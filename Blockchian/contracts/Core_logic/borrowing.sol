@@ -6,7 +6,10 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interface/CDSInterface.sol";
 import "../interface/ITrinityToken.sol";
 import "../interface/IProtocolToken.sol";
+import "../interface/IWETHGateway.sol";
+//import "./Treasury.sol";
 import "hardhat/console.sol";
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 contract Borrowing is Ownable {
     ITrinityToken public Trinity; // our stablecoin
@@ -15,7 +18,9 @@ contract Borrowing is Ownable {
 
     IProtocolToken public protocolToken;
 
-  
+    //Treasury public treasury;
+
+    IWrappedTokenGatewayV3 public wethGateway;
 
     uint256 private _downSideProtectionLimit; // 
     struct DepositDetails{
@@ -25,7 +30,7 @@ contract Borrowing is Ownable {
         uint64 downsidePercentage;
         uint64 ethPriceAtDeposit;
         bool withdrawed;
-        bool Liquidated;
+        bool liquidated;
         uint64 ethPriceAtWithdraw;
         uint64 withdrawTime;
     }
@@ -55,11 +60,24 @@ contract Borrowing is Ownable {
     uint8 private LTV; // LTV is a percentage eg LTV = 60 is 60%, must be divided by 100 in calculations
     uint128 public totalVolumeOfBorrowersinWei;
     uint128 public totalVolumeOfBorrowersinUSD;
+    address public priceFeedAddress;
+    address public treasuryAddress;
+    address constant ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
 
-    constructor(address _tokenAddress, address _cds, address _protocolToken) {
+    constructor(
+        address _tokenAddress,
+        address _cds,
+        address _protocolToken,
+        address _priceFeedAddress,
+        address _wethGateway,
+        address _treasury
+        ) {
         Trinity = ITrinityToken(_tokenAddress);
         cds = CDSInterface(_cds);
         protocolToken = IProtocolToken(_protocolToken);
+        treasuryAddress = _treasury;
+        wethGateway = IWrappedTokenGatewayV3(_wethGateway);         //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
+        priceFeedAddress = _priceFeedAddress;                       //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
 
     }
 
@@ -101,7 +119,8 @@ contract Borrowing is Ownable {
      * @param _ethPrice get current eth price 
      * @param _depositTime get unixtime stamp at the time of deposit 
      * @param PercentageOfETH If downside protection is of ETH_PRICE_VOLUME in DownsideProtectionLimitValue then PercentageOfETH will be taken as average/volatility percentage of ethereum of past 3 months
-     * @param receivedType figure out which type of DownsideProtectionLimitValue enum */ 
+     * @param receivedType figure out which type of DownsideProtectionLimitValue enum */
+
     function depositTokens(
         uint64 _ethPrice,  //! price of eth at the time of deposit
         uint64 _depositTime, 
@@ -175,6 +194,15 @@ contract Borrowing is Ownable {
         
         //call transfer function of trinity token
         _transferToken(msg.sender,borrowerIndex);
+
+        //Split the depositedETH
+        uint256 treasuryShare = msg.value/2;
+        uint256 share = (msg.value - treasuryShare)/2;
+
+        payable(treasuryAddress).transfer(treasuryShare);
+
+        wethGateway.depositETH{value: share}(ethAddress,address(this),0);
+
     }
 
     function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime) external {
@@ -186,7 +214,7 @@ contract Borrowing is Ownable {
         // check if borrowerIndex in BorrowerDetails of the msg.sender is greater than or equal to Index
         if( borrowing[msg.sender].borrowerIndex >= Index ) {
             // Check if user amount in the Index is been liquidated or not
-            require(borrowing[msg.sender].depositDetails[Index].Liquidated != true ," User amount has been liquidated");
+            require(borrowing[msg.sender].depositDetails[Index].liquidated != true ," User amount has been liquidated");
             // check if withdrawed in depositDetails in borrowing of msg.seader is false or not
             if( borrowing[msg.sender].depositDetails[Index].withdrawed  != false ) {
                 //revert if the value of withdrawed is true
@@ -202,7 +230,7 @@ contract Borrowing is Ownable {
             revert("User doens't have the perticular index");
         }
 
-        uint64 depositEthPrice = borrowing[msg.sender].depositDetails[Index].ethPriceAtDeposit;
+        uint128 depositEthPrice = borrowing[msg.sender].depositDetails[Index].ethPriceAtDeposit;
 
         // Also check if user have sufficient Trinity balance what we have given at the time of depoist
         require(borrowing[msg.sender].depositDetails[Index].depositedAmount <= Trinity.balanceOf(msg.sender) ,"User doesn't enough trinity" );
@@ -291,33 +319,39 @@ contract Borrowing is Ownable {
 
     //To liquidate a users eth by any other user,
 
-    function Liquidate(uint64 index,uint128 currentEthPrice,uint64 protocolTokenValue, address _user) external{
+    function Liquidate(uint64 index,uint64 currentEthPrice,uint64 protocolTokenValue, address _user) external{
 
         //To check if the ratio is less than 0.8 & converting into Bips
         require(msg.sender!=_user,"You cannot liquidate your own assets!");
-        uint64 ratio = (currentEthPrice * 10000 / borrowing[_user].depositDetails[index].ethPriceAtDeposit);
+        uint64 Index = index;
+        uint128 ratio = (currentEthPrice * 10000 / borrowing[_user].depositDetails[index].ethPriceAtDeposit);
         uint64 downsideProtectionPercentage = borrowing[msg.sender].depositDetails[Index].downsidePercentage;
         //converting percentage to bips
         uint64 downsideProtection = downsideProtectionPercentage * 100;
         require(ratio<downsideProtection,"You cannot liquidate");
         //Token liquidator needs to provide for liquidating
         
-        uint64 TokenNeededToLiquidate = (borrowing[_user].depositDetails[index].ethPriceAtDeposit - currentEthPrice)*borrowing[_user].depositDetails[index].depositedAmount;
+        uint128 TokenNeededToLiquidate = (borrowing[_user].depositDetails[index].ethPriceAtDeposit - currentEthPrice)*borrowing[_user].depositDetails[index].depositedAmount;
         
 
         borrowing[msg.sender].depositDetails[Index].liquidated = true;
         //Transfer the require amount 
-        Trinity.burnFrom(msg.sender, address(this), TokenNeededToLiquidate);
+        Trinity.burnFrom(address(this), TokenNeededToLiquidate);
         //Protocol token will be minted for the liquidator
         //multipling by 10 and dividing by 100 to get 10%,  
         //Denominator = 100 * 2(protocol token value in dollar) = 200
-        uint64 amountToMint = (110 * TokenNeededToLiquidate) / (100*protocolTokenValue);  
+        uint128 amountToMint = (110 * TokenNeededToLiquidate) / (100*protocolTokenValue);  
 
         protocolToken.mint(msg.sender, amountToMint);
 
     }
 
-    
+    function getUSDValue() internal view returns(uint256){
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(priceFeedAddress);
+        (,int256 price,,,) = priceFeed.latestRoundData();
+        return uint256(price);
+    }
+
     function setLTV(uint8 _LTV) external onlyOwner {
         LTV = _LTV;
     }
