@@ -6,8 +6,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interface/CDSInterface.sol";
 import "../interface/ITrinityToken.sol";
 import "../interface/IProtocolToken.sol";
-import "../interface/IWETHGateway.sol";
-//import "./Treasury.sol";
+import "../interface/ITreasury.sol";
 import "hardhat/console.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
@@ -18,11 +17,11 @@ contract Borrowing is Ownable {
 
     IProtocolToken public protocolToken;
 
-    //Treasury public treasury;
+    ITreasury public treasury;
 
-    IWrappedTokenGatewayV3 public wethGateway;
 
-    uint256 private _downSideProtectionLimit; // 
+    uint256 private _downSideProtectionLimit;
+
     struct DepositDetails{
 
         uint64 depositedTime;
@@ -61,22 +60,19 @@ contract Borrowing is Ownable {
     uint128 public totalVolumeOfBorrowersinWei;
     uint128 public totalVolumeOfBorrowersinUSD;
     address public priceFeedAddress;
-    address public treasuryAddress;
-    address constant ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    uint256 FEED_PRECISION = 1e8; // ETH/USD had 8 decimals
 
     constructor(
         address _tokenAddress,
         address _cds,
         address _protocolToken,
         address _priceFeedAddress,
-        address _wethGateway,
         address _treasury
         ) {
         Trinity = ITrinityToken(_tokenAddress);
         cds = CDSInterface(_cds);
         protocolToken = IProtocolToken(_protocolToken);
-        treasuryAddress = _treasury;
-        wethGateway = IWrappedTokenGatewayV3(_wethGateway);         //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
+        treasury = ITreasury(_treasury);
         priceFeedAddress = _priceFeedAddress;                       //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
 
     }
@@ -196,12 +192,10 @@ contract Borrowing is Ownable {
         _transferToken(msg.sender,borrowerIndex);
 
         //Split the depositedETH
-        uint256 treasuryShare = msg.value/2;
-        uint256 share = (msg.value - treasuryShare)/2;
+        // uint256 treasuryShare = msg.value/2;
+        // uint256 share = (msg.value - treasuryShare)/2;
 
-        payable(treasuryAddress).transfer(treasuryShare);
-
-        wethGateway.depositETH{value: share}(ethAddress,address(this),0);
+        treasury.deposit{value:msg.value}();
 
     }
 
@@ -232,7 +226,7 @@ contract Borrowing is Ownable {
 
         uint128 depositEthPrice = borrowing[msg.sender].depositDetails[Index].ethPriceAtDeposit;
 
-        // Also check if user have sufficient Trinity balance what we have given at the time of depoist
+        // Also check if user have sufficient Trinity balance what we have given at the time of deposit
         require(borrowing[msg.sender].depositDetails[Index].depositedAmount <= Trinity.balanceOf(msg.sender) ,"User doesn't enough trinity" );
 
         // compare ethPrice at the time of deposit and at the time of withdraw
@@ -346,10 +340,10 @@ contract Borrowing is Ownable {
 
     }
 
-    function getUSDValue() internal view returns(uint256){
+    function getUSDValue() public view returns(uint256){
         AggregatorV3Interface priceFeed = AggregatorV3Interface(priceFeedAddress);
         (,int256 price,,,) = priceFeed.latestRoundData();
-        return uint256(price);
+        return uint256(price/FEED_PRECISION);
     }
 
     function setLTV(uint8 _LTV) external onlyOwner {
