@@ -29,7 +29,6 @@ contract Treasury is Ownable{
         uint64 depositedTime;
         bool hasDeposited;
         uint128 depositedAmount;
-        //uint64 downsidePercentage;
         uint64 ethPriceAtDeposit;
         uint64 depositedUsdValue;
 
@@ -38,6 +37,7 @@ contract Treasury is Ownable{
         uint64 withdrawTime;
     }
 
+    //Deposit 25% of ETH to Aave and Compound each
     struct ToOutside{
         uint64 depositedTime;
         bool hasDeposited;
@@ -51,57 +51,55 @@ contract Treasury is Ownable{
 
     }
 
-    mapping (address => DepositorDetails) public depositorDetails;
-    mapping (uint256 => ToOutside) public toOutside;
+    mapping (address depositor => DepositorDetails) public depositorDetails;
+    mapping (uint256  => ToOutside) public toOutside;
     uint256 public totalETH;
 
-    // event Deposit(address indexed user,uint256 amount);
-    // event Withdraw(address indexed user,uint256 amount);
+    event Deposit(address indexed user,uint256 amount);
+    event Withdraw(address indexed user,uint256 amount);
 
     constructor(address _borrowing,address _wethGateway) {
         borrowing = IBorrowing(_borrowing);
         wethGateway = IWrappedTokenGatewayV3(_wethGateway);       //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
     }
 
-    function deposit() external payable {
+    function deposit(address user) external payable {
         require(msg.value > 0, "Cannot deposit zero tokens");
-        require(msg.sender.balance > 0, "You do not have sufficient balance to execute this transaction");
+        require(user.balance > 0, "You do not have sufficient balance to execute this transaction");
 
-        depositorDetails[msg.sender].depositedTime = block.timestamp;
-        depositorDetails[msg.sender].hasDeposited = true;
-        depositorDetails[msg.sender].depositedAmount += msg.value;
-        //depositorDetails[msg.sender].depositedCount += 1;
-        uint256 depositedAmount = depositorDetails[msg.sender].depositedAmount;
-        depositorDetails[msg.sender].ethPriceAtDeposit = borrowing.getUSDValue();
-        depositorDetails[msg.sender].depositedUsdValue = depositedAmount * depositorDetails[msg.sender].ethPriceAtDeposit;
+        depositorDetails[user].depositedTime = block.timestamp;
+        depositorDetails[user].hasDeposited = true;
+        depositorDetails[user].depositedAmount += msg.value;
+        uint256 depositedAmount = depositorDetails[user].depositedAmount;
+        depositorDetails[user].ethPriceAtDeposit = borrowing.getUSDValue();
+        depositorDetails[user].depositedUsdValue = depositedAmount * depositorDetails[user].ethPriceAtDeposit;
 
         totalETH += msg.value;
-        emit Deposit(msg.sender,msg.value);
+        emit Deposit(user,msg.value);
     }
 
-    function withdraw(uint256 _amount) external {
+    function withdraw(address toAddress,uint256 _amount) external {
         require(_amount > 0, "Cannot withdraw zero Ether");
         require(totalETH >= _amount,"Insufficient balance in Treasury");
-        require(depositorDetails[msg.sender].hasDeposited,"Not a Depositor");
+        require(depositorDetails[toAddress].hasDeposited,"Not a Depositor");
 
-        depositorDetails[msg.sender].depositedTime = block.timestamp;
-        depositorDetails[msg.sender].depositedAmount -= _amount;
-        //depositorDetails[msg.sender].depositedCount += 1;
-        uint256 depositedAmount = depositorDetails[msg.sender].depositedAmount;
-        depositorDetails[msg.sender].ethPriceAtWithdraw = borrowing.getUSDValue();
-        depositorDetails[msg.sender].depositedUsdValue = depositedAmount * depositorDetails[msg.sender].ethPriceAtWithdraw;
+        depositorDetails[toAddress].depositedTime = block.timestamp;
+        depositorDetails[toAddress].depositedAmount -= _amount;
+        uint256 depositedAmount = depositorDetails[toAddress].depositedAmount;
+        depositorDetails[toAddress].ethPriceAtWithdraw = borrowing.getUSDValue();
+        depositorDetails[toAddress].depositedUsdValue = depositedAmount * depositorDetails[toAddress].ethPriceAtWithdraw;
 
         if(depositedAmount == 0){
-            depositorDetails[msg.sender].hasDeposited = false;
+            depositorDetails[toAddress].hasDeposited = false;
         }
 
-        (bool sent,) = msg.sender.call{value: _amount}("");
+        (bool sent,) = toAddress.call{value: _amount}("");
         require(sent, "Failed to send ether");
 
-        depositorDetails[msg.sender].withdrawTime = block.timestamp;
-        depositorDetails[msg.sender].withdrawed = true;
+        depositorDetails[toAddress].withdrawTime = block.timestamp;
+        depositorDetails[toAddress].withdrawed = true;
 
-        emit Withdraw(msg.sender,_amount);
+        emit Withdraw(toAddress,_amount);
     }
 
     function depositToAave() external onlyOwner{
@@ -109,14 +107,36 @@ contract Treasury is Ownable{
         require(share > 0,"Null deposit");
         wethGateway.depositETH{value: share}(ethAddress,address(this),0);
 
-        toOutside[1].depositedTime = block.timestamp;
-        toOutside[1].hasDeposited = true;
-        toOutside[1].depositedAmount += msg.value;
-        //toOutside[1].depositedCount += 1;
-        uint256 depositedAmount = toOutside[1].depositedAmount;
-        toOutside[1].ethPriceAtDeposit = borrowing.getUSDValue();
-        toOutside[1].depositedUsdValue = depositedAmount * depositorDetails[1].ethPriceAtDeposit;
+        // toOutside[].depositedTime = block.timestamp;
+        // toOutside[].hasDeposited = true;
+        // toOutside[].depositedAmount += msg.value;
 
+        // uint256 depositedAmount = toOutside[1].depositedAmount;
+        // toOutside[].ethPriceAtDeposit = borrowing.getUSDValue();
+        // toOutside[].depositedUsdValue = depositedAmount * depositorDetails[1].ethPriceAtDeposit;
+    }
+
+    function withdrawFromAave(uint256 amount) external onlyOwner{
+        require(amount > 0,"Null withdraw");
+        wethGateway.withdrawETH(ethAddress,amount,address(this));
+    }
+
+    function getUserAccountData (address user)
+        external
+        view
+        returns(
+            uint64 depositedTime,
+            bool hasDeposited,
+            uint128 depositedAmount,
+            uint64 ethPriceAtDeposit,
+            uint64 depositedUsdValue,
+            bool withdrawed,
+            uint64 ethPriceAtWithdraw,
+            uint64 withdrawTime)
+    {
+            // DepositorDetails memory depositorAccountData;
+            // depositorAccountData = depositorDetails[user];
+            // return depositorAccountData;
     }
 
 }
