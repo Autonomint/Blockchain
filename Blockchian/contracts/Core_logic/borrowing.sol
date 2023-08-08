@@ -19,7 +19,6 @@ contract Borrowing is Ownable {
 
     ITreasury public treasury;
 
-
     uint256 private _downSideProtectionLimit;
 
     struct DepositDetails{
@@ -109,6 +108,10 @@ contract Borrowing is Ownable {
         Trinity.mint(_borrower, tokensToLend);
     }
 
+    function transferToken(address _borrower, uint64 borrowerIndex) external {
+        _transferToken(_borrower,borrowerIndex);
+    }
+
 
     /**
      * @dev This function takes ethPrice, depositTime, percentageOfEth and receivedType parameters to deposit eth into the contract and mint them back the Trinity tokens.
@@ -117,86 +120,12 @@ contract Borrowing is Ownable {
      * @param PercentageOfETH If downside protection is of ETH_PRICE_VOLUME in DownsideProtectionLimitValue then PercentageOfETH will be taken as average/volatility percentage of ethereum of past 3 months
      * @param receivedType figure out which type of DownsideProtectionLimitValue enum */
 
-    function depositTokens(
-        uint64 _ethPrice,  //! price of eth at the time of deposit
-        uint64 _depositTime, 
-        uint64 PercentageOfETH,  //!Downside percentage
-        DownsideProtectionLimitValue receivedType
-        ) payable external {
+    function depositTokens (uint64 _ethPrice,uint64 _depositTime) external payable {
         require(msg.value > 0, "Cannot deposit zero tokens");
         require(msg.sender.balance > 0, "You do not have sufficient balance to execute this transaction");
-        uint64 borrowerIndex;
-        //check if borrower is depositing for the first time or not
-        if (!borrowing[msg.sender].hasDeposited) {
-            //change borrowerindex to 1
-             borrowerIndex = borrowing[msg.sender].borrowerIndex = 1;
-          
-
-            //change hasDeposited bool to true after first deposit
-            borrowing[msg.sender].hasDeposited = true;
-        }
-        else {
-           borrowerIndex = ++borrowing[msg.sender].borrowerIndex;
-           // borroweIndex = borrowing[msg.sender].borrowerIndex;
-        }
-
-        uint128 DownsideProtectionPercentage;
-
-        // if DownsideProtectionLimitValue value is 0 them we will be haveing DownsideProtectionPercentage as PercentageOfETH
-        // if DownsideProtectionLimitValue value is 1 then we will be haveing DownsideProtectionPercentage as CDS volume / borrowers volume
-        if(receivedType == DownsideProtectionLimitValue.ETH_PRICE_VOLUME) {
-            DownsideProtectionPercentage = PercentageOfETH;
-        }
-        else {
-            DownsideProtectionPercentage = cds.totalCdsDepositedAmount() / totalVolumeOfBorrowersinUSD; //! need to check if this is possible 
-            if (cds.totalCdsDepositedAmount() <= totalVolumeOfBorrowersinUSD ) { 
-                revert("CDS has less or equal amount to borrowers amount");
-            }
-        }
-
-        // get 20% of the deposited eth.
-        uint128 DownsideProtectionValue = ( uint128(msg.value) * DownsideProtectionPercentage ) / 100;
-               
-        // get amountAvailableToBorrow from CDS contract
-        uint128 cdsPercentage = cds.amountAvailableToBorrow();
-
-       // check if 20% of deposit amount is less than amountAvailableToBorrow in cds
-        require(DownsideProtectionValue <= cdsPercentage, "Doesnt have enough value in cds");
-
-        uint128 updatedCdsPercentage = cdsPercentage - DownsideProtectionValue;
-    
-
-        // update deposited amount of the user
-        borrowing[msg.sender].depositDetails[borrowerIndex].depositedAmount = uint128(msg.value);
-
-        //Total volume of borrowers in USD
-        totalVolumeOfBorrowersinUSD += (_ethPrice * uint128(msg.value));
-
-        //Total volume of borrowers in Wei
-        totalVolumeOfBorrowersinWei += uint128(msg.value);
-
-        borrowing[msg.sender].depositDetails[borrowerIndex].depositedAmount =  uint128(msg.value);
-
-        //Adding depositTime to borrowing struct
-        borrowing[msg.sender].depositDetails[borrowerIndex].depositedTime = _depositTime;
-
-        //Adding ethprice to struct
-        borrowing[msg.sender].depositDetails[borrowerIndex].ethPriceAtDeposit = _ethPrice;
-
-        //Adding downsidePercentage to struct 
-        borrowing[msg.sender].depositDetails[borrowerIndex].downsidePercentage = PercentageOfETH; 
-
-        cds.updateAmountAvailabletoBorrow(updatedCdsPercentage);
         
-        //call transfer function of trinity token
-        _transferToken(msg.sender,borrowerIndex);
-
-        //Split the depositedETH
-        // uint256 treasuryShare = msg.value/2;
-        // uint256 share = (msg.value - treasuryShare)/2;
-
-        treasury.deposit{value:msg.value}();
-
+        //Call the deposit function in Treasury contract
+        treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
     }
 
     function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime) external {
