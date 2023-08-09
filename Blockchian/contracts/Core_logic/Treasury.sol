@@ -9,7 +9,7 @@ import "../interface/ICEther.sol";
 
 contract Treasury is Ownable{
 
-    IBorrowing public borrowing;
+    IBorrowing public borrow;
     IWrappedTokenGatewayV3 public wethGateway;
     ICEther public cEther;
 
@@ -26,6 +26,7 @@ contract Treasury is Ownable{
         uint64 ethPriceAtWithdraw;
         uint64 withdrawTime;
     }
+
     //Borrower Details
     struct BorrowerDetails {
         uint256 depositedAmount;
@@ -48,8 +49,8 @@ contract Treasury is Ownable{
     }
 
     mapping(address depositor => BorrowerDetails) public borrowing;
-    mapping (uint256 count => ToAave) public toAave;
-    uint256 public aaveCount;
+    mapping (uint64 count => ToAave) public toAave;
+    uint64 public aaveCount;
     uint128 public totalVolumeOfBorrowersinWei;
     uint128 public totalVolumeOfBorrowersinUSD;
 
@@ -74,8 +75,6 @@ contract Treasury is Ownable{
      **/
 
     function deposit( address user,uint64 _ethPrice,uint64 _depositTime) external payable {
-        require(msg.value > 0, "Cannot deposit zero tokens");
-        require(user.balance > 0, "You do not have sufficient balance to execute this transaction");
 
         uint64 borrowerIndex;
         //check if borrower is depositing for the first time or not
@@ -99,12 +98,10 @@ contract Treasury is Ownable{
         borrowing[user].depositDetails[borrowerIndex].depositedAmount = uint128(msg.value);
 
         //Total volume of borrowers in USD
-        totalVolumeOfBorrowersinUSD += (uint128(ethPrice) * uint128(msg.value));
+        totalVolumeOfBorrowersinUSD += (uint128(_ethPrice) * uint128(msg.value));
 
         //Total volume of borrowers in Wei
         totalVolumeOfBorrowersinWei += uint128(msg.value);
-
-        borrowing[user].depositDetails[borrowerIndex].depositedAmount =  uint128(msg.value);
 
         //Adding depositTime to borrowing struct
         borrowing[user].depositDetails[borrowerIndex].depositedTime = _depositTime;
@@ -113,31 +110,20 @@ contract Treasury is Ownable{
         borrowing[user].depositDetails[borrowerIndex].ethPriceAtDeposit = _ethPrice;
         
         //call transfer function of trinity token
-        borrowing.transferToken(user,borrowerIndex);
+        borrow.transferToken(user,borrowerIndex);
 
         emit Deposit(user,msg.value);
     }
 
     function withdraw(address toAddress,uint256 _amount) external {
         require(_amount > 0, "Cannot withdraw zero Ether");
-        require(totalETH >= _amount,"Insufficient balance in Treasury");
-        require(depositorDetails[toAddress].hasDeposited,"Not a Depositor");
 
-        depositorDetails[toAddress].depositedTime = block.timestamp;
-        depositorDetails[toAddress].depositedAmount -= _amount;
-        uint256 depositedAmount = depositorDetails[toAddress].depositedAmount;
-        depositorDetails[toAddress].ethPriceAtWithdraw = borrow.getUSDValue();
-        depositorDetails[toAddress].depositedUsdValue = depositedAmount * depositorDetails[toAddress].ethPriceAtWithdraw;
+        // if(depositedAmount == 0){
+        //     depositorDetails[toAddress].hasDeposited = false;
+        // }
 
-        if(depositedAmount == 0){
-            depositorDetails[toAddress].hasDeposited = false;
-        }
-
-        (bool sent,) = toAddress.call{value: _amount}("");
-        require(sent, "Failed to send ether");
-
-        depositorDetails[toAddress].withdrawTime = block.timestamp;
-        depositorDetails[toAddress].withdrawed = true;
+        // (bool sent,) = toAddress.call{value: _amount}("");
+        // require(sent, "Failed to send ether");
 
         emit Withdraw(toAddress,_amount);
     }
@@ -147,17 +133,17 @@ contract Treasury is Ownable{
     */
 
     function depositToAave() external onlyOwner{
-        uint256 share = (address(this).balance)/4;
+        uint128 share = uint128(address(this).balance)/4;
         require(share > 0,"Null deposit");
         wethGateway.depositETH{value: share}(ethAddress,address(this),0);
         aaveCount += 1;
 
-        toAave[aaveCount].depositedTime = block.timestamp;
+        toAave[aaveCount].depositedTime = uint64(block.timestamp);
         toAave[aaveCount].hasDeposited = true;
         toAave[aaveCount].depositedAmount += share;
-        uint256 depositedAmount = toAave[aaveCount].depositedAmount;
-        toAave[aaveCount].ethPriceAtDeposit = borrow.getUSDValue();
-        toAave[aaveCount].depositedUsdValue = depositedAmount * toAave[aaveCount].ethPriceAtDeposit;
+        uint128 depositedAmount = toAave[aaveCount].depositedAmount;
+        toAave[aaveCount].ethPriceAtDeposit = uint64(borrow.getUSDValue());
+        toAave[aaveCount].depositedUsdValue = uint64(depositedAmount) * toAave[aaveCount].ethPriceAtDeposit;
 
         emit DepositToAave(share);
     }
@@ -196,14 +182,15 @@ contract Treasury is Ownable{
         cEther.redeem(amount);
         emit WithdrawFromCompound(amount);
     }
-    /**
-     * @dev This function returns the user data in protocol
-     * @param user address of the user for whom to get the data
-     */
-    function getUserAccountData (address user) external view returns (DepositorDetails){
-        DepositorDetails memory depositorAccountData;
-        depositorAccountData = depositorDetails[user];
-        return depositorAccountData;
-    }
+
+
+    // function getUserAccountData (address user) external view returns (BorrowerDetails memory){
+    //     DepositDetails memory depositorAccountData;
+    //     depositorAccountData = borrowing[user];
+    //     return depositorAccountData;
+    // }
+
+    receive() external payable{}
+    fallback() external payable{}
 
 }
