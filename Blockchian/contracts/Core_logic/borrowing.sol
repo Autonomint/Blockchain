@@ -65,13 +65,11 @@ contract Borrowing is Ownable {
         address _tokenAddress,
         address _cds,
         address _protocolToken,
-        address _priceFeedAddress,
-        address _treasury
-        ) {
+        address _priceFeedAddress
+        ){
         Trinity = ITrinityToken(_tokenAddress);
         cds = CDSInterface(_cds);
         protocolToken = IProtocolToken(_protocolToken);
-        treasury = ITreasury(_treasury);
         priceFeedAddress = _priceFeedAddress;                       //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
 
     }
@@ -84,6 +82,10 @@ contract Borrowing is Ownable {
         size := extcodesize(addr)
     }
     return size > 0;
+    }
+
+    function initializeTreasury(address _treasury) external onlyOwner{
+        treasury = ITreasury(_treasury);
     }
 
     /**
@@ -117,8 +119,7 @@ contract Borrowing is Ownable {
      * @dev This function takes ethPrice, depositTime, percentageOfEth and receivedType parameters to deposit eth into the contract and mint them back the Trinity tokens.
      * @param _ethPrice get current eth price 
      * @param _depositTime get unixtime stamp at the time of deposit 
-     * @param PercentageOfETH If downside protection is of ETH_PRICE_VOLUME in DownsideProtectionLimitValue then PercentageOfETH will be taken as average/volatility percentage of ethereum of past 3 months
-     * @param receivedType figure out which type of DownsideProtectionLimitValue enum */
+     */
 
     function depositTokens (uint64 _ethPrice,uint64 _depositTime) external payable {
         require(msg.value > 0, "Cannot deposit zero tokens");
@@ -272,7 +273,7 @@ contract Borrowing is Ownable {
     function getUSDValue() public view returns(uint256){
         AggregatorV3Interface priceFeed = AggregatorV3Interface(priceFeedAddress);
         (,int256 price,,,) = priceFeed.latestRoundData();
-        return uint256(price/FEED_PRECISION);
+        return (uint256(price)/FEED_PRECISION);
     }
 
     function setLTV(uint8 _LTV) external onlyOwner {
