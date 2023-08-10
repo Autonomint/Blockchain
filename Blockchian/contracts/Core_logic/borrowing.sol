@@ -92,13 +92,14 @@ contract Borrowing is Ownable {
      * @dev Transfer Trinity token to the borrower
      * @param _borrower Address of the borrower to transfer
      * @param borrowerIndex Index of the borrower
+     * @param amount deposited amount of the borrower
+     * @param _ethPrice current eth price
      */
-    function _transferToken(address _borrower, uint64 borrowerIndex) internal {
+    function _transferToken(address _borrower, uint64 borrowerIndex,uint256 amount,uint64 _ethPrice) internal {
         require(_borrower != address(0), "Borrower cannot be zero address");
-        require(borrowing[_borrower].hasDeposited, "Borrower must have deposited collateral before claiming loan");
         require(LTV != 0, "LTV must be set to non-zero value before providing loans");
         
-        uint256 tokenValueConversion = borrowing[_borrower].depositDetails[borrowerIndex].depositedAmount * borrowing[_borrower].depositDetails[borrowerIndex].ethPriceAtDeposit ; // dummy data
+        uint256 tokenValueConversion = amount * _ethPrice; // dummy data
 
         // tokenValueConversion is in USD, and our stablecoin is pegged to USD in 1:1 ratio
         // Hence if tokenValueConversion = 1, then equivalent stablecoin tokens = tokenValueConversion
@@ -118,16 +119,17 @@ contract Borrowing is Ownable {
 
     function depositTokens (uint64 _ethPrice,uint64 _depositTime) external payable {
         require(msg.value > 0, "Cannot deposit zero tokens");
-        require(msg.sender.balance > 0, "You do not have sufficient balance to execute this transaction");
+        require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
         
         //Call the deposit function in Treasury contract
         uint64 borrowerIndex;
         bool deposited;
         (borrowerIndex,deposited) = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
-        borrowing[msg.sender].hasDeposited = deposited;
-        borrowing[msg.sender].depositDetails[borrowerIndex].depositedAmount = uint128(msg.value);
-        borrowing[msg.sender].depositDetails[borrowerIndex].ethPriceAtDeposit = _ethPrice;
-        _transferToken(msg.sender,borrowerIndex);
+
+        //Check whether the deposit is successfull
+        require(deposited, "Borrower must have deposited collateral before claiming loan");
+        // Call the transfer function to mint Trinity
+        _transferToken(msg.sender,borrowerIndex,msg.value,_ethPrice);
     }
 
     function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime) external {
