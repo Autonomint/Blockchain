@@ -40,26 +40,40 @@ contract Treasury is Ownable{
         uint64 borrowerIndex;
     }
 
-    struct ToAave{
+    //Each Deposit to Aave/Compound
+    struct EachOutside{
         uint64 depositedTime;
-        bool hasDeposited;
         uint128 depositedAmount;
         uint64 ethPriceAtDeposit;
-        uint64 depositedUsdValue;
+        uint128 depositedUsdValue;
+
+        bool withdrawed;
+        uint64 ethPriceAtWithdraw;
+        uint64 withdrawTime;
+        uint64 withdrawedUsdValue;
     }
 
+    //Total Deposit to Aave/Compound
+    struct ToOutside{
+        mapping (uint64 => EachOutside) eachOutside;
+        uint64 depositIndex;
+        uint256 depositedAmount;
+        uint128 depositedUsdValue;       
+    }
+
+    enum Protocol{Aave,Compound}
+
     mapping(address depositor => BorrowerDetails) public borrowing;
-    mapping (uint64 count => ToAave) public toAave;
-    uint64 public aaveCount;
+    mapping(Protocol => ToOutside) public toOutside;
     uint128 public totalVolumeOfBorrowersinWei;
     uint128 public totalVolumeOfBorrowersinUSD;
 
     event Deposit(address indexed user,uint256 amount);
     event Withdraw(address indexed user,uint256 amount);
-    event DepositToAave(uint256 amount);
-    event WithdrawFromAave(uint256 amount);
-    event DepositToCompound(uint256 amount);
-    event WithdrawFromCompound(uint256 amount);
+    event DepositToAave(uint64 count,uint256 amount);
+    event WithdrawFromAave(uint64 count,uint256 amount);
+    event DepositToCompound(uint64 count,uint256 amount);
+    event WithdrawFromCompound(uint64 count,uint256 amount);
 
 
     constructor(address _borrowing,address _wethGateway,address _cEther) {
@@ -74,7 +88,12 @@ contract Treasury is Ownable{
      * @param _depositTime get unixtime stamp at the time of deposit
      **/
 
-    function deposit( address user,uint64 _ethPrice,uint64 _depositTime) external payable {
+    function deposit(
+        address user,
+        uint64 _ethPrice,
+        uint64 _depositTime
+        )
+        external payable onlyOwner returns(uint64,bool) {
 
         uint64 borrowerIndex;
         //check if borrower is depositing for the first time or not
@@ -87,8 +106,8 @@ contract Treasury is Ownable{
         }
         else {
             //increment the borrowerIndex for each deposit
-           borrowerIndex = ++borrowing[user].borrowerIndex;
-           // borroweIndex = borrowing[user].borrowerIndex;
+            borrowerIndex = ++borrowing[user].borrowerIndex;
+            // borrowerIndex = borrowing[user].borrowerIndex;
         }
     
         // update total deposited amount of the user
@@ -109,10 +128,11 @@ contract Treasury is Ownable{
         //Adding ethprice to struct
         borrowing[user].depositDetails[borrowerIndex].ethPriceAtDeposit = _ethPrice;
         
-        //call transfer function of trinity token
-        borrow.transferToken(user,borrowerIndex);
-
         emit Deposit(user,msg.value);
+        return (
+            borrowerIndex,
+            borrowing[user].hasDeposited
+            );
     }
 
     function withdraw(address toAddress,uint256 _amount) external {
@@ -133,19 +153,22 @@ contract Treasury is Ownable{
     */
 
     function depositToAave() external onlyOwner{
-        uint128 share = uint128(address(this).balance)/4;
+        uint256 share = (address(this).balance)/4;
         require(share > 0,"Null deposit");
         wethGateway.depositETH{value: share}(ethAddress,address(this),0);
-        aaveCount += 1;
 
-        toAave[aaveCount].depositedTime = uint64(block.timestamp);
-        toAave[aaveCount].hasDeposited = true;
-        toAave[aaveCount].depositedAmount += share;
-        uint128 depositedAmount = toAave[aaveCount].depositedAmount;
-        toAave[aaveCount].ethPriceAtDeposit = uint64(borrow.getUSDValue());
-        toAave[aaveCount].depositedUsdValue = uint64(depositedAmount) * toAave[aaveCount].ethPriceAtDeposit;
+        uint64 count = toOutside[Protocol.Aave].depositIndex;
+        count += 1;
 
-        emit DepositToAave(share);
+        toOutside[Protocol.Aave].depositIndex = count;
+        toOutside[Protocol.Aave].depositedAmount += share;
+        toOutside[Protocol.Aave].eachOutside[count].depositedTime = uint64(block.timestamp);
+        toOutside[Protocol.Aave].eachOutside[count].depositedAmount = uint128(share);
+        uint64 ethPrice = toOutside[Protocol.Aave].eachOutside[count].ethPriceAtDeposit = uint64(borrow.getUSDValue());
+        toOutside[Protocol.Aave].eachOutside[count].depositedUsdValue = uint128(share) * uint128(ethPrice);
+        toOutside[Protocol.Aave].depositedUsdValue = uint128(toOutside[Protocol.Aave].depositedAmount) * uint128(ethPrice);
+
+        emit DepositToAave(count,share);
     }
 
     /**
@@ -153,11 +176,19 @@ contract Treasury is Ownable{
      * @param amount amount of ETH to withdraw 
      */
 
-    function withdrawFromAave(uint256 amount) external onlyOwner{
+    function withdrawFromAave(uint64 index,uint256 amount) external onlyOwner{
         require(amount > 0,"Null withdraw");
+        require(!toOutside[Protocol.Aave].eachOutside[index].withdrawed,"Already withdrawed in this index");
         wethGateway.withdrawETH(ethAddress,amount,address(this));
 
-        emit WithdrawFromAave(amount);
+        toOutside[Protocol.Aave].depositedAmount -= amount;
+        toOutside[Protocol.Aave].eachOutside[index].withdrawed = true;
+        toOutside[Protocol.Aave].eachOutside[index].withdrawTime = uint64(block.timestamp);
+        uint64 ethPrice = toOutside[Protocol.Aave].eachOutside[index].ethPriceAtWithdraw = uint64(borrow.getUSDValue());
+        toOutside[Protocol.Aave].eachOutside[index].withdrawedUsdValue = uint64(amount) * ethPrice;
+        toOutside[Protocol.Aave].depositedUsdValue = uint128(toOutside[Protocol.Aave].depositedAmount) * uint128(ethPrice);
+
+        emit WithdrawFromAave(index,amount);
     }
 
     /**
@@ -169,7 +200,18 @@ contract Treasury is Ownable{
         require(share > 0,"Null deposit");
         cEther.mint{value: share};
 
-        emit DepositToCompound(share);
+        uint64 count = toOutside[Protocol.Compound].depositIndex;
+        count += 1;
+
+        toOutside[Protocol.Compound].depositIndex = count;
+        toOutside[Protocol.Compound].depositedAmount += share;
+        toOutside[Protocol.Compound].eachOutside[count].depositedTime = uint64(block.timestamp);
+        toOutside[Protocol.Compound].eachOutside[count].depositedAmount = uint128(share);
+        uint64 ethPrice = toOutside[Protocol.Compound].eachOutside[count].ethPriceAtDeposit = uint64(borrow.getUSDValue());
+        toOutside[Protocol.Compound].eachOutside[count].depositedUsdValue = uint128(share) * uint128(ethPrice);
+        toOutside[Protocol.Compound].depositedUsdValue = uint128(toOutside[Protocol.Compound].depositedAmount) * uint128(ethPrice);
+
+        emit DepositToCompound(count,share);
     }
 
     /**
@@ -177,10 +219,19 @@ contract Treasury is Ownable{
      * @param amount amount of ETH to withdraw 
      */
 
-    function withdrawFromCompound(uint256 amount) external onlyOwner{
+    function withdrawFromCompound(uint64 index,uint256 amount) external onlyOwner{
         require(amount > 0,"Null withdraw");
+        require(!toOutside[Protocol.Compound].eachOutside[index].withdrawed,"Already withdrawed in this index");
         cEther.redeem(amount);
-        emit WithdrawFromCompound(amount);
+
+        toOutside[Protocol.Compound].depositedAmount -= amount;
+        toOutside[Protocol.Compound].eachOutside[index].withdrawed = true;
+        toOutside[Protocol.Compound].eachOutside[index].withdrawTime = uint64(block.timestamp);
+        uint64 ethPrice = toOutside[Protocol.Compound].eachOutside[index].ethPriceAtWithdraw = uint64(borrow.getUSDValue());
+        toOutside[Protocol.Compound].eachOutside[index].withdrawedUsdValue = uint64(amount) * ethPrice;
+        toOutside[Protocol.Compound].depositedUsdValue = uint128(toOutside[Protocol.Compound].depositedAmount) * uint128(ethPrice);
+
+        emit WithdrawFromCompound(index,amount);
     }
 
 
