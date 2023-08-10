@@ -36,18 +36,39 @@ describe("Borrowing Contract",function(){
 
         const Treasury = await ethers.getContractFactory("Treasury");
         treasury = await Treasury.deploy(Token.address,wethGateway,cEther);
+        await treasury.transferOwnership(BorrowingContract.address);
 
         await BorrowingContract.initializeTreasury(treasury.address);
+        await BorrowingContract.setLTV(80);
         
         [owner, user1, user2] = await ethers.getSigners();
         return {Token,pToken,CDSContract,BorrowingContract,treasury,owner,user1,user2}
     }
 
-        it.only("Should deposit ETH",async function(){
-            const {BorrowingContract,treasury,Token} = await loadFixture(deployer);
+    describe("Should deposit ETH and mint Trinity",function(){
+        it("Should deposit ETH",async function(){
+            const {BorrowingContract,Token} = await loadFixture(deployer);
             const timeStamp = await time.latest();
             await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
-            console.log("Trinity supply",await Token.totalSupply());
+            expect(await Token.totalSupply()).to.be.equal(ethers.utils.parseEther("800"));
         })
+    })
+
+    describe("Should revert errors",function(){
+        it("Should revert if zero eth is deposited",async function(){
+            const {BorrowingContract} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            const tx =  BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("0")});
+            expect(tx).to.be.revertedWith("Cannot deposit zero tokens");
+        })
+
+        it("Should revert if LTV set to zero value before providing loans",async function(){
+            const {BorrowingContract} = await loadFixture(deployer);
+            await BorrowingContract.setLTV(0);          
+            const timeStamp = await time.latest();
+            const tx =  BorrowingContract.depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            expect(tx).to.be.revertedWith("LTV must be set to non-zero value before providing loans");
+        })
+    })
 
 })
