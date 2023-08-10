@@ -36,7 +36,7 @@ contract Borrowing is Ownable {
 
     struct BorrowerDetails {
         //uint256 depositedAmount;
-        mapping(uint64=> DepositDetails) depositDetails;
+        mapping(uint64 => DepositDetails) depositDetails;
         uint256 borrowedAmount;
         bool hasBorrowed;
         bool hasDeposited;
@@ -110,11 +110,6 @@ contract Borrowing is Ownable {
         Trinity.mint(_borrower, tokensToLend);
     }
 
-    function transferToken(address _borrower, uint64 borrowerIndex) external {
-        _transferToken(_borrower,borrowerIndex);
-    }
-
-
     /**
      * @dev This function takes ethPrice, depositTime, percentageOfEth and receivedType parameters to deposit eth into the contract and mint them back the Trinity tokens.
      * @param _ethPrice get current eth price 
@@ -126,7 +121,13 @@ contract Borrowing is Ownable {
         require(msg.sender.balance > 0, "You do not have sufficient balance to execute this transaction");
         
         //Call the deposit function in Treasury contract
-        treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
+        uint64 borrowerIndex;
+        bool deposited;
+        (borrowerIndex,deposited) = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
+        borrowing[msg.sender].hasDeposited = deposited;
+        borrowing[msg.sender].depositDetails[borrowerIndex].depositedAmount = uint128(msg.value);
+        borrowing[msg.sender].depositDetails[borrowerIndex].ethPriceAtDeposit = _ethPrice;
+        _transferToken(msg.sender,borrowerIndex);
     }
 
     function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime) external {
