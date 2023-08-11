@@ -91,11 +91,10 @@ contract Borrowing is Ownable {
     /**
      * @dev Transfer Trinity token to the borrower
      * @param _borrower Address of the borrower to transfer
-     * @param borrowerIndex Index of the borrower
      * @param amount deposited amount of the borrower
      * @param _ethPrice current eth price
      */
-    function _transferToken(address _borrower, uint64 borrowerIndex,uint256 amount,uint64 _ethPrice) internal {
+    function _transferToken(address _borrower,uint256 amount,uint64 _ethPrice) internal {
         require(_borrower != address(0), "Borrower cannot be zero address");
         require(LTV != 0, "LTV must be set to non-zero value before providing loans");
         
@@ -122,14 +121,13 @@ contract Borrowing is Ownable {
         require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
         
         //Call the deposit function in Treasury contract
-        uint64 borrowerIndex;
         bool deposited;
-        (borrowerIndex,deposited) = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
+        deposited = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
 
         //Check whether the deposit is successfull
         require(deposited, "Borrower must have deposited collateral before claiming loan");
         // Call the transfer function to mint Trinity
-        _transferToken(msg.sender,borrowerIndex,msg.value,_ethPrice);
+        _transferToken(msg.sender,msg.value,_ethPrice);
     }
 
     function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime) external {
