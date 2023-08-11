@@ -56,6 +56,7 @@ contract CDS is Ownable{
         dataFeed = AggregatorV3Interface(
             0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43
         );
+        updateLastEthPrice();
     }
 
     function getLatestData() internal view returns (int) {
@@ -139,20 +140,22 @@ contract CDS is Ownable{
         
         cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(); 
 
-        
+        updateLastEthPrice();
 
     }
 
-    function withdraw(address _to, uint64 _index, uint64 _withdrawTime) public returns(uint256){
+    function withdraw(uint64 _index) public returns(uint256){
        // require(_amount != 0, "Amount cannot be zero");
-        require(
-            _to != address(0) && isContract(_to) == false,
-            "Invalid address"
-        );
+        // require(
+        //     _to != address(0) && isContract(_to) == false,
+        //     "Invalid address"
+        // );
         require(cdsDetails[msg.sender].index >= _index , "user doesn't have the specified index");
        // require(totalCdsDepositedAmount >= _amount, "Contract doesnt have sufficient balance");
         require(cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawed == false,"Already withdrawn");
         
+        uint64 _withdrawTime = block.timestamp;
+
         if (cdsDetails[msg.sender].cdsAccountDetails[_index].depositedTime + withdrawTimeLimit <= _withdrawTime) {
             revert("cannot withdraw before the withdraw time limit");
         }
@@ -171,9 +174,8 @@ contract CDS is Ownable{
 
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedTime =  _withdrawTime;
-        
 
-        Trinity_token.approve(msg.sender, returnAmount);
+        // Trinity_token.approve(msg.sender, returnAmount);
     
         bool transfer = Trinity_token.transfer(msg.sender, returnAmount); // transfer amount to msg.sender
         
