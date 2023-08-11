@@ -14,6 +14,7 @@ contract Treasury is Ownable{
     ICEther public cEther;
 
     address constant ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
+    address public borrowingContract;
 
     //Depositor's Details for each depsoit.
     struct DepositDetails{
@@ -77,9 +78,19 @@ contract Treasury is Ownable{
 
 
     constructor(address _borrowing,address _wethGateway,address _cEther) {
+        borrowingContract = _borrowing;
         borrow = IBorrowing(_borrowing);
         wethGateway = IWrappedTokenGatewayV3(_wethGateway);       //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
         cEther = ICEther(_cEther);                                //0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5
+    }
+
+    modifier onlyBorrowingContract() {
+        require( msg.sender == borrowingContract, "This function can only called by borrowing contract");
+        _;
+    }
+
+    function isContract(address account) internal view returns (bool) {
+        return account.code.length > 0;
     }
 
     /**
@@ -93,7 +104,7 @@ contract Treasury is Ownable{
         uint64 _ethPrice,
         uint64 _depositTime
         )
-        external payable onlyOwner returns(uint64,bool) {
+        external payable onlyBorrowingContract returns(uint64,bool) {
 
         uint64 borrowerIndex;
         //check if borrower is depositing for the first time or not
@@ -152,7 +163,7 @@ contract Treasury is Ownable{
      * @dev This function depsoit 25% of the deposited ETH to AAVE and mint aTokens 
     */
 
-    function depositToAave() external onlyOwner{
+    function depositToAave() external onlyBorrowingContract{
 
         //Divide the Total ETH in the contract to 1/4
         uint256 share = (address(this).balance)/4;
@@ -193,7 +204,7 @@ contract Treasury is Ownable{
      * @param amount amount of ETH to withdraw 
      */
 
-    function withdrawFromAave(uint64 index,uint256 amount) external onlyOwner{
+    function withdrawFromAave(uint64 index,uint256 amount) external onlyBorrowingContract{
 
         //Check the amount to be withdraw is greater than zero
         require(amount > 0,"Null withdraw");
@@ -227,7 +238,7 @@ contract Treasury is Ownable{
      * @dev This function depsoit 25% of the deposited ETH to COMPOUND and mint cETH. 
     */
 
-    function depositToCompound() external onlyOwner{
+    function depositToCompound() external onlyBorrowingContract{
 
         //Divide the Total ETH in the contract to 1/4
         uint256 share = (address(this).balance)/4;
@@ -268,7 +279,7 @@ contract Treasury is Ownable{
      * @param amount amount of ETH to withdraw 
      */
 
-    function withdrawFromCompound(uint64 index,uint256 amount) external onlyOwner{
+    function withdrawFromCompound(uint64 index,uint256 amount) external onlyBorrowingContract{
 
         //Check the amount to be withdraw is greater than zero
         require(amount > 0,"Null withdraw");
@@ -304,5 +315,12 @@ contract Treasury is Ownable{
     //     depositorAccountData = borrowing[user];
     //     return depositorAccountData;
     // }
+
+
+    function setBorrowingContract(address _address) external onlyOwner {
+        require(_address != address(0) && isContract(_address) != false, "Input address is invalid");
+        borrowingContract = _address;
+        borrow = IBorrowing(_address);
+    }
 
 }
