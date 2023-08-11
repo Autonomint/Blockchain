@@ -104,7 +104,7 @@ contract Treasury is Ownable{
         uint64 _ethPrice,
         uint64 _depositTime
         )
-        external payable onlyBorrowingContract returns(uint64,bool) {
+        external payable onlyBorrowingContract returns(bool) {
 
         uint64 borrowerIndex;
         //check if borrower is depositing for the first time or not
@@ -140,10 +140,7 @@ contract Treasury is Ownable{
         borrowing[user].depositDetails[borrowerIndex].ethPriceAtDeposit = _ethPrice;
         
         emit Deposit(user,msg.value);
-        return (
-            borrowerIndex,
-            borrowing[user].hasDeposited
-            );
+        return borrowing[user].hasDeposited;
     }
 
     function withdraw(address toAddress,uint256 _amount) external {
