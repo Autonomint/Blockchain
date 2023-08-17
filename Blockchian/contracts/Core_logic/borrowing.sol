@@ -11,6 +11,10 @@ import "hardhat/console.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 contract Borrowing is Ownable {
+
+    error Borrowing_DepositFailed();
+    error Borrowing_MintFailed();
+
     ITrinityToken public Trinity; // our stablecoin
 
     CDSInterface public cds;
@@ -107,7 +111,12 @@ contract Borrowing is Ownable {
         borrowing[_borrower].hasBorrowed = true;
         borrowing[_borrower].borrowedAmount = tokensToLend;
 
-        Trinity.mint(_borrower, tokensToLend);
+        //Call the mint function in Trinity
+        bool minted = Trinity.mint(_borrower, tokensToLend);
+        
+        if(!minted){
+            revert Borrowing_MintFailed();
+        }
     }
 
     /**
@@ -121,11 +130,12 @@ contract Borrowing is Ownable {
         require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
         
         //Call the deposit function in Treasury contract
-        bool deposited;
-        deposited = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
+        bool deposited = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
 
         //Check whether the deposit is successfull
-        require(deposited, "Borrower must have deposited collateral before claiming loan");
+        if(!deposited){
+            revert Borrowing_DepositFailed();
+        }
         // Call the transfer function to mint Trinity
         _transferToken(msg.sender,msg.value,_ethPrice);
     }
