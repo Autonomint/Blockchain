@@ -4,16 +4,17 @@ pragma solidity 0.8.18;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interface/IBorrowing.sol";
-import "../interface/IWETHGateway.sol";
+import "../interface/AaveInterfaces/IWETHGateway.sol";
+import "../interface/AaveInterfaces/IPoolAddressesProvider.sol";
 import "../interface/ICEther.sol";
 
 contract Treasury is Ownable{
 
     IBorrowing public borrow;
     IWrappedTokenGatewayV3 public wethGateway;
+    IPoolAddressesProvider public aavePoolAddressProvider;
     ICEther public cEther;
 
-    address constant ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address public borrowingContract;
     address public compoundAddress;
 
@@ -79,12 +80,13 @@ contract Treasury is Ownable{
     event WithdrawFromCompound(uint64 count,uint256 amount);
 
 
-    constructor(address _borrowing,address _wethGateway,address _cEther) {
+    constructor(address _borrowing,address _wethGateway,address _cEther,address _aavePoolAddressProvider) {
         borrowingContract = _borrowing;
         borrow = IBorrowing(_borrowing);
         wethGateway = IWrappedTokenGatewayV3(_wethGateway);       //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
         cEther = ICEther(_cEther);                                //0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5
         compoundAddress = _cEther;
+        aavePoolAddressProvider = IPoolAddressesProvider(_aavePoolAddressProvider);  //0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
     }
 
     modifier onlyBorrowingContract() {
@@ -171,8 +173,10 @@ contract Treasury is Ownable{
         //Check the amount to be deposited is greater than zero
         require(share > 0,"Null deposit");
 
+        address poolAddress = aavePoolAddressProvider.getPool();
+
         // Call the deposit function in aave to deposit eth.
-        wethGateway.depositETH{value: share}(ethAddress,address(this),0);
+        wethGateway.depositETH{value: share}(poolAddress,address(this),0);
 
         uint64 count = protocolDeposit[Protocol.Aave].depositIndex;
         count += 1;
@@ -212,8 +216,10 @@ contract Treasury is Ownable{
         //Check the deposited amount in the given index is already withdrawed
         require(!protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawed,"Already withdrawed in this index");
 
+        address poolAddress = aavePoolAddressProvider.getPool();
+
         // Call the withdraw function in aave to withdraw eth.
-        wethGateway.withdrawETH(ethAddress,amount,address(this));
+        wethGateway.withdrawETH(poolAddress,amount,address(this));
 
         //Update the total amount deposited in Aave
         protocolDeposit[Protocol.Aave].depositedAmount -= amount;
