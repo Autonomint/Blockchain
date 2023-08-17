@@ -15,6 +15,7 @@ contract Treasury is Ownable{
 
     address constant ethAddress = 0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE;
     address public borrowingContract;
+    address public compoundAddress;
 
     //Depositor's Details for each depsoit.
     struct DepositDetails{
@@ -47,11 +48,12 @@ contract Treasury is Ownable{
         uint128 depositedAmount;
         uint64 ethPriceAtDeposit;
         uint128 depositedUsdValue;
+        uint128 cETHCredited;
 
         bool withdrawed;
         uint64 ethPriceAtWithdraw;
         uint64 withdrawTime;
-        uint64 withdrawedUsdValue;
+        uint128 withdrawedUsdValue;
     }
 
     //Total Deposit to Aave/Compound
@@ -82,6 +84,7 @@ contract Treasury is Ownable{
         borrow = IBorrowing(_borrowing);
         wethGateway = IWrappedTokenGatewayV3(_wethGateway);       //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
         cEther = ICEther(_cEther);                                //0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5
+        compoundAddress = _cEther;
     }
 
     modifier onlyBorrowingContract() {
@@ -223,7 +226,7 @@ contract Treasury is Ownable{
 
         //Update the withdrawed amount in USD
         uint64 ethPrice = protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].ethPriceAtWithdraw = uint64(borrow.getUSDValue());
-        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawedUsdValue = uint64(amount) * ethPrice;
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawedUsdValue = uint128(amount) * uint128(ethPrice);
 
         //Update the total deposited amount in USD
         protocolDeposit[Protocol.Aave].depositedUsdValue = uint128(protocolDeposit[Protocol.Aave].depositedAmount) * uint128(ethPrice);
@@ -244,7 +247,7 @@ contract Treasury is Ownable{
         require(share > 0,"Null deposit");
 
         // Call the deposit function in Coumpound to deposit eth.
-        cEther.mint{value: share};
+        cEther.mint{value: share}();
 
         uint64 count = protocolDeposit[Protocol.Compound].depositIndex;
         count += 1;
@@ -268,15 +271,19 @@ contract Treasury is Ownable{
         //Update the total deposited amount in USD
         protocolDeposit[Protocol.Compound].depositedUsdValue = uint128(protocolDeposit[Protocol.Compound].depositedAmount) * uint128(ethPrice);
 
+        uint256 creditedAmount = cEther.balanceOf(address(this));
+        protocolDeposit[Protocol.Compound].eachDepositToProtocol[count].cETHCredited = uint128(creditedAmount);
+
         emit DepositToCompound(count,share);
     }
 
     /**
      * @dev This function withdraw ETH from COMPOUND.
-     * @param amount amount of ETH to withdraw 
      */
 
-    function withdrawFromCompound(uint64 index,uint256 amount) external onlyBorrowingContract{
+    function withdrawFromCompound(uint64 index) external onlyBorrowingContract{
+
+        uint256 amount = protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].cETHCredited;
 
         //Check the amount to be withdraw is greater than zero
         require(amount > 0,"Null withdraw");
@@ -298,7 +305,7 @@ contract Treasury is Ownable{
 
         //Update the withdraw amount in USD
         uint64 ethPrice = protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].ethPriceAtWithdraw = uint64(borrow.getUSDValue());
-        protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].withdrawedUsdValue = uint64(amount) * ethPrice;
+        protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].withdrawedUsdValue = uint128(amount) * uint128(ethPrice);
 
         //Update the total deposited amount in USD
         protocolDeposit[Protocol.Compound].depositedUsdValue = uint128(protocolDeposit[Protocol.Compound].depositedAmount) * uint128(ethPrice);
@@ -320,4 +327,9 @@ contract Treasury is Ownable{
         borrow = IBorrowing(_address);
     }
 
+    function getBalanceInTreasury() public view returns(uint256){
+        return address(this).balance;
+    }
+
+    receive() external payable{}
 }
