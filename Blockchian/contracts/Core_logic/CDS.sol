@@ -214,7 +214,7 @@ contract CDS is Ownable{
         borrowingContract = _address;
     }
 
-    function calculateValue(uint128 _amount,uint256 _price){
+    function calculateValue(uint128 _amount,uint256 _price) internal {
         uint256 treasuryBal = Trinity_token.balanceOf(treasury);
         uint256 vaultBal = address(this).balance;
         uint priceDiff = _price - lastEthPrice;
