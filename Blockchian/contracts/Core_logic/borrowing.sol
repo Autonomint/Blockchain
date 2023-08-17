@@ -130,6 +130,22 @@ contract Borrowing is Ownable {
         _transferToken(msg.sender,msg.value,_ethPrice);
     }
 
+    function depositToAaveProtocol() external onlyOwner{
+        treasury.depositToAave();
+    }
+
+    function withdrawFromAaveProtocol(uint64 index,uint256 amount) external onlyOwner{
+        treasury.withdrawFromAave(index,amount);
+    }
+
+    function depositToCompoundProtocol() external onlyOwner{
+        treasury.depositToCompound();
+    }
+
+    function withdrawFromCompoundProtocol(uint64 index) external onlyOwner{
+        treasury.withdrawFromCompound(index);
+    }
+
     function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime) external {
         // check is _toAddress in not a zero address and isContract address
         require(_toAddress != address(0) && isContract(_toAddress) != true, "To address cannot be a zero and contract address");
