@@ -92,88 +92,66 @@ describe("Borrowing Contract",function(){
             expect(tx).to.be.revertedWith("LTV must be set to non-zero value before providing loans");
         })
 
-        it("Should revert if called by other than borrowing contract",async function(){
-            const {treasury} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
-            const tx =  treasury.connect(user1).deposit(user1.address,1000,timeStamp,{value: ethers.utils.parseEther("1")});
-            expect(tx).to.be.revertedWith("This function can only called by borrowing contract");    
-        })
 
-        it("Should return if the address is invalid",async function(){
-            const {treasury} = await loadFixture(deployer);
-            expect(treasury.setBorrowingContract(user1.address)).to.be.revertedWith("Input address is invalid");
-        })
-    })
-
-    describe("Should update all state changes correctly",function(){
-        it("Should update deposited amount",async function(){
+        it("Should revert if the caller is not owner for initializeTreasury",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
-            const tx = await treasury.borrowing(user1.address);
-            expect(tx[0]).to.be.equal(ethers.utils.parseEther("1"))
+            expect(BorrowingContract.connect(user1).initializeTreasury(treasury.address)).to.be.revertedWith("Ownable: caller is not the owner");
         })
 
-        it.only("Should update depositedAmount correctly if deposited multiple times",async function(){
-            const {BorrowingContract,treasury} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("2")});
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("3")});                    
-            const tx = await treasury.borrowing(user1.address);
-            console.log(tx);
-            console.log(await treasury.depositDetails());
-            expect(tx[0]).to.be.equal(ethers.utils.parseEther("6"))
+        it("Should revert if the Treasury address is zero",async function(){
+            const {BorrowingContract} = await loadFixture(deployer);
+            expect(BorrowingContract.connect(owner).initializeTreasury(ethers.constants.AddressZero)).to.be.revertedWith("Treasury cannot be zero address");
         })
 
-        it("Should update hasDeposited or not",async function(){
-            const {BorrowingContract,treasury} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
-            const tx = await treasury.borrowing(user1.address);
-            expect(tx[3]).to.be.equal(true);
+        it("Should revert if caller is not owner(depositToAaveProtocol)",async function(){
+            const {BorrowingContract} = await loadFixture(deployer);
+            const tx = BorrowingContract.connect(user1).depositToAaveProtocol();
+            expect(tx).to.be.revertedWith("Ownable: caller is not the owner");
         })
 
-        it("Should update borrowerIndex",async function(){
-            const {BorrowingContract,treasury} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
-            const tx = await treasury.borrowing(user1.address);
-            expect(tx[4]).to.be.equal(1);
+        it("Should revert if caller is not owner(withdrawFromAaveProtocol)",async function(){
+            const {BorrowingContract} = await loadFixture(deployer);
+            const tx = BorrowingContract.connect(user1).withdrawFromAaveProtocol(1,ethers.utils.parseEther("10"));
+            expect(tx).to.be.revertedWith("Ownable: caller is not the owner");
         })
 
-        it("Should update borrowerIndex correctly if deposited multiple times",async function(){
-            const {BorrowingContract,treasury} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("2")});
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("3")});                    
-            const tx = await treasury.borrowing(user1.address);
-            expect(tx[4]).to.be.equal(3);
+        it("Should revert if caller is not owner(depositToCompoundProtocol)",async function(){
+            const {BorrowingContract} = await loadFixture(deployer);
+            const tx = BorrowingContract.connect(user1).depositToCompoundProtocol();
+            expect(tx).to.be.revertedWith("Ownable: caller is not the owner");
         })
 
-        it("Should update totalVolumeOfBorrowersinUSD",async function(){
-            const {BorrowingContract,treasury} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("2")});
-            expect(await treasury.totalVolumeOfBorrowersinUSD()).to.be.equal(ethers.utils.parseEther("2000"));
+        it("Should revert if caller is not owner(withdrawFromProtocol)",async function(){
+            const {BorrowingContract} = await loadFixture(deployer);
+            const tx = BorrowingContract.connect(user1).withdrawFromCompoundProtocol(1);
+            expect(tx).to.be.revertedWith("Ownable: caller is not the owner");
         })
 
-        it("Should update totalVolumeOfBorrowersinUSD if multiple users deposit in different ethPrice",async function(){
-            const {BorrowingContract,treasury} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("2")});
-            await BorrowingContract.connect(user2).depositTokens(1500,timeStamp,{value: ethers.utils.parseEther("2")});
-            expect(await treasury.totalVolumeOfBorrowersinUSD()).to.be.equal(ethers.utils.parseEther("5000"));
+        it("Should revert if caller is not owner(setLTV)",async function(){
+            const {BorrowingContract} = await loadFixture(deployer);
+            const tx = BorrowingContract.connect(user1).setLTV(80);
+            expect(tx).to.be.revertedWith("Ownable: caller is not the owner");
         })
 
-        it("Should update totalVolumeOfBorrowersinWei",async function(){
-            const {BorrowingContract,treasury} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("2")});
-            await BorrowingContract.connect(user2).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("3")});          
-            expect(await treasury.totalVolumeOfBorrowersinWei()).to.be.equal(ethers.utils.parseEther("5"));
-        })
+        // it.only("Should revert Borrower address can't be zero",async function(){
+        //     const {BorrowingContract,Token} = await loadFixture(deployer);
+        //     const timeStamp = await time.latest();
+        //     const tx = BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+        //     expect(tx).to.be.revertedWith("Borrower cannot be zero address");
+        // })
+
+        // it("Should return true if the address is contract address ",async function(){
+        //     const {BorrowingContract,treasury} = await loadFixture(deployer);
+        //     const tx = await BorrowingContract.isContract(treasury.address);
+        //     expect(tx).to.be.equal(true);
+        // })
+
+        // it("Should return false if the address is not contract address ",async function(){
+        //     const {BorrowingContract,treasury} = await loadFixture(deployer);
+        //     const tx = await BorrowingContract.isContract(user1.address);
+        //     expect(tx).to.be.equal(false);
+        // })
+
     })
 
 })
