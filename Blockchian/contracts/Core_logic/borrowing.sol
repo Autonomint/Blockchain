@@ -89,6 +89,7 @@ contract Borrowing is Ownable {
     }
 
     function initializeTreasury(address _treasury) external onlyOwner{
+        require(_treasury != address(0), "Treasury cannot be zero address");
         treasury = ITreasury(_treasury);
     }
 
