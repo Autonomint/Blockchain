@@ -14,6 +14,14 @@ interface IATOKEN is IERC20{}
 
 contract Treasury is Ownable{
 
+    error Treasury_ZeroDeposit();
+    error Treasury_ZeroWithdraw();
+    error Treasury_AavePoolAddressZero();
+    error Treasury_AaveDepositAndMintFailed();
+    error Treasury_AaveWithdrawFailed();
+    error Treasury_CompoundDepositAndMintFailed();
+    error Treasury_CompoundWithdrawFailed();
+
     IBorrowing public borrow;
     IWrappedTokenGatewayV3 public wethGateway;
     IPoolAddressesProvider public aavePoolAddressProvider;
@@ -22,7 +30,7 @@ contract Treasury is Ownable{
 
     address public borrowingContract;
     address public compoundAddress;
-    address public aaveWETH;
+    address public aaveWETH;        //wethGateway Address for Approve
 
     //Depositor's Details for each depsoit.
     struct DepositDetails{
@@ -55,7 +63,7 @@ contract Treasury is Ownable{
         uint128 depositedAmount;
         uint64 ethPriceAtDeposit;
         uint128 depositedUsdValue;
-        uint128 cETHCredited;
+        uint128 tokensCredited;
 
         bool withdrawed;
         uint64 ethPriceAtWithdraw;
@@ -68,6 +76,7 @@ contract Treasury is Ownable{
         mapping (uint64 => EachDepositToProtocol) eachDepositToProtocol;
         uint64 depositIndex;
         uint256 depositedAmount;
+        uint256 totalCreditedTokens;
         uint128 depositedUsdValue;       
     }
 
@@ -179,12 +188,23 @@ contract Treasury is Ownable{
         uint256 share = (address(this).balance)/4;
 
         //Check the amount to be deposited is greater than zero
-        require(share > 0,"Null deposit");
+        if(share == 0){
+            revert Treasury_ZeroDeposit();
+        }
 
         address poolAddress = aavePoolAddressProvider.getPool();
 
+        if(poolAddress == address(0)){
+            revert Treasury_AavePoolAddressZero();
+        }
+
         // Call the deposit function in aave to deposit eth.
         wethGateway.depositETH{value: share}(poolAddress,address(this),0);
+
+        uint256 creditedAmount = aToken.balanceOf(address(this));
+        if(creditedAmount == protocolDeposit[Protocol.Aave].totalCreditedTokens){
+            revert Treasury_AaveDepositAndMintFailed();
+        }
 
         uint64 count = protocolDeposit[Protocol.Aave].depositIndex;
         count += 1;
@@ -208,6 +228,9 @@ contract Treasury is Ownable{
         //Update the total deposited amount in USD
         protocolDeposit[Protocol.Aave].depositedUsdValue = uint128(protocolDeposit[Protocol.Aave].depositedAmount) * uint128(ethPrice);
 
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].tokensCredited = uint128(creditedAmount) - uint128(protocolDeposit[Protocol.Aave].totalCreditedTokens);
+        protocolDeposit[Protocol.Aave].totalCreditedTokens = creditedAmount;
+
         emit DepositToAave(count,share);
     }
 
@@ -219,17 +242,28 @@ contract Treasury is Ownable{
     function withdrawFromAave(uint64 index,uint256 amount) external onlyBorrowingContract{
 
         //Check the amount to be withdraw is greater than zero
-        require(amount > 0,"Null withdraw");
+        if(amount == 0){
+            revert Treasury_ZeroWithdraw();
+        }
 
         //Check the deposited amount in the given index is already withdrawed
         require(!protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawed,"Already withdrawed in this index");
 
         address poolAddress = aavePoolAddressProvider.getPool();
 
+        if(poolAddress == address(0)){
+            revert Treasury_AavePoolAddressZero();
+        }
+
         aToken.approve(aaveWETH,amount);
 
         // Call the withdraw function in aave to withdraw eth.
         wethGateway.withdrawETH(poolAddress,amount,address(this));
+
+        uint256 aaveToken = cEther.balanceOf(address(this));
+        if(aaveToken == protocolDeposit[Protocol.Aave].totalCreditedTokens){
+            revert Treasury_AaveWithdrawFailed();
+        }
 
         //Update the total amount deposited in Aave
         protocolDeposit[Protocol.Aave].depositedAmount -= amount;
@@ -247,6 +281,8 @@ contract Treasury is Ownable{
         //Update the total deposited amount in USD
         protocolDeposit[Protocol.Aave].depositedUsdValue = uint128(protocolDeposit[Protocol.Aave].depositedAmount) * uint128(ethPrice);
 
+        protocolDeposit[Protocol.Aave].totalCreditedTokens -= amount; 
+
         emit WithdrawFromAave(index,amount);
     }
 
@@ -260,10 +296,19 @@ contract Treasury is Ownable{
         uint256 share = (address(this).balance)/4;
 
         //Check the amount to be deposited is greater than zero       
-        require(share > 0,"Null deposit");
+        if(share == 0){
+            revert Treasury_ZeroDeposit();
+        }
 
         // Call the deposit function in Coumpound to deposit eth.
         cEther.mint{value: share}();
+
+        uint256 creditedAmount = cEther.balanceOf(address(this));
+        console.log(creditedAmount);
+
+        if(creditedAmount == protocolDeposit[Protocol.Compound].totalCreditedTokens){
+            revert Treasury_CompoundDepositAndMintFailed();
+        }
 
         uint64 count = protocolDeposit[Protocol.Compound].depositIndex;
         count += 1;
@@ -287,8 +332,8 @@ contract Treasury is Ownable{
         //Update the total deposited amount in USD
         protocolDeposit[Protocol.Compound].depositedUsdValue = uint128(protocolDeposit[Protocol.Compound].depositedAmount) * uint128(ethPrice);
 
-        uint256 creditedAmount = cEther.balanceOf(address(this));
-        protocolDeposit[Protocol.Compound].eachDepositToProtocol[count].cETHCredited = uint128(creditedAmount);
+        protocolDeposit[Protocol.Compound].eachDepositToProtocol[count].tokensCredited = uint128(creditedAmount) - uint128(protocolDeposit[Protocol.Compound].totalCreditedTokens);
+        protocolDeposit[Protocol.Compound].totalCreditedTokens = creditedAmount;
 
         emit DepositToCompound(count,share);
     }
@@ -299,16 +344,21 @@ contract Treasury is Ownable{
 
     function withdrawFromCompound(uint64 index) external onlyBorrowingContract{
 
-        uint256 amount = protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].cETHCredited;
+        uint256 amount = protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].tokensCredited;
 
         //Check the amount to be withdraw is greater than zero
-        require(amount > 0,"Null withdraw");
-
+        if(amount == 0){
+            revert Treasury_ZeroWithdraw();
+        }
         //Check the deposited amount in the given index is already withdrawed
         require(!protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].withdrawed,"Already withdrawed in this index");
 
         // Call the redeem function in Compound to withdraw eth.
         cEther.redeem(amount);
+        uint256 cToken = cEther.balanceOf(address(this));
+        if(cToken == protocolDeposit[Protocol.Compound].totalCreditedTokens){
+            revert Treasury_CompoundWithdrawFailed();
+        }
 
         //Update the total amount deposited in Coumpound
         protocolDeposit[Protocol.Compound].depositedAmount -= amount;
@@ -325,6 +375,8 @@ contract Treasury is Ownable{
 
         //Update the total deposited amount in USD
         protocolDeposit[Protocol.Compound].depositedUsdValue = uint128(protocolDeposit[Protocol.Compound].depositedAmount) * uint128(ethPrice);
+
+        protocolDeposit[Protocol.Compound].totalCreditedTokens -= amount; 
 
         emit WithdrawFromCompound(index,amount);
     }
