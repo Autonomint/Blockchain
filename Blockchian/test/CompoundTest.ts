@@ -60,13 +60,19 @@ describe("Compound Testing",function(){
     }
 
     describe("Should deposit Eth in Compound",function(){
+        it("Should revert if called by other than Borrowing Contract(Compound Deposit)",async function(){
+            const {treasury} = await loadFixture(deployer);
+            const tx = treasury.connect(owner).depositToCompound();
+            expect(tx).to.be.revertedWith("This function can only called by borrowing contract");
+        })
+
         it("Should revert if zero eth is deposited to Compound",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const tx = BorrowingContract.connect(owner).depositToCompoundProtocol();
             expect(tx).to.be.revertedWithCustomError(treasury,"Treasury_ZeroDeposit");
         })
 
-        it.only("Should deposit eth and mint cETH",async function(){
+        it("Should deposit eth and mint cETH",async function(){
             const {BorrowingContract,treasury,cETH} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
@@ -82,7 +88,25 @@ describe("Compound Testing",function(){
             expect(tx).to.be.revertedWithCustomError(treasury,"Treasury_ZeroWithdraw");
         })
 
-        it.only("Should withdraw eth from Compound",async function(){
+        it("Should revert if called by other than Borrowing Contract(Compound Withdraw)",async function(){
+            const {treasury} = await loadFixture(deployer);
+            const tx = treasury.connect(owner).withdrawFromCompound(1);
+            expect(tx).to.be.revertedWith("This function can only called by borrowing contract");
+        })
+
+        it("Should revert if already withdraw in index from Compound",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(owner).depositToCompoundProtocol();
+
+            await BorrowingContract.connect(owner).withdrawFromCompoundProtocol(1);
+            const tx =  BorrowingContract.connect(owner).withdrawFromCompoundProtocol(1);
+            expect(tx).to.be.revertedWith("Already withdrawed in this index");
+        })
+
+        it("Should withdraw eth from Compound",async function(){
             const {BorrowingContract,treasury,cETH} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
