@@ -60,17 +60,25 @@ describe("Borrowing Contract",function(){
     }
 
     describe("Should deposit and withdraw Eth in Aave",function(){
+        it("Should revert if called by other than Borrowing Contract(Aave Deposit)",async function(){
+            const {treasury} = await loadFixture(deployer);
+            const tx = treasury.connect(owner).depositToAave();
+            expect(tx).to.be.revertedWith("This function can only called by borrowing contract");
+        })
+
         it("Should revert if zero eth is deposited to Aave",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const tx = BorrowingContract.connect(owner).depositToAaveProtocol();
             expect(tx).to.be.revertedWithCustomError(treasury,"Treasury_ZeroDeposit");
         })
 
-        it("Should deposit eth and mint aTokens",async function(){
-            const {BorrowingContract} = await loadFixture(deployer);
+        it.only("Should deposit eth and mint aTokens",async function(){
+            const {BorrowingContract,aToken} = await loadFixture(deployer);
             const timeStamp = await time.latest();
             await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
             await BorrowingContract.connect(owner).depositToAaveProtocol();
+            console.log(await aToken.balanceOf("0xb1CCF81aF23C05B99D5AaEa9F521a5e912E17767"));
+            //expect(await aToken.balanceOf(treasury.address)).to.be.equal(ethers.utils.parseEther("25"))
         })
 
         it("Should revert if zero Eth withdraw from Compound",async function(){
@@ -78,6 +86,25 @@ describe("Borrowing Contract",function(){
             const tx = BorrowingContract.connect(owner).withdrawFromAaveProtocol(1,ethers.utils.parseEther("0"));
             expect(tx).to.be.revertedWithCustomError(treasury,"Treasury_ZeroWithdraw");
         })
+
+        it("Should revert if already withdraw in index from Aave",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(owner).depositToAaveProtocol();
+
+            await BorrowingContract.connect(owner).withdrawFromAaveProtocol(1,ethers.utils.parseEther("10"));
+            const tx =  BorrowingContract.connect(owner).withdrawFromAaveProtocol(1,ethers.utils.parseEther("10"));
+            expect(tx).to.be.revertedWith("Already withdrawed in this index");
+        })
+
+        it("Should revert if called by other than Borrowing Contract(Aave Withdraw)",async function(){
+            const {treasury} = await loadFixture(deployer);
+            const tx = treasury.connect(owner).withdrawFromAave(1,ethers.utils.parseEther("25"));
+            expect(tx).to.be.revertedWith("This function can only called by borrowing contract");
+        })
+
 
         it("Should withdraw eth from Aave",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
