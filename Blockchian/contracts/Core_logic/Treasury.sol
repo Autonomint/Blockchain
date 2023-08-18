@@ -304,7 +304,6 @@ contract Treasury is Ownable{
         cEther.mint{value: share}();
 
         uint256 creditedAmount = cEther.balanceOf(address(this));
-        console.log(creditedAmount);
 
         if(creditedAmount == protocolDeposit[Protocol.Compound].totalCreditedTokens){
             revert Treasury_CompoundDepositAndMintFailed();
@@ -346,12 +345,13 @@ contract Treasury is Ownable{
 
         uint256 amount = protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].tokensCredited;
 
+        //Check the deposited amount in the given index is already withdrawed
+        require(!protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].withdrawed,"Already withdrawed in this index");
+
         //Check the amount to be withdraw is greater than zero
         if(amount == 0){
             revert Treasury_ZeroWithdraw();
         }
-        //Check the deposited amount in the given index is already withdrawed
-        require(!protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].withdrawed,"Already withdrawed in this index");
 
         // Call the redeem function in Compound to withdraw eth.
         cEther.redeem(amount);
@@ -376,7 +376,8 @@ contract Treasury is Ownable{
         //Update the total deposited amount in USD
         protocolDeposit[Protocol.Compound].depositedUsdValue = uint128(protocolDeposit[Protocol.Compound].depositedAmount) * uint128(ethPrice);
 
-        protocolDeposit[Protocol.Compound].totalCreditedTokens -= amount; 
+        protocolDeposit[Protocol.Compound].totalCreditedTokens -= amount;
+        protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].tokensCredited = 0;
 
         emit WithdrawFromCompound(index,amount);
     }
