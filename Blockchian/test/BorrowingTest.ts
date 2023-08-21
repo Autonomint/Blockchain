@@ -15,7 +15,7 @@ import {
     INFURA_URL,
     aTokenABI,
     cETH_ABI,
-    } from "./index";
+    } from "./utils/index"
 
 describe("Borrowing Contract",function(){
 
@@ -153,5 +153,299 @@ describe("Borrowing Contract",function(){
         // })
 
     })
+
+    describe("Should revert errors",function(){
+        it("Should revert if called by other than borrowing contract",async function(){
+            const {treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            const tx =  treasury.connect(user1).deposit(user1.address,1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            expect(tx).to.be.revertedWith("This function can only called by borrowing contract");    
+        })
+
+        it("Should revert if the address is zero",async function(){
+            const {treasury} = await loadFixture(deployer);
+            expect(treasury.connect(owner).setBorrowingContract(ethers.constants.AddressZero)).to.be.revertedWith("Input address is invalid");
+        })
+
+        it("Should revert if the address is invalid",async function(){
+            const {treasury} = await loadFixture(deployer);
+            expect(treasury.connect(owner).setBorrowingContract(user1.address)).to.be.revertedWith("Input address is invalid");
+        })
+
+        it("Should revert if the caller is not owner",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            expect(treasury.connect(user1).setBorrowingContract(BorrowingContract.address)).to.be.revertedWith("Ownable: caller is not the owner");
+        })
+    })
+
+    describe("Should update all state changes correctly",function(){
+        it("Should update deposited amount",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            const tx = await treasury.borrowing(user1.address);
+            expect(tx[0]).to.be.equal(ethers.utils.parseEther("1"))
+        })
+
+        it("Should update depositedAmount correctly if deposited multiple times",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("2")});
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("3")});                    
+            const tx = await treasury.borrowing(user1.address);
+            expect(tx[0]).to.be.equal(ethers.utils.parseEther("6"))
+        })
+
+        it("Should update hasDeposited or not",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            const tx = await treasury.borrowing(user1.address);
+            expect(tx[3]).to.be.equal(true);
+        })
+
+        it("Should update borrowerIndex",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            const tx = await treasury.borrowing(user1.address);
+            expect(tx[4]).to.be.equal(1);
+        })
+
+        it("Should update borrowerIndex correctly if deposited multiple times",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("2")});
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("3")});                    
+            const tx = await treasury.borrowing(user1.address);
+            expect(tx[4]).to.be.equal(3);
+        })
+
+        it("Should update totalVolumeOfBorrowersinUSD",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("2")});
+            expect(await treasury.totalVolumeOfBorrowersinUSD()).to.be.equal(ethers.utils.parseEther("2000"));
+        })
+
+        it("Should update totalVolumeOfBorrowersinUSD if multiple users deposit in different ethPrice",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("2")});
+            await BorrowingContract.connect(user2).depositTokens(1500,timeStamp,{value: ethers.utils.parseEther("2")});
+            expect(await treasury.totalVolumeOfBorrowersinUSD()).to.be.equal(ethers.utils.parseEther("5000"));
+        })
+
+        it("Should update totalVolumeOfBorrowersinWei",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("2")});
+            await BorrowingContract.connect(user2).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("3")});          
+            expect(await treasury.totalVolumeOfBorrowersinWei()).to.be.equal(ethers.utils.parseEther("5"));
+        })
+    })
+
+    describe("Should deposit and withdraw Eth in Aave",function(){
+        it("Should revert if called by other than Borrowing Contract(Aave Deposit)",async function(){
+            const {treasury} = await loadFixture(deployer);
+            const tx = treasury.connect(owner).depositToAave();
+            expect(tx).to.be.revertedWith("This function can only called by borrowing contract");
+        })
+
+        it("Should revert if zero eth is deposited to Aave",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const tx = BorrowingContract.connect(owner).depositToAaveProtocol();
+            expect(tx).to.be.revertedWithCustomError(treasury,"Treasury_ZeroDeposit");
+        })
+
+        it("Should deposit eth and mint aTokens",async function(){
+            const {BorrowingContract,aToken} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(owner).depositToAaveProtocol();
+            //console.log(await aToken.balanceOf("0xb1CCF81aF23C05B99D5AaEa9F521a5e912E17767"));
+            //expect(await aToken.balanceOf(treasury.address)).to.be.equal(ethers.utils.parseEther("25"))
+        })
+
+        it("Should revert if zero Eth withdraw from Compound",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const tx = BorrowingContract.connect(owner).withdrawFromAaveProtocol(1,ethers.utils.parseEther("0"));
+            expect(tx).to.be.revertedWithCustomError(treasury,"Treasury_ZeroWithdraw");
+        })
+
+        it("Should revert if already withdraw in index from Aave",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(owner).depositToAaveProtocol();
+
+            await BorrowingContract.connect(owner).withdrawFromAaveProtocol(1,ethers.utils.parseEther("10"));
+            const tx =  BorrowingContract.connect(owner).withdrawFromAaveProtocol(1,ethers.utils.parseEther("10"));
+            expect(tx).to.be.revertedWith("Already withdrawed in this index");
+        })
+
+        it("Should revert if called by other than Borrowing Contract(Aave Withdraw)",async function(){
+            const {treasury} = await loadFixture(deployer);
+            const tx = treasury.connect(owner).withdrawFromAave(1,ethers.utils.parseEther("25"));
+            expect(tx).to.be.revertedWith("This function can only called by borrowing contract");
+        })
+
+
+        it("Should withdraw eth from Aave",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            console.log(await treasury.getBalanceInTreasury());
+
+            await BorrowingContract.connect(owner).depositToAaveProtocol();
+            console.log(await treasury.getBalanceInTreasury());
+
+            await BorrowingContract.connect(owner).withdrawFromAaveProtocol(1,ethers.utils.parseEther("25"));
+            console.log(await treasury.getBalanceInTreasury());
+        })
+
+        it("Should update deposit index correctly",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(owner).depositToAaveProtocol();
+            await BorrowingContract.connect(owner).depositToAaveProtocol();
+
+            const tx = await treasury.protocolDeposit(0);
+            expect(tx[0]).to.be.equal(2);
+        })
+
+        it("Should update depositedAmount correctly",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(owner).depositToAaveProtocol();
+            await BorrowingContract.connect(owner).depositToAaveProtocol();
+
+            const tx = await treasury.protocolDeposit(0);
+            expect(tx[1]).to.be.equal(ethers.utils.parseEther("43.75"));
+        })
+    })
+
+    describe("Should deposit Eth in Compound",function(){
+        it("Should revert if called by other than Borrowing Contract(Compound Deposit)",async function(){
+            const {treasury} = await loadFixture(deployer);
+            const tx = treasury.connect(owner).depositToCompound();
+            expect(tx).to.be.revertedWith("This function can only called by borrowing contract");
+        })
+
+        it("Should revert if zero eth is deposited to Compound",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const tx = BorrowingContract.connect(owner).depositToCompoundProtocol();
+            expect(tx).to.be.revertedWithCustomError(treasury,"Treasury_ZeroDeposit");
+        })
+
+        it("Should deposit eth and mint cETH",async function(){
+            const {BorrowingContract,treasury,cETH} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+
+            await BorrowingContract.connect(owner).depositToCompoundProtocol();
+            //console.log(await cETH.balanceOf(treasury.address));         
+        })
+
+        it("Should revert if zero Eth withdraw from Compound",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const tx = BorrowingContract.connect(owner).withdrawFromCompoundProtocol(1);
+            expect(tx).to.be.revertedWithCustomError(treasury,"Treasury_ZeroWithdraw");
+        })
+
+        it("Should revert if called by other than Borrowing Contract(Compound Withdraw)",async function(){
+            const {treasury} = await loadFixture(deployer);
+            const tx = treasury.connect(owner).withdrawFromCompound(1);
+            expect(tx).to.be.revertedWith("This function can only called by borrowing contract");
+        })
+
+        it("Should revert if already withdraw in index from Compound",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(owner).depositToCompoundProtocol();
+
+            await BorrowingContract.connect(owner).withdrawFromCompoundProtocol(1);
+            const tx =  BorrowingContract.connect(owner).withdrawFromCompoundProtocol(1);
+            expect(tx).to.be.revertedWith("Already withdrawed in this index");
+        })
+
+        it("Should withdraw eth from Compound",async function(){
+            const {BorrowingContract,treasury,cETH} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            console.log(await treasury.getBalanceInTreasury());
+
+            const tx = await BorrowingContract.connect(owner).depositToCompoundProtocol();
+            console.log(await treasury.getBalanceInTreasury());
+
+            await BorrowingContract.connect(owner).withdrawFromCompoundProtocol(1);
+            console.log(await treasury.getBalanceInTreasury());
+        })
+
+        it("Should update deposit index correctly",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(owner).depositToCompoundProtocol();
+            await BorrowingContract.connect(owner).depositToCompoundProtocol();
+
+            const tx = await treasury.protocolDeposit(1);
+            expect(tx[0]).to.be.equal(2);
+        })
+
+        it("Should update depositedAmount correctly",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(owner).depositToCompoundProtocol();
+            await BorrowingContract.connect(owner).depositToCompoundProtocol();
+
+            const tx = await treasury.protocolDeposit(1);
+            expect(tx[1]).to.be.equal(ethers.utils.parseEther("43.75"));
+        })
+
+        it("Should update totalCreditedTokens correctly",async function(){
+             const {BorrowingContract,treasury,cETH} = await loadFixture(deployer);
+            // const timeStamp = await time.latest();
+
+            // await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            // await BorrowingContract.connect(owner).depositToCompoundProtocol();
+            // await BorrowingContract.connect(owner).depositToCompoundProtocol();
+
+            // const tx = await treasury.protocolDeposit(1);
+            // expect(tx[2]).to.be.equal();
+            //console.log(await cETH.connect(user1).balanceOf(treasury.address));
+        })
+
+        // it.only("Should update depositedUsdValue correctly",async function(){
+        //     const {BorrowingContract,treasury} = await loadFixture(deployer);
+        //     const timeStamp = await time.latest();
+
+        //     await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+        //     await BorrowingContract.connect(owner).depositToCompoundProtocol();
+        //     await BorrowingContract.connect(owner).depositToCompoundProtocol();
+
+        //     const usdValue = await BorrowingContract.getUSDValue();
+        //     const ethValue = ethers.utils.parseEther("100");
+
+        //     const tx = await treasury.protocolDeposit(1);
+        //     expect(tx[3]).to.be.equal();
+        // })
+    })
+
 
 })
