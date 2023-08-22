@@ -396,7 +396,7 @@ contract Treasury is Ownable{
         borrow = IBorrowing(_address);
     }
 
-    function getBalanceInTreasury() public view returns(uint256){
+    function getBalanceInTreasury() external view returns(uint256){
         return address(this).balance;
     }
 
