@@ -22,15 +22,15 @@ contract CDS is Ownable{
     address public treasury;
 
     uint256 public lastEthPrice;
+    uint256 public fallbackEthPrice;
     uint256 public cdsCount;
     uint96 public withdrawTimeLimit;
     uint128 public totalCdsDepositedAmount;
-    uint128 public amountAvailableToBorrow;
 
     struct CdsAccountDetails {
-        uint64 depositedTime;
+        uint depositedTime;
         uint128 depositedAmount;
-        uint64 withdrawedTime;
+        uint withdrawedTime;
         uint128 withdrawedAmount;
         bool withdrawed;
         uint256 depositPrice;
@@ -56,10 +56,10 @@ contract CDS is Ownable{
         dataFeed = AggregatorV3Interface(
             0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43
         );
-        updateLastEthPrice();
+        lastEthPrice = getLatestData();
     }
 
-    function getLatestData() internal view returns (int) {
+    function getLatestData() internal view returns (uint) {
         (
             /* uint80 roundID */,
             int answer,
@@ -67,11 +67,12 @@ contract CDS is Ownable{
             /*uint timeStamp*/,
             /*uint80 answeredInRound*/
         ) = dataFeed.latestRoundData();
-        return answer.toUint256();
+        return uint(answer);
     }
 
-    function updateLastEthPrice() internal {
-        lastEthPrice = getLatestData();
+    function updateLastEthPrice(uint256 priceAtEvent) internal {
+        fallbackEthPrice = lastEthPrice;
+        lastEthPrice = priceAtEvent;
     }
 
     function isContract(address account) internal view returns (bool) {
@@ -86,7 +87,7 @@ contract CDS is Ownable{
         ); // check if user has sufficient trinity token
 
         require(
-            Trinity_token.allowance(msg.sender) >= _amount,
+            Trinity_token.allowance(msg.sender,address(this)) >= _amount,
             "Insufficient allowance"
         ); // check if user has sufficient trinity token allowance
 
@@ -130,21 +131,19 @@ contract CDS is Ownable{
 
         //add deposited amount to totalCdsDepositedAmount
         totalCdsDepositedAmount += _amount;
-
-        amountAvailableToBorrow += _amount/2; 
-        
-        //amountAvailableToBorrow = totalCdsDepositedAmount/2;
         
         //add deposited time of perticular index and amount in cdsAccountDetails
         cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = block.timestamp;
         
-        cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(); 
+        cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(ethPrice); 
 
-        updateLastEthPrice();
-
+        if(ethPrice != lastEthPrice){
+            updateLastEthPrice(ethPrice);
+        }
+        
     }
 
-    function withdraw(uint64 _index) public returns(uint256){
+    function withdraw(uint64 _index) public {
        // require(_amount != 0, "Amount cannot be zero");
         // require(
         //     _to != address(0) && isContract(_to) == false,
@@ -154,7 +153,7 @@ contract CDS is Ownable{
        // require(totalCdsDepositedAmount >= _amount, "Contract doesnt have sufficient balance");
         require(cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawed == false,"Already withdrawn");
         
-        uint64 _withdrawTime = block.timestamp;
+        uint _withdrawTime = block.timestamp;
 
         if (cdsDetails[msg.sender].cdsAccountDetails[_index].depositedTime + withdrawTimeLimit <= _withdrawTime) {
             revert("cannot withdraw before the withdraw time limit");
@@ -182,18 +181,13 @@ contract CDS is Ownable{
         require(transfer == true, "Transfer failed in cds withdraw");
     }
    
-   function updateAmountAvailabletoBorrow(uint128 _updatedCdsPercentage) external onlyBorrowContract {
-        amountAvailableToBorrow = _updatedCdsPercentage;
-           
-   }
 
    //calculating Ethereum value to return to CDS owner
    //The function will deduct some amount of ether if it is borrowed
    //Deduced amount will be calculated using the percentage of CDS a user owns
-   function cdsAmountToReturn(address _user, uint64 index) internal returns(uint128){
-        uint128 safeAmountInCDS = ((cdsDetails[_user].cdsAccountDetails[index].depositedAmount)/2);
-        uint128 toReturn = ((cdsDetails[_user].cdsAccountDetails[index].depositedAmount)*amountAvailableToBorrow)/totalCdsDepositedAmount;
-        amountAvailableToBorrow -= toReturn;
+   function cdsAmountToReturn(address _user, uint64 index) internal view returns(uint128){
+        uint128 safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
+        uint128 toReturn = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
         return (toReturn + safeAmountInCDS);
    }
 
@@ -214,10 +208,19 @@ contract CDS is Ownable{
         borrowingContract = _address;
     }
 
-    function calculateValue(uint128 _amount,uint256 _price) internal {
+    function calculateValue(uint256 _price) internal view returns(uint256) {
+        uint128 _amount = 1000;
         uint256 treasuryBal = Trinity_token.balanceOf(treasury);
         uint256 vaultBal = address(this).balance;
-        uint priceDiff = _price - lastEthPrice;
+        uint priceDiff;
+
+        if(_price != lastEthPrice){
+            priceDiff = _price - lastEthPrice;
+        }
+
+        else{
+            priceDiff = _price - fallbackEthPrice;
+        }
         uint256 value = (_amount * vaultBal * priceDiff) / treasuryBal;
         return value;
     }
