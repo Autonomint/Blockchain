@@ -8,6 +8,7 @@ interface ITreasury{
         function withdrawFromAave(uint64 index,uint256 amount) external;
         function depositToCompound() external;
         function withdrawFromCompound(uint64 index) external;
+        function getBalanceInTreasury() external view returns(uint256);
 
         //function getUserAccountData (address user) external view returns();
 
