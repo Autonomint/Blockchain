@@ -197,16 +197,24 @@ contract CDS is Ownable{
         uint withdrawalVal = calculateValue(_ethPrice);
         uint depositVal = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
 
-        // if(withdrawalVal < depositVal){
-        //     return 0;
-        // }
+        if(withdrawalVal <= depositVal){
+            uint valDiff = depositVal - withdrawalVal;
 
-        uint valDiff = withdrawalVal - depositVal;
+            uint safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
+            uint loss = (safeAmountInCDS * valDiff) / 1000;
 
-        uint safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
-        uint toReturn = (safeAmountInCDS * valDiff) / 1000;
+            return (safeAmountInCDS - loss);
+        }
 
-        return (toReturn + safeAmountInCDS);
+        else{
+            uint valDiff = withdrawalVal - depositVal;
+
+            uint safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
+            uint toReturn = (safeAmountInCDS * valDiff) / 1000;
+
+            return (toReturn + safeAmountInCDS);
+        }
+        
    }
 
 
