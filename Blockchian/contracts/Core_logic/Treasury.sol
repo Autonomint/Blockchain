@@ -84,8 +84,9 @@ contract Treasury is Ownable{
 
     mapping(address depositor => BorrowerDetails) public borrowing;
     mapping(Protocol => ProtocolDeposit) public protocolDeposit;
-    uint128 public totalVolumeOfBorrowersinWei;
-    uint128 public totalVolumeOfBorrowersinUSD;
+    uint128 public totalVolumeOfBorrowersAmountinWei;
+    uint128 public totalVolumeOfBorrowersAmountinUSD;
+    uint128 public noOfBorrowers;
 
     event Deposit(address indexed user,uint256 amount);
     event Withdraw(address indexed user,uint256 amount);
@@ -136,6 +137,7 @@ contract Treasury is Ownable{
           
             //change hasDeposited bool to true after first deposit
             borrowing[user].hasDeposited = true;
+            ++noOfBorrowers;
         }
         else {
             //increment the borrowerIndex for each deposit
@@ -150,10 +152,10 @@ contract Treasury is Ownable{
         borrowing[user].depositDetails[borrowerIndex].depositedAmount = uint128(msg.value);
 
         //Total volume of borrowers in USD
-        totalVolumeOfBorrowersinUSD += (uint128(_ethPrice) * uint128(msg.value));
+        totalVolumeOfBorrowersAmountinUSD += (uint128(_ethPrice) * uint128(msg.value));
 
         //Total volume of borrowers in Wei
-        totalVolumeOfBorrowersinWei += uint128(msg.value);
+        totalVolumeOfBorrowersAmountinWei += uint128(msg.value);
 
         //Adding depositTime to borrowing struct
         borrowing[user].depositDetails[borrowerIndex].depositedTime = _depositTime;

@@ -14,6 +14,7 @@ contract Borrowing is Ownable {
 
     error Borrowing_DepositFailed();
     error Borrowing_MintFailed();
+    error Borrowing_TreasuryBalanceZero();
 
     ITrinityToken public Trinity; // our stablecoin
 
@@ -63,7 +64,12 @@ contract Borrowing is Ownable {
     uint128 public totalVolumeOfBorrowersinWei;
     uint128 public totalVolumeOfBorrowersinUSD;
     address public priceFeedAddress;
-    uint256 FEED_PRECISION = 1e8; // ETH/USD had 8 decimals
+    uint128 public lastEthprice;
+    uint256 public lastEthVaultValue;
+    uint256 public lastCDSPoolValue;
+    uint256 public lastTotalCDSPool;
+    uint128 FEED_PRECISION = 1e10; // ETH/USD had 8 decimals
+    uint128 PRECISION = 1e6;
 
     constructor(
         address _tokenAddress,
@@ -89,7 +95,7 @@ contract Borrowing is Ownable {
     }
 
     function initializeTreasury(address _treasury) external onlyOwner{
-        require(_treasury != address(0), "Treasury cannot be zero address");
+        require(_treasury != address(0) && isContract(_treasury) != false, "Treasury must be contract address & can't be zero address");
         treasury = ITreasury(_treasury);
     }
 
@@ -137,6 +143,7 @@ contract Borrowing is Ownable {
         if(!deposited){
             revert Borrowing_DepositFailed();
         }
+        lastEthprice = uint128(getUSDValue());
         // Call the transfer function to mint Trinity
         _transferToken(msg.sender,msg.value,_ethPrice);
     }
@@ -301,11 +308,63 @@ contract Borrowing is Ownable {
     function getUSDValue() public view returns(uint256){
         AggregatorV3Interface priceFeed = AggregatorV3Interface(priceFeedAddress);
         (,int256 price,,,) = priceFeed.latestRoundData();
-        return (uint256(price)/FEED_PRECISION);
+        return (uint256(price) * FEED_PRECISION);
     }
 
     function setLTV(uint8 _LTV) external onlyOwner {
         LTV = _LTV;
+    }
+
+    function calculateInverseOfRatio(uint256 _amount) internal returns(uint16){
+        // Get the current ETH/USD price
+        uint128 currentEthPrice = uint128(getUSDValue());
+
+        if(currentEthPrice == 0){
+            revert Borrowing_GettingETHPriceFailed();
+        }
+
+        // Get the number of Borrowers
+        uint128 noOfBorrowers = treasury.noOfBorrowers();
+
+        // Calculate net P/L of CDS Pool
+        uint128 netPLCdsPool = (lastEthprice - currentEthPrice) * noOfBorrowers;
+        uint256 currentEthVaultValue;
+        uint256 currentCDSPoolValue;
+
+        // Check it is the first deposit
+        if(noOfBorrowers == 0){
+
+            // Calculate the ethVault value
+            lastEthVaultValue = _amount * currentEthPrice;
+
+            // Set the currentEthVaultValue to lastEthVaultValue for next deposit
+            currentEthVaultValue = lastEthVaultValue;
+
+            // Get the total amount in CDS
+            lastTotalCDSPool = cds.totalCdsDepositedAmount();
+            require(lastCDSPoolValue > 0,"CDS don't have any balance");
+            lastCDSPoolValue = lastTotalCDSPool + netPLCdsPool;
+
+            // Set the currentCDSPoolValue to lastCDSPoolValue for next deposit
+            currentCDSPoolValue = lastCDSPoolValue;
+        }
+
+        currentEthVaultValue = lastEthVaultValue + (_amount * currentEthPrice);
+        lastEthVaultValue = currentEthVaultValue;
+
+        uint256 latestTotalCDSPool = cds.totalCdsDepositedAmount();
+        require(latestTotalCDSPool > 0,"CDS don't have any balance");
+        currentCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) + netPLCdsPool;
+        lastTotalCDSPool = latestTotalCDSPool;
+        lastCDSPoolValue = currentCDSPoolValue;
+
+        // Calculate ratio by dividing currentEthVaultValue by currentCDSPoolValue,
+        // since it may return in decimals we multiply it by 1e6
+        uint64 ratio = uint64((currentEthVaultValue/currentCDSPoolValue) * PRECISION);
+
+        // Find the inverse of ratio
+        uint16 inverseRatio = uint16((1/(ratio/PRECISION)) * PRECISION);
+        return inverseRatio;
     }
     
 }

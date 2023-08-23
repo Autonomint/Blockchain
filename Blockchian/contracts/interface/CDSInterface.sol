@@ -9,4 +9,5 @@ interface CDSInterface {
     function amountAvailableToBorrow() external returns(uint128);
     function updateAmountAvailabletoBorrow(uint128 _updatedCdsPercentage) external;
     function approval(address _address, uint _amount) external;
+    function cdsCount() external returns(uint256);
 }
