@@ -15,6 +15,7 @@ contract Borrowing is Ownable {
     error Borrowing_DepositFailed();
     error Borrowing_MintFailed();
     error Borrowing_TreasuryBalanceZero();
+    error Borrowing_GettingETHPriceFailed();
 
     ITrinityToken public Trinity; // our stablecoin
 
@@ -69,7 +70,8 @@ contract Borrowing is Ownable {
     uint256 public lastCDSPoolValue;
     uint256 public lastTotalCDSPool;
     uint128 FEED_PRECISION = 1e10; // ETH/USD had 8 decimals
-    uint128 PRECISION = 1e6;
+    uint24 PRECISION = 1e6;
+    uint24 LIMIT_PRECISION = 1e5;
 
     constructor(
         address _tokenAddress,
@@ -135,6 +137,10 @@ contract Borrowing is Ownable {
     function depositTokens (uint64 _ethPrice,uint64 _depositTime) external payable {
         require(msg.value > 0, "Cannot deposit zero tokens");
         require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
+
+        //Call calculateInverseOfRatio function to find ratio
+        uint16 ratio = calculateInverseOfRatio(msg.value);
+        require(ratio > (2 * PRECISION),"Not enough fund in CDS");
         
         //Call the deposit function in Treasury contract
         bool deposited = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
@@ -360,11 +366,8 @@ contract Borrowing is Ownable {
 
         // Calculate ratio by dividing currentEthVaultValue by currentCDSPoolValue,
         // since it may return in decimals we multiply it by 1e6
-        uint64 ratio = uint64((currentEthVaultValue/currentCDSPoolValue) * PRECISION);
-
-        // Find the inverse of ratio
-        uint16 inverseRatio = uint16((1/(ratio/PRECISION)) * PRECISION);
-        return inverseRatio;
+        uint16 ratio = uint16((currentCDSPoolValue/currentEthVaultValue) * PRECISION);
+        return ratio;
     }
-    
+
 }
