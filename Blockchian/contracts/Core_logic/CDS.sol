@@ -14,27 +14,27 @@ contract CDS is Ownable{
     // using SafeERC20 for IERC20;
 
     ITrinityToken public immutable Trinity_token;
-     AggregatorV3Interface internal dataFeed;
+    AggregatorV3Interface internal dataFeed;
 
     address public borrowingContract;
 
     address public ethVault;
     address public treasury;
 
-    uint256 public lastEthPrice;
-    uint256 public fallbackEthPrice;
-    uint256 public cdsCount;
-    uint96 public withdrawTimeLimit;
-    uint128 public totalCdsDepositedAmount;
+    uint public lastEthPrice;
+    uint public fallbackEthPrice;
+    uint public cdsCount;
+    uint public withdrawTimeLimit;
+    uint public totalCdsDepositedAmount;
 
     struct CdsAccountDetails {
         uint depositedTime;
-        uint128 depositedAmount;
+        uint depositedAmount;
         uint withdrawedTime;
-        uint128 withdrawedAmount;
+        uint withdrawedAmount;
         bool withdrawed;
-        uint256 depositPrice;
-        uint256 depositValue;
+        uint depositPrice;
+        uint depositValue;
     }
 
     struct CdsDetails {
@@ -161,13 +161,14 @@ contract CDS is Ownable{
 
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawed = true;
 
-
-
         if (cdsDetails[msg.sender].index == 1 && _index == 1) {
             --cdsCount;
         }
 
-        uint128 returnAmount = cdsAmountToReturn(msg.sender,_index);
+        uint256 ethPrice = getLatestData();
+        require(ethPrice != 0,"Oracle Failed");
+
+        uint returnAmount = cdsAmountToReturn(msg.sender,_index, ethPrice);
 
         totalCdsDepositedAmount -= returnAmount;
 
@@ -179,20 +180,37 @@ contract CDS is Ownable{
         bool transfer = Trinity_token.transfer(msg.sender, returnAmount); // transfer amount to msg.sender
         
         require(transfer == true, "Transfer failed in cds withdraw");
+
+        if(ethPrice != lastEthPrice){
+            updateLastEthPrice(ethPrice);
+        }
+
     }
    
 
    //calculating Ethereum value to return to CDS owner
    //The function will deduct some amount of ether if it is borrowed
    //Deduced amount will be calculated using the percentage of CDS a user owns
-   function cdsAmountToReturn(address _user, uint64 index) internal view returns(uint128){
-        uint128 safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
-        uint128 toReturn = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
+   function cdsAmountToReturn(address _user, uint64 index, uint256 _ethPrice) internal view returns(uint){
+        
+
+        uint withdrawalVal = calculateValue(_ethPrice);
+        uint depositVal = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
+
+        // if(withdrawalVal < depositVal){
+        //     return 0;
+        // }
+
+        uint valDiff = withdrawalVal - depositVal;
+
+        uint safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
+        uint toReturn = (safeAmountInCDS * valDiff) / 1000;
+
         return (toReturn + safeAmountInCDS);
    }
 
 
-    function setWithdrawTimeLimit(uint64 _timeLimit) external onlyOwner {
+    function setWithdrawTimeLimit(uint _timeLimit) external onlyOwner {
         require(_timeLimit != 0, "Withdraw time limit can't be zero");
         withdrawTimeLimit = _timeLimit;
     }
