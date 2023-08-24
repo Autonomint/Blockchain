@@ -61,14 +61,14 @@ contract Treasury is Ownable{
     struct EachDepositToProtocol{
         uint64 depositedTime;
         uint128 depositedAmount;
-        uint64 ethPriceAtDeposit;
-        uint128 depositedUsdValue;
+        uint128 ethPriceAtDeposit;
+        uint256 depositedUsdValue;
         uint128 tokensCredited;
 
         bool withdrawed;
-        uint64 ethPriceAtWithdraw;
+        uint128 ethPriceAtWithdraw;
         uint64 withdrawTime;
-        uint128 withdrawedUsdValue;
+        uint256 withdrawedUsdValue;
     }
 
     //Total Deposit to Aave/Compound
@@ -77,7 +77,7 @@ contract Treasury is Ownable{
         uint64 depositIndex;
         uint256 depositedAmount;
         uint256 totalCreditedTokens;
-        uint128 depositedUsdValue;       
+        uint256 depositedUsdValue;       
     }
 
     enum Protocol{Aave,Compound}
@@ -224,11 +224,11 @@ contract Treasury is Ownable{
         protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].depositedAmount = uint128(share);
 
         //Update the deposited amount in USD
-        uint64 ethPrice = protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].ethPriceAtDeposit = uint64(borrow.getUSDValue());
-        protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].depositedUsdValue = uint128(share) * uint128(ethPrice);
+        uint128 ethPrice = protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].ethPriceAtDeposit = uint128(borrow.getUSDValue());
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].depositedUsdValue = share * ethPrice;
 
         //Update the total deposited amount in USD
-        protocolDeposit[Protocol.Aave].depositedUsdValue = uint128(protocolDeposit[Protocol.Aave].depositedAmount) * uint128(ethPrice);
+        protocolDeposit[Protocol.Aave].depositedUsdValue = protocolDeposit[Protocol.Aave].depositedAmount * ethPrice;
 
         protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].tokensCredited = uint128(creditedAmount) - uint128(protocolDeposit[Protocol.Aave].totalCreditedTokens);
         protocolDeposit[Protocol.Aave].totalCreditedTokens = creditedAmount;
@@ -277,11 +277,11 @@ contract Treasury is Ownable{
         protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawTime = uint64(block.timestamp);
 
         //Update the withdrawed amount in USD
-        uint64 ethPrice = protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].ethPriceAtWithdraw = uint64(borrow.getUSDValue());
-        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawedUsdValue = uint128(amount) * uint128(ethPrice);
+        uint128 ethPrice = protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].ethPriceAtWithdraw = uint64(borrow.getUSDValue());
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawedUsdValue = amount * ethPrice;
 
         //Update the total deposited amount in USD
-        protocolDeposit[Protocol.Aave].depositedUsdValue = uint128(protocolDeposit[Protocol.Aave].depositedAmount) * uint128(ethPrice);
+        protocolDeposit[Protocol.Aave].depositedUsdValue = protocolDeposit[Protocol.Aave].depositedAmount * ethPrice;
 
         protocolDeposit[Protocol.Aave].totalCreditedTokens -= amount; 
 
@@ -327,11 +327,11 @@ contract Treasury is Ownable{
         protocolDeposit[Protocol.Compound].eachDepositToProtocol[count].depositedAmount = uint128(share);
 
         //Update the deposited amount in USD
-        uint64 ethPrice = protocolDeposit[Protocol.Compound].eachDepositToProtocol[count].ethPriceAtDeposit = uint64(borrow.getUSDValue());
-        protocolDeposit[Protocol.Compound].eachDepositToProtocol[count].depositedUsdValue = uint128(share) * uint128(ethPrice);
+        uint128 ethPrice = protocolDeposit[Protocol.Compound].eachDepositToProtocol[count].ethPriceAtDeposit = uint128(borrow.getUSDValue());
+        protocolDeposit[Protocol.Compound].eachDepositToProtocol[count].depositedUsdValue = share * ethPrice;
 
         //Update the total deposited amount in USD
-        protocolDeposit[Protocol.Compound].depositedUsdValue = uint128(protocolDeposit[Protocol.Compound].depositedAmount) * uint128(ethPrice);
+        protocolDeposit[Protocol.Compound].depositedUsdValue = protocolDeposit[Protocol.Compound].depositedAmount * ethPrice;
 
         protocolDeposit[Protocol.Compound].eachDepositToProtocol[count].tokensCredited = uint128(creditedAmount) - uint128(protocolDeposit[Protocol.Compound].totalCreditedTokens);
         protocolDeposit[Protocol.Compound].totalCreditedTokens = creditedAmount;
@@ -372,11 +372,11 @@ contract Treasury is Ownable{
         protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].withdrawTime = uint64(block.timestamp);
 
         //Update the withdraw amount in USD
-        uint64 ethPrice = protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].ethPriceAtWithdraw = uint64(borrow.getUSDValue());
-        protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].withdrawedUsdValue = uint128(amount) * uint128(ethPrice);
+        uint128 ethPrice = protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].ethPriceAtWithdraw = uint128(borrow.getUSDValue());
+        protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].withdrawedUsdValue = amount * ethPrice;
 
         //Update the total deposited amount in USD
-        protocolDeposit[Protocol.Compound].depositedUsdValue = uint128(protocolDeposit[Protocol.Compound].depositedAmount) * uint128(ethPrice);
+        protocolDeposit[Protocol.Compound].depositedUsdValue = protocolDeposit[Protocol.Compound].depositedAmount * ethPrice;
 
         protocolDeposit[Protocol.Compound].totalCreditedTokens -= amount;
         protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].tokensCredited = 0;
