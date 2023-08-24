@@ -139,7 +139,7 @@ contract Borrowing is Ownable {
         require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
 
         //Call calculateInverseOfRatio function to find ratio
-        uint16 ratio = calculateInverseOfRatio(msg.value);
+        uint16 ratio = calculateRatio(msg.value);
         require(ratio > (2 * PRECISION),"Not enough fund in CDS");
         
         //Call the deposit function in Treasury contract
@@ -321,9 +321,10 @@ contract Borrowing is Ownable {
         LTV = _LTV;
     }
 
-    function calculateInverseOfRatio(uint256 _amount) internal returns(uint16){
+    function calculateRatio(uint256 _amount) internal returns(uint16){
         // Get the current ETH/USD price
         uint128 currentEthPrice = uint128(getUSDValue());
+        uint256 netPLCdsPool;
 
         if(currentEthPrice == 0){
             revert Borrowing_GettingETHPriceFailed();
@@ -333,7 +334,12 @@ contract Borrowing is Ownable {
         uint128 noOfBorrowers = treasury.noOfBorrowers();
 
         // Calculate net P/L of CDS Pool
-        uint128 netPLCdsPool = (lastEthprice - currentEthPrice) * noOfBorrowers;
+        if(currentEthPrice > lastEthprice){
+            netPLCdsPool = (currentEthPrice - lastEthprice) * noOfBorrowers;
+        }else{
+            netPLCdsPool = (lastEthprice - currentEthPrice) * noOfBorrowers;
+        }
+
         uint256 currentEthVaultValue;
         uint256 currentCDSPoolValue;
 
@@ -348,21 +354,31 @@ contract Borrowing is Ownable {
 
             // Get the total amount in CDS
             lastTotalCDSPool = cds.totalCdsDepositedAmount();
-            require(lastCDSPoolValue > 0,"CDS don't have any balance");
-            lastCDSPoolValue = lastTotalCDSPool + netPLCdsPool;
+
+            if (currentEthPrice > lastEthprice){
+                lastCDSPoolValue = lastTotalCDSPool + netPLCdsPool;
+            }else{
+                lastCDSPoolValue = lastTotalCDSPool - netPLCdsPool;
+            }
 
             // Set the currentCDSPoolValue to lastCDSPoolValue for next deposit
             currentCDSPoolValue = lastCDSPoolValue;
+        }else{
+
+            currentEthVaultValue = lastEthVaultValue + (_amount * currentEthPrice);
+            lastEthVaultValue = currentEthVaultValue;
+
+            uint256 latestTotalCDSPool = cds.totalCdsDepositedAmount();
+
+            if(currentEthPrice > lastEthprice){
+                currentCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) + netPLCdsPool;
+            }else{
+                currentCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) - netPLCdsPool;
+            }
+
+            lastTotalCDSPool = latestTotalCDSPool;
+            lastCDSPoolValue = currentCDSPoolValue;
         }
-
-        currentEthVaultValue = lastEthVaultValue + (_amount * currentEthPrice);
-        lastEthVaultValue = currentEthVaultValue;
-
-        uint256 latestTotalCDSPool = cds.totalCdsDepositedAmount();
-        require(latestTotalCDSPool > 0,"CDS don't have any balance");
-        currentCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) + netPLCdsPool;
-        lastTotalCDSPool = latestTotalCDSPool;
-        lastCDSPoolValue = currentCDSPoolValue;
 
         // Calculate ratio by dividing currentEthVaultValue by currentCDSPoolValue,
         // since it may return in decimals we multiply it by 1e6
