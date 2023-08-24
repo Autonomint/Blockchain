@@ -21,20 +21,20 @@ contract CDS is Ownable{
     address public ethVault;
     address public treasury;
 
-    uint public lastEthPrice;
-    uint public fallbackEthPrice;
-    uint public cdsCount;
-    uint public withdrawTimeLimit;
-    uint public totalCdsDepositedAmount;
+    uint128 public lastEthPrice;
+    uint128 public fallbackEthPrice;
+    uint64 public cdsCount;
+    uint64 public withdrawTimeLimit;
+    uint128 public totalCdsDepositedAmount;
 
     struct CdsAccountDetails {
-        uint depositedTime;
-        uint depositedAmount;
-        uint withdrawedTime;
-        uint withdrawedAmount;
+        uint64 depositedTime;
+        uint128 depositedAmount;
+        uint64 withdrawedTime;
+        uint128 withdrawedAmount;
         bool withdrawed;
-        uint depositPrice;
-        uint depositValue;
+        uint128 depositPrice;
+        uint128 depositValue;
     }
 
     struct CdsDetails {
@@ -59,7 +59,7 @@ contract CDS is Ownable{
         lastEthPrice = getLatestData();
     }
 
-    function getLatestData() internal view returns (uint) {
+    function getLatestData() internal view returns (uint128) {
         (
             /* uint80 roundID */,
             int answer,
@@ -67,10 +67,11 @@ contract CDS is Ownable{
             /*uint timeStamp*/,
             /*uint80 answeredInRound*/
         ) = dataFeed.latestRoundData();
-        return uint(answer);
+        uint temp = uint(answer);
+        return uint128(temp);
     }
 
-    function updateLastEthPrice(uint256 priceAtEvent) internal {
+    function updateLastEthPrice(uint128 priceAtEvent) internal {
         fallbackEthPrice = lastEthPrice;
         lastEthPrice = priceAtEvent;
     }
@@ -99,7 +100,7 @@ contract CDS is Ownable{
         //check it token have successfully transfer or not
         require(transfer == true, "Transfer failed in CDS deposit");
 
-        uint256 ethPrice = getLatestData();
+        uint128 ethPrice = getLatestData();
 
         require(ethPrice != 0,"Oracle Failed");
 
@@ -133,7 +134,7 @@ contract CDS is Ownable{
         totalCdsDepositedAmount += _amount;
         
         //add deposited time of perticular index and amount in cdsAccountDetails
-        cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = block.timestamp;
+        cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = uint64(block.timestamp);
         
         cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(ethPrice); 
 
@@ -153,7 +154,7 @@ contract CDS is Ownable{
        // require(totalCdsDepositedAmount >= _amount, "Contract doesnt have sufficient balance");
         require(cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawed == false,"Already withdrawn");
         
-        uint _withdrawTime = block.timestamp;
+        uint64 _withdrawTime = uint64(block.timestamp);
 
         if (cdsDetails[msg.sender].cdsAccountDetails[_index].depositedTime + withdrawTimeLimit <= _withdrawTime) {
             revert("cannot withdraw before the withdraw time limit");
@@ -165,10 +166,10 @@ contract CDS is Ownable{
             --cdsCount;
         }
 
-        uint256 ethPrice = getLatestData();
+        uint128 ethPrice = getLatestData();
         require(ethPrice != 0,"Oracle Failed");
 
-        uint returnAmount = cdsAmountToReturn(msg.sender,_index, ethPrice);
+        uint128 returnAmount = cdsAmountToReturn(msg.sender,_index, ethPrice);
 
         totalCdsDepositedAmount -= returnAmount;
 
@@ -191,26 +192,26 @@ contract CDS is Ownable{
    //calculating Ethereum value to return to CDS owner
    //The function will deduct some amount of ether if it is borrowed
    //Deduced amount will be calculated using the percentage of CDS a user owns
-   function cdsAmountToReturn(address _user, uint64 index, uint256 _ethPrice) internal view returns(uint){
+   function cdsAmountToReturn(address _user, uint64 index, uint128 _ethPrice) internal view returns(uint128){
         
 
-        uint withdrawalVal = calculateValue(_ethPrice);
-        uint depositVal = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
+        uint128 withdrawalVal = calculateValue(_ethPrice);
+        uint128 depositVal = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
 
         if(withdrawalVal <= depositVal){
-            uint valDiff = depositVal - withdrawalVal;
+            uint128 valDiff = depositVal - withdrawalVal;
 
-            uint safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
-            uint loss = (safeAmountInCDS * valDiff) / 1000;
+            uint128 safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
+            uint128 loss = (safeAmountInCDS * valDiff) / 1000;
 
             return (safeAmountInCDS - loss);
         }
 
         else{
-            uint valDiff = withdrawalVal - depositVal;
+            uint128 valDiff = withdrawalVal - depositVal;
 
-            uint safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
-            uint toReturn = (safeAmountInCDS * valDiff) / 1000;
+            uint128 safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
+            uint128 toReturn = (safeAmountInCDS * valDiff) / 1000;
 
             return (toReturn + safeAmountInCDS);
         }
@@ -218,7 +219,7 @@ contract CDS is Ownable{
    }
 
 
-    function setWithdrawTimeLimit(uint _timeLimit) external onlyOwner {
+    function setWithdrawTimeLimit(uint64 _timeLimit) external onlyOwner {
         require(_timeLimit != 0, "Withdraw time limit can't be zero");
         withdrawTimeLimit = _timeLimit;
     }
@@ -234,11 +235,11 @@ contract CDS is Ownable{
         borrowingContract = _address;
     }
 
-    function calculateValue(uint256 _price) internal view returns(uint256) {
+    function calculateValue(uint128 _price) internal view returns(uint128) {
         uint128 _amount = 1000;
-        uint256 treasuryBal = Trinity_token.balanceOf(treasury);
-        uint256 vaultBal = address(this).balance;
-        uint priceDiff;
+        uint128 treasuryBal = uint128(Trinity_token.balanceOf(treasury));
+        uint128 vaultBal = uint128(address(this).balance);
+        uint128 priceDiff;
 
         if(_price != lastEthPrice){
             priceDiff = _price - lastEthPrice;
@@ -247,7 +248,7 @@ contract CDS is Ownable{
         else{
             priceDiff = _price - fallbackEthPrice;
         }
-        uint256 value = (_amount * vaultBal * priceDiff) / treasuryBal;
+        uint128 value = (_amount * vaultBal * priceDiff) / treasuryBal;
         return value;
     }
 }
