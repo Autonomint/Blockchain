@@ -70,7 +70,7 @@ contract Borrowing is Ownable {
     uint256 public lastCDSPoolValue;
     uint256 public lastTotalCDSPool;
     uint128 FEED_PRECISION = 1e10; // ETH/USD had 8 decimals
-    uint24 PRECISION = 1e6;
+    uint128 PRECISION = 1e28;
     uint24 LIMIT_PRECISION = 1e5;
 
     constructor(
@@ -83,7 +83,7 @@ contract Borrowing is Ownable {
         cds = CDSInterface(_cds);
         protocolToken = IProtocolToken(_protocolToken);
         priceFeedAddress = _priceFeedAddress;                       //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
-
+        lastEthprice = uint128(getUSDValue());
     }
 
     // Function to check if an address is a contract
@@ -139,7 +139,7 @@ contract Borrowing is Ownable {
         require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
 
         //Call calculateInverseOfRatio function to find ratio
-        uint16 ratio = calculateRatio(msg.value);
+        uint40 ratio = calculateRatio(msg.value);
         require(ratio > (2 * PRECISION),"Not enough fund in CDS");
         
         //Call the deposit function in Treasury contract
@@ -321,7 +321,7 @@ contract Borrowing is Ownable {
         LTV = _LTV;
     }
 
-    function calculateRatio(uint256 _amount) internal returns(uint16){
+    function calculateRatio(uint256 _amount) internal returns(uint40){
         // Get the current ETH/USD price
         uint128 currentEthPrice = uint128(getUSDValue());
         uint256 netPLCdsPool;
@@ -355,7 +355,7 @@ contract Borrowing is Ownable {
             // Get the total amount in CDS
             lastTotalCDSPool = cds.totalCdsDepositedAmount();
 
-            if (currentEthPrice > lastEthprice){
+            if (currentEthPrice >= lastEthprice){
                 lastCDSPoolValue = lastTotalCDSPool + netPLCdsPool;
             }else{
                 lastCDSPoolValue = lastTotalCDSPool - netPLCdsPool;
@@ -370,7 +370,7 @@ contract Borrowing is Ownable {
 
             uint256 latestTotalCDSPool = cds.totalCdsDepositedAmount();
 
-            if(currentEthPrice > lastEthprice){
+            if(currentEthPrice >= lastEthprice){
                 currentCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) + netPLCdsPool;
             }else{
                 currentCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) - netPLCdsPool;
@@ -382,7 +382,7 @@ contract Borrowing is Ownable {
 
         // Calculate ratio by dividing currentEthVaultValue by currentCDSPoolValue,
         // since it may return in decimals we multiply it by 1e6
-        uint16 ratio = uint16((currentCDSPoolValue/currentEthVaultValue) * PRECISION);
+        uint40 ratio = uint40((currentCDSPoolValue * PRECISION)/currentEthVaultValue);
         return ratio;
     }
 
