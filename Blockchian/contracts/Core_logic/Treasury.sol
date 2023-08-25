@@ -37,7 +37,7 @@ contract Treasury is Ownable{
         uint64 depositedTime;
         uint128 depositedAmount;
         uint64 downsidePercentage;
-        uint64 ethPriceAtDeposit;
+        uint128 ethPriceAtDeposit;
         bool withdrawed;
         bool liquidated;
         uint64 ethPriceAtWithdraw;
@@ -85,7 +85,7 @@ contract Treasury is Ownable{
     mapping(address depositor => BorrowerDetails) public borrowing;
     mapping(Protocol => ProtocolDeposit) public protocolDeposit;
     uint128 public totalVolumeOfBorrowersAmountinWei;
-    uint128 public totalVolumeOfBorrowersAmountinUSD;
+    uint256 public totalVolumeOfBorrowersAmountinUSD;
     uint128 public noOfBorrowers;
 
     event Deposit(address indexed user,uint256 amount);
@@ -124,7 +124,7 @@ contract Treasury is Ownable{
 
     function deposit(
         address user,
-        uint64 _ethPrice,
+        uint128 _ethPrice,
         uint64 _depositTime
         )
         external payable onlyBorrowingContract returns(bool) {
@@ -152,7 +152,7 @@ contract Treasury is Ownable{
         borrowing[user].depositDetails[borrowerIndex].depositedAmount = uint128(msg.value);
 
         //Total volume of borrowers in USD
-        totalVolumeOfBorrowersAmountinUSD += (uint128(_ethPrice) * uint128(msg.value));
+        totalVolumeOfBorrowersAmountinUSD += (_ethPrice * msg.value);
 
         //Total volume of borrowers in Wei
         totalVolumeOfBorrowersAmountinWei += uint128(msg.value);
