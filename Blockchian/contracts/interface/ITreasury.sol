@@ -3,7 +3,7 @@
 pragma solidity 0.8.18;
 
 interface ITreasury{
-        function deposit(address user,uint64 _ethPrice,uint64 _depositTime) external payable returns(bool);
+        function deposit(address user,uint128 _ethPrice,uint64 _depositTime) external payable returns(bool);
         function depositToAave() external;
         function withdrawFromAave(uint64 index,uint256 amount) external;
         function depositToCompound() external;
