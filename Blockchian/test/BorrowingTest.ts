@@ -5,7 +5,7 @@ import { ethers } from "hardhat";
 import { Contract,utils,providers,Wallet, Signer } from "ethers";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { describe } from "node:test";
-import { BorrowingTest, CDSTest, TrinityStablecoin, ProtocolToken, Treasury} from "../typechain-types";
+import { BorrowingTest,Borrowing, CDSTest, TrinityStablecoin, ProtocolToken, Treasury} from "../typechain-types";
 import {
     wethGateway,
     priceFeedAddress,
@@ -20,13 +20,14 @@ import {
 describe("Borrowing Contract",function(){
 
     let CDSContract : CDSTest;
-    let BorrowingContract : BorrowingTest;
+    let BorrowingContract : Borrowing;
     let Token : TrinityStablecoin;
     let pToken : ProtocolToken;
     let treasury : Treasury;
     let owner: any;
     let user1: any;
     let user2: any;
+    let user3: any;
 
 
     async function deployer(){
@@ -39,7 +40,7 @@ describe("Borrowing Contract",function(){
         const CDS = await ethers.getContractFactory("CDSTest");
         CDSContract = await CDS.deploy(Token.address);
 
-        const Borrowing = await ethers.getContractFactory("BorrowingTest");
+        const Borrowing = await ethers.getContractFactory("Borrowing");
         BorrowingContract = await Borrowing.deploy(Token.address,CDSContract.address,pToken.address,priceFeedAddress);
 
         const Treasury = await ethers.getContractFactory("Treasury");
@@ -55,9 +56,9 @@ describe("Borrowing Contract",function(){
         const aToken = new ethers.Contract(aTokenAddress,aTokenABI,signer);
         const cETH = new ethers.Contract(cEther,cETH_ABI,signer);
 
-        [owner,user1,user2] = await ethers.getSigners();
+        [owner,user1,user2,user3] = await ethers.getSigners();
 
-        return {Token,pToken,CDSContract,BorrowingContract,treasury,aToken,cETH,owner,user1,user2,provider}
+        return {Token,pToken,CDSContract,BorrowingContract,treasury,aToken,cETH,owner,user1,user2,user3,provider}
     }
 
     describe("Should deposit ETH and mint Trinity",function(){
@@ -68,7 +69,7 @@ describe("Borrowing Contract",function(){
             expect(await Token.totalSupply()).to.be.equal(ethers.utils.parseEther("800"));
         })
 
-        it("Should calculate criticalRatio correctly",async function(){
+        it.only("Should calculate criticalRatio correctly",async function(){
             const {BorrowingContract,CDSContract,Token} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
@@ -76,14 +77,10 @@ describe("Borrowing Contract",function(){
             await Token.connect(owner).approve(CDSContract.address,ethers.utils.parseEther("10000"));
 
             await CDSContract.deposit(ethers.utils.parseEther("10000"));
-            const tx = await BorrowingContract.connect(user1).calculateRatio(ethers.utils.parseEther("1"),ethers.utils.parseEther("1215.48016465422"),ethers.utils.parseEther("1215.48016465422"));
-            await BorrowingContract.connect(user2).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
-            const tx1 = await BorrowingContract.connect(user1).calculateRatio(ethers.utils.parseEther("1"),ethers.utils.parseEther("1215.48016465422"),ethers.utils.parseEther("1216.12094444444"));
-            await BorrowingContract.connect(user2).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
-            const tx2 = await BorrowingContract.connect(user1).calculateRatio(ethers.utils.parseEther("1"),ethers.utils.parseEther("1216.12094444444"),ethers.utils.parseEther("1190.84086805555"));
-            await BorrowingContract.connect(user2).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
-            const tx3 = await BorrowingContract.connect(user1).calculateRatio(ethers.utils.parseEther("1"),ethers.utils.parseEther("1190.84086805555"),ethers.utils.parseEther("1199.77778472222"));
-
+            await BorrowingContract.connect(user1).depositTokens(ethers.utils.parseEther("1215.48016465422"),timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user2).depositTokens(ethers.utils.parseEther("1216.12094444444"),timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user3).depositTokens(ethers.utils.parseEther("1190.84086805555"),timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(owner).depositTokens(ethers.utils.parseEther("1163.07447222222"),timeStamp,{value: ethers.utils.parseEther("1")});
         })
     })
 
