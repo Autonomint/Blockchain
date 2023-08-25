@@ -62,6 +62,7 @@ contract Borrowing is Ownable {
     mapping(address => BorrowerDetails) public borrowing;
 
     uint8 private LTV; // LTV is a percentage eg LTV = 60 is 60%, must be divided by 100 in calculations
+    uint8 private APY;
     uint128 public totalVolumeOfBorrowersinWei;
     uint128 public totalVolumeOfBorrowersinUSD;
     address public priceFeedAddress;
@@ -69,9 +70,10 @@ contract Borrowing is Ownable {
     uint256 public lastEthVaultValue;
     uint256 public lastCDSPoolValue;
     uint256 public lastTotalCDSPool;
+    uint128 lastCumulativeRate;
+    uint128 private lastEventTime;
     uint128 FEED_PRECISION = 1e10; // ETH/USD had 8 decimals
     uint128 PRECISION = 1e28;
-    uint24 LIMIT_PRECISION = 1e5;
 
     constructor(
         address _tokenAddress,
@@ -107,7 +109,7 @@ contract Borrowing is Ownable {
      * @param amount deposited amount of the borrower
      * @param _ethPrice current eth price
      */
-    function _transferToken(address _borrower,uint256 amount,uint64 _ethPrice) internal {
+    function _transferToken(address _borrower,uint256 amount,uint128 _ethPrice) internal {
         require(_borrower != address(0), "Borrower cannot be zero address");
         require(LTV != 0, "LTV must be set to non-zero value before providing loans");
         
@@ -134,13 +136,13 @@ contract Borrowing is Ownable {
      * @param _depositTime get unixtime stamp at the time of deposit 
      */
 
-    function depositTokens (uint64 _ethPrice,uint64 _depositTime) external payable {
+    function depositTokens (uint128 _ethPrice,uint64 _depositTime) external payable {
         require(msg.value > 0, "Cannot deposit zero tokens");
         require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
 
         //Call calculateInverseOfRatio function to find ratio
-        uint40 ratio = calculateRatio(msg.value);
-        require(ratio > (2 * PRECISION),"Not enough fund in CDS");
+        uint40 ratio = calculateRatio(msg.value,uint128(_ethPrice));
+        require(ratio < (5 * FEED_PRECISION),"Not enough fund in CDS");
         
         //Call the deposit function in Treasury contract
         bool deposited = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
@@ -149,7 +151,8 @@ contract Borrowing is Ownable {
         if(!deposited){
             revert Borrowing_DepositFailed();
         }
-        lastEthprice = uint128(getUSDValue());
+        lastEthprice = uint128(_ethPrice);
+        lastEventTime = uint128(block.timestamp);
         // Call the transfer function to mint Trinity
         _transferToken(msg.sender,msg.value,_ethPrice);
     }
@@ -321,9 +324,8 @@ contract Borrowing is Ownable {
         LTV = _LTV;
     }
 
-    function calculateRatio(uint256 _amount) internal returns(uint40){
-        // Get the current ETH/USD price
-        uint128 currentEthPrice = uint128(getUSDValue());
+    function calculateRatio(uint256 _amount,uint currentEthPrice) internal returns(uint40){
+
         uint256 netPLCdsPool;
 
         if(currentEthPrice == 0){
@@ -386,4 +388,38 @@ contract Borrowing is Ownable {
         return ratio;
     }
 
+    function setAPY(uint8 _apy) external onlyOwner{
+        APY = _apy;
+    }
+
+    function getAPY() public view returns(uint8){
+        return APY;
+    }
+
+    function calculateCumulativeRate(uint256 _amount) public returns(uint128){
+        // Get the APY
+        uint8 apy = getAPY();
+
+        // Get the noOfBorrowers
+        uint128 noOfBorrowers = treasury.noOfBorrowers();
+
+        // Calculate the rate/sec
+        uint128 nThpower =  (1/365 days);
+        uint256 apyPerSecond =  (apy/100) ** (nThpower);
+        uint128 ratePerSec = 1 + apyPerSecond;
+
+        uint128 currentCumulativeRate;
+        uint256 normalizedAmount;
+
+        if(noOfBorrowers == 0){
+            currentCumulativeRate = ratePerSec;
+            lastCumulativeRate = currentCumulativeRate;
+        }else{
+            currentCumulativeRate = ratePerSec * lastCumulativeRate * (uint128(block.timestamp) - lastEventTime);
+            lastCumulativeRate = currentCumulativeRate;
+        }
+
+        normalizedAmount = _amount * currentCumulativeRate;
+        return currentCumulativeRate;
+    }
 }
