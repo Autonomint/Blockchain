@@ -65,6 +65,7 @@ contract Borrowing is Ownable {
     uint8 private APY;
     uint128 public totalVolumeOfBorrowersinWei;
     uint128 public totalVolumeOfBorrowersinUSD;
+    uint256 public totalNormalizedAmount;
     address public priceFeedAddress;
     uint128 public lastEthprice;
     uint256 public lastEthVaultValue;
@@ -74,6 +75,7 @@ contract Borrowing is Ownable {
     uint128 private lastEventTime;
     uint128 FEED_PRECISION = 1e10; // ETH/USD had 8 decimals
     uint128 PRECISION = 1e28;
+    uint128 RATIO_PRECISION = 1e3;
 
     constructor(
         address _tokenAddress,
@@ -396,30 +398,33 @@ contract Borrowing is Ownable {
         return APY;
     }
 
-    function calculateCumulativeRate(uint256 _amount) public returns(uint128){
+    function calculateCumulativeRate(uint256 _amount) public returns(uint128,uint256){
         // Get the APY
-        uint8 apy = getAPY();
+        uint128 apy = uint128(getAPY());
 
         // Get the noOfBorrowers
         uint128 noOfBorrowers = treasury.noOfBorrowers();
 
         // Calculate the rate/sec
-        uint128 nThpower =  (1/365 days);
-        uint256 apyPerSecond =  (apy/100) ** (nThpower);
-        uint128 ratePerSec = 1 + apyPerSecond;
+        uint128 nThpower =  ((1 * PRECISION)/365 days);
+
+        uint256 apyPerSecond =  ((1* RATIO_PRECISION)+(apy * RATIO_PRECISION)/100);
+
+        uint256 ratePerSec = (apyPerSecond ** nThpower);
+        console.log(ratePerSec); //1.0000000015471259578632124490459
 
         uint128 currentCumulativeRate;
         uint256 normalizedAmount;
 
         if(noOfBorrowers == 0){
-            currentCumulativeRate = ratePerSec;
+            currentCumulativeRate = uint128(ratePerSec);
             lastCumulativeRate = currentCumulativeRate;
         }else{
-            currentCumulativeRate = ratePerSec * lastCumulativeRate * (uint128(block.timestamp) - lastEventTime);
+            currentCumulativeRate = uint128(ratePerSec * lastCumulativeRate * (uint128(block.timestamp) - lastEventTime));
             lastCumulativeRate = currentCumulativeRate;
         }
 
-        normalizedAmount = _amount * currentCumulativeRate;
-        return currentCumulativeRate;
+        normalizedAmount = _amount/currentCumulativeRate;
+        return (currentCumulativeRate,normalizedAmount);
     }
 }
