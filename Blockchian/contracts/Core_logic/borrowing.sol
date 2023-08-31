@@ -111,7 +111,7 @@ contract Borrowing is Ownable {
      * @param amount deposited amount of the borrower
      * @param _ethPrice current eth price
      */
-    function _transferToken(address _borrower,uint256 amount,uint128 _ethPrice) internal {
+    function _transferToken(address _borrower,uint256 amount,uint128 _ethPrice) internal returns(uint256){
         require(_borrower != address(0), "Borrower cannot be zero address");
         require(LTV != 0, "LTV must be set to non-zero value before providing loans");
         
@@ -130,6 +130,7 @@ contract Borrowing is Ownable {
         if(!minted){
             revert Borrowing_MintFailed();
         }
+        return tokensToLend;
     }
 
     /**
@@ -155,8 +156,18 @@ contract Borrowing is Ownable {
         }
         lastEthprice = uint128(_ethPrice);
         lastEventTime = uint128(block.timestamp);
-        // Call the transfer function to mint Trinity
-        _transferToken(msg.sender,msg.value,_ethPrice);
+        
+        // Call the transfer function to mint Trinity and Get the borrowedAmount
+        uint256 borrowAmount = _transferToken(msg.sender,msg.value,_ethPrice);
+
+        //Call calculateCumulativeRate() to get currentCumulativeRatev
+        uint128 currentCumulativeRate = calculateCumulativeRate();
+
+        // Calculate normalizedAmount
+        uint256 normalizedAmount = borrowAmount/currentCumulativeRate;
+
+        // Calculate normalizedAmount of Protocol
+        totalNormalizedAmount += normalizedAmount;
     }
 
     function depositToAaveProtocol() external onlyOwner{
@@ -398,24 +409,28 @@ contract Borrowing is Ownable {
         return APY;
     }
 
-    function calculateCumulativeRate(uint256 _amount) public returns(uint128,uint256){
+    function calculateCumulativeRate() public returns(uint128){
         // Get the APY
         uint128 apy = uint128(getAPY());
 
         // Get the noOfBorrowers
         uint128 noOfBorrowers = treasury.noOfBorrowers();
 
-        // Calculate the rate/sec
+        // r**n = apyRate
+        // calculate 1/n
         uint128 nThpower =  ((1 * PRECISION)/365 days);
 
-        uint256 apyPerSecond =  ((1* RATIO_PRECISION)+(apy * RATIO_PRECISION)/100);
+        // calculate apyRate ( 1 + apy)
+        uint256 apyRate =  ((1* RATIO_PRECISION)+(apy * RATIO_PRECISION)/100);
 
-        uint256 ratePerSec = (apyPerSecond ** nThpower);
-        console.log(ratePerSec); //1.0000000015471259578632124490459
+        // calculate rate per second
+        uint256 ratePerSec = apyRate ** nThpower;      
+
+        console.log(ratePerSec);        //1.0000000015471259578632124490459
 
         uint128 currentCumulativeRate;
-        uint256 normalizedAmount;
 
+        //If first event
         if(noOfBorrowers == 0){
             currentCumulativeRate = uint128(ratePerSec);
             lastCumulativeRate = currentCumulativeRate;
@@ -423,8 +438,6 @@ contract Borrowing is Ownable {
             currentCumulativeRate = uint128(ratePerSec * lastCumulativeRate * (uint128(block.timestamp) - lastEventTime));
             lastCumulativeRate = currentCumulativeRate;
         }
-
-        normalizedAmount = _amount/currentCumulativeRate;
-        return (currentCumulativeRate,normalizedAmount);
+        return currentCumulativeRate;
     }
 }
