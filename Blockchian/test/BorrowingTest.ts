@@ -69,7 +69,7 @@ describe("Borrowing Contract",function(){
             expect(await Token.totalSupply()).to.be.equal(ethers.utils.parseEther("800"));
         })
 
-        it.only("Should calculate criticalRatio correctly",async function(){
+        it("Should calculate criticalRatio correctly",async function(){
             const {BorrowingContract,CDSContract,Token} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
@@ -81,6 +81,12 @@ describe("Borrowing Contract",function(){
             await BorrowingContract.connect(user2).depositTokens(ethers.utils.parseEther("1216.12094444444"),timeStamp,{value: ethers.utils.parseEther("1")});
             await BorrowingContract.connect(user3).depositTokens(ethers.utils.parseEther("1190.84086805555"),timeStamp,{value: ethers.utils.parseEther("1")});
             await BorrowingContract.connect(owner).depositTokens(ethers.utils.parseEther("1163.07447222222"),timeStamp,{value: ethers.utils.parseEther("1")});
+        })
+
+        it.only("Should calculate cumulativeRatio correctly",async function(){
+            const {BorrowingContract} = await loadFixture(deployer);
+            await BorrowingContract.setAPY(5);
+            await BorrowingContract.calculateCumulativeRate();
         })
     })
 
