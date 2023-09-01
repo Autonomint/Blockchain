@@ -16,6 +16,7 @@ contract Borrowing is Ownable {
     error Borrowing_MintFailed();
     error Borrowing_TreasuryBalanceZero();
     error Borrowing_GettingETHPriceFailed();
+    error Borrowing_LowBorrowingHealth();
 
     ITrinityToken public Trinity; // our stablecoin
 
@@ -26,32 +27,7 @@ contract Borrowing is Ownable {
     ITreasury public treasury;
 
     uint256 private _downSideProtectionLimit;
-
-    struct DepositDetails{
-
-        uint64 depositedTime;
-        uint128 depositedAmount;
-        uint64 downsidePercentage;
-        uint64 ethPriceAtDeposit;
-        bool withdrawed;
-        bool liquidated;
-        uint64 ethPriceAtWithdraw;
-        uint64 withdrawTime;
-    }
     
-
-    struct BorrowerDetails {
-        //uint256 depositedAmount;
-        mapping(uint64 => DepositDetails) depositDetails;
-        uint256 borrowedAmount;
-        bool hasBorrowed;
-        bool hasDeposited;
-        //uint64 downsidePercentage;
-        //uint128 ETHPrice;
-        //uint64 depositedTime;
-        uint64 borrowerIndex;
-    }
-
     enum DownsideProtectionLimitValue {
         // 0: deside Downside Protection limit by percentage of eth price in past 3 months
         ETH_PRICE_VOLUME,
@@ -59,8 +35,7 @@ contract Borrowing is Ownable {
         CDS_VOLUME_BY_BORROWER_VOLUME
     }
 
-    mapping(address => BorrowerDetails) public borrowing;
-
+    address public treasuryAddress;
     uint8 private LTV; // LTV is a percentage eg LTV = 60 is 60%, must be divided by 100 in calculations
     uint8 private APY;
     uint128 public totalVolumeOfBorrowersinWei;
@@ -73,6 +48,7 @@ contract Borrowing is Ownable {
     uint256 public lastTotalCDSPool;
     uint128 lastCumulativeRate;
     uint128 private lastEventTime;
+
     uint128 FEED_PRECISION = 1e10; // ETH/USD had 8 decimals
     uint128 PRECISION = 1e28;
     uint128 RATIO_PRECISION = 1e3;
@@ -121,8 +97,6 @@ contract Borrowing is Ownable {
         // Hence if tokenValueConversion = 1, then equivalent stablecoin tokens = tokenValueConversion
 
         uint256 tokensToLend = tokenValueConversion * LTV / 100;
-        borrowing[_borrower].hasBorrowed = true;
-        borrowing[_borrower].borrowedAmount = tokensToLend;
 
         //Call the mint function in Trinity
         bool minted = Trinity.mint(_borrower, tokensToLend);
@@ -131,6 +105,22 @@ contract Borrowing is Ownable {
             revert Borrowing_MintFailed();
         }
         return tokensToLend;
+    }
+
+    function _mintPToken(address _toAddress,uint256 _amount) internal returns(uint128){
+        require(_toAddress != address(0), "Borrower cannot be zero address");
+        require(_amount != 0,"Amount can't be zero");
+
+        // PToken:Trinity = 4:1
+        uint128 amount = (uint128(_amount) * 25)/100;
+
+        //Call the mint function in ProtocolToken
+        bool minted = protocolToken.mint(_toAddress,amount);
+
+        if(!minted){
+            revert Borrowing_MintFailed();
+        }
+        return amount;
     }
 
     /**
@@ -144,11 +134,11 @@ contract Borrowing is Ownable {
         require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
 
         //Call calculateInverseOfRatio function to find ratio
-        uint40 ratio = calculateRatio(msg.value,uint128(_ethPrice));
+        uint64 ratio = _calculateRatio(msg.value,uint128(_ethPrice));
         require(ratio < (5 * FEED_PRECISION),"Not enough fund in CDS");
         
         //Call the deposit function in Treasury contract
-        bool deposited = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
+        (bool deposited,uint64 index) = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
 
         //Check whether the deposit is successfull
         if(!deposited){
@@ -159,12 +149,17 @@ contract Borrowing is Ownable {
         
         // Call the transfer function to mint Trinity and Get the borrowedAmount
         uint256 borrowAmount = _transferToken(msg.sender,msg.value,_ethPrice);
+        treasury.borrowing[msg.sender].hasBorrowed = true;
+        treasury.borrowing[msg.sender].depositDetails[index].borrowedAmount = borrowAmount;
+        treasury.borrowing[msg.sender].totalBorrowedAmount += borrowAmount;
 
         //Call calculateCumulativeRate() to get currentCumulativeRatev
         uint128 currentCumulativeRate = calculateCumulativeRate();
 
         // Calculate normalizedAmount
         uint256 normalizedAmount = borrowAmount/currentCumulativeRate;
+
+        treasury.borrowing[msg.sender].depositDetails[index].normalizedAmount = normalizedAmount;
 
         // Calculate normalizedAmount of Protocol
         totalNormalizedAmount += normalizedAmount;
@@ -193,17 +188,17 @@ contract Borrowing is Ownable {
         uint64 Index = _index;
 
         // check if borrowerIndex in BorrowerDetails of the msg.sender is greater than or equal to Index
-        if( borrowing[msg.sender].borrowerIndex >= Index ) {
+        if(treasury.borrowing[msg.sender].borrowerIndex >= Index ) {
             // Check if user amount in the Index is been liquidated or not
-            require(borrowing[msg.sender].depositDetails[Index].liquidated != true ," User amount has been liquidated");
+            require(treasury.borrowing[msg.sender].depositDetails[Index].liquidated != true ," User amount has been liquidated");
             // check if withdrawed in depositDetails in borrowing of msg.seader is false or not
-            if( borrowing[msg.sender].depositDetails[Index].withdrawed  != false ) {
+            if( treasury.borrowing[msg.sender].depositDetails[Index].withdrawed  != false ) {
                 //revert if the value of withdrawed is true
                 revert("User have withdrawed the amount");
-
             }
             else {
-                borrowing[msg.sender].depositDetails[Index].withdrawed = true;
+                // update withdrawed to true
+                treasury.borrowing[msg.sender].depositDetails[Index].withdrawed = true;
             }
         }
         else {
@@ -211,83 +206,64 @@ contract Borrowing is Ownable {
             revert("User doens't have the perticular index");
         }
 
-        uint128 depositEthPrice = borrowing[msg.sender].depositDetails[Index].ethPriceAtDeposit;
+        // Get the ETH price at deposit
+        uint128 depositEthPrice = treasury.borrowing[msg.sender].depositDetails[Index].ethPriceAtDeposit;
+        
+        // Get the deposited amount from the index
+        uint128 depositedAmount = treasury.borrowing[msg.sender].depositDetails[Index].depositedAmount;
 
-        // Also check if user have sufficient Trinity balance what we have given at the time of deposit
-        require(borrowing[msg.sender].depositDetails[Index].depositedAmount <= Trinity.balanceOf(msg.sender) ,"User doesn't enough trinity" );
+        // Calculate the borrowingHealth
+        uint64 borrowingHealth = ( _ethPrice * 10000) / depositEthPrice ;
 
-        // compare ethPrice at the time of deposit and at the time of withdraw
+        // Check if the borrowingHealth is between 8000(0.8) & 10000(1)
+        if( 8000 < borrowingHealth < 10000 ) {
 
-        // check the downSideProtection of the index and calculate downsideProtectionValue
-        uint128 depositedAmount = borrowing[msg.sender].depositDetails[Index].depositedAmount;
-        uint64 downsideProtectionPercentage = borrowing[msg.sender].depositDetails[Index].downsidePercentage;
-        uint128 DownsideProtectionValue = ( depositedAmount * downsideProtectionPercentage ) / 100;
+            // Calculate the currentCumulativeRate
+            uint128 currentCumulativeRate = calculateCumulativeRate();
 
-        // Convert downsideProtectionPercentage to Hi to see at what value we should liquidate
-        // we are converting downsideProtection to bips(100.00%)
-        uint64 downsideProtection = (downsideProtectionPercentage * 100);
+            // Calculate th borrower's debt
+            uint128 borrowerDebt = treasury.borrowing[msg.sender].depositDetails[Index].normalizedAmount * currentCumulativeRate;
 
-        // calculate the health of the borrowing position and convert it in to multiple of 100
-        uint borrowingHealth = ( _ethPrice * 10000) / depositEthPrice ;
-
-        // if borrowingHealth is lessThan / equal to 10000 which is equal to(1)
-        if( borrowingHealth <= 10000 ) {
-
-            // if borrowingHealth is greater than 10000 - (downsideProtection / 2)
-            if (borrowingHealth > 10000 -  (downsideProtection / 2)) {
-                // calculate the value of the deposited eth with current price of eth
-                uint128 currentValueOfDepositedAmount = (depositedAmount * _ethPrice);
-
-                // revert if user doesn't have enough Trinity token
-                require(Trinity.balanceOf(msg.sender) >= currentValueOfDepositedAmount, "User balance is less than required");
+            // Check whether the Borrower have enough Trinty
+            require(Trinity.balanceOf(msg.sender) >= borrowerDebt, "User balance is less than required");
                 
-                // change withdrawed to true
-                borrowing[msg.sender].depositDetails[Index].withdrawed = true;
+            // Update the borrower's data    
+            treasury.borrowing[msg.sender].depositDetails[Index].ethPriceAtWithdraw = _ethPrice;
+            treasury.borrowing[msg.sender].depositDetails[Index].withdrawTime = _withdrawTime;
+            treasury.borrowing[msg.sender].depositedAmount -= depositedAmount;
+            treasury.borrowing[msg.sender].depositDetails[Index].depositedAmount = 0;
 
-                // update eth price at withdraw
-                borrowing[msg.sender].depositDetails[Index].ethPriceAtWithdraw = _ethPrice;
+            treasury.totalVolumeOfBorrowersAmountinUSD -= (_ethPrice * (depositedAmount/2));
+            treasury.totalVolumeOfBorrowersAmountinWei -= uint128(depositedAmount/2);
 
-                // update withdraw time
-                borrowing[msg.sender].depositDetails[Index].withdrawTime = _withdrawTime;
+            uint128 borrowedAmount = treasury.borrowing[msg.sender].depositDetails[Index].borrowedAmount;
 
-                // burn Trinity token from user of value currentValueOfDepositedAmount
-                Trinity.burnFrom(msg.sender, currentValueOfDepositedAmount);
+            // Calculate interest for the borrower's debt
+            uint128 interest = borrowerDebt - borrowedAmount;
 
-                //calculate value depositedEthValue - currentValueOfDepositedAmount
-                uint128 valueToBeBurnedFromCDS = (depositedAmount * depositEthPrice) - currentValueOfDepositedAmount;
+            // Calculate the amount of Trinity to burn and sent to the treasury
+            uint256 halfValue = (50 *(borrowerDebt-interest))/100;
 
-                // call approvel function from CDS to burn Trinity from CDS
-                cds.approval(address(this), valueToBeBurnedFromCDS);
-                
-                // burn valueToBeBurnedFromCDS from CDS
-                Trinity.burnFrom(address(cds), valueToBeBurnedFromCDS); //! CDS should approve borrowing contract to burn Trinity.
-                
-                // transfer the value of eth
-                (bool sent, bytes memory data) = msg.sender.call{value: depositedAmount}("");
+            // Burn the Trinity from the Borrower
+            Trinity.burnFrom(msg.sender, halfValue);
 
-                // call should be successfully
-                require(sent, "Failed to send ether in borrowingHealth > downsideProtection / 2");
-            }
-            //  else, if ethPriceAtWithdraw is above (ethPriceAtDeposit-downsideProtectionValue) and below ethPriceAtDeposit
-            else {
-                //      calculate the difference and get the difference amount from CDS and transfer it to the user
-                uint128 depositWithdrawPriceDiff = depositEthPrice - _ethPrice;
-            }
+            //Transfer the remaining Trinity to the treasury
+            Trinity.transferFrom(msg.sender,treasuryAddress,halfValue);
+            totalNormalizedAmount -= borrowerDebt;
+            treasury.totalInterest += interest;
+
+            // Sent the ETH(depositedAmount) to the toAddress
+            treasury.withdraw(_toAddress,depositedAmount);
+
+            // Mint the pTokens
+            uint128 noOfPTokensminted = _mintPToken(msg.sender,halfValue);
+            treasury.borrowing[msg.sender].depositDetails[Index].pTokensAmount = noOfPTokensminted;
+            treasury.borrowing[msg.sender].totalPTokens += noOfPTokensminted;
+
         }
-  
-       
-       
-       
-        // update withdrawed amount and totalborrowedAmount in borrowing and amountAvailableToBorrow in cds
-        // Transfer Trinity token to the user
-        // else ethPriceAtDeposit < ethPriceAtWithdraw
-        // calculate the difference between ethPriceAtDeposit and ethPriceAtWithdraw
-        // transfer difference to cds
-        // transfer remaining amount to the user.
-        // emit event withdrawBorrow having index, toAddress, withdrawEthPrice, DepositEthPrice
-        // 
-
-
+        else {
+            //liquidate();
+        }
     }
     
     // function getBorrowDetails(address _user, uint64 _index) public view returns(DepositDetails){
@@ -305,17 +281,17 @@ contract Borrowing is Ownable {
         //To check if the ratio is less than 0.8 & converting into Bips
         require(msg.sender!=_user,"You cannot liquidate your own assets!");
         uint64 Index = index;
-        uint128 ratio = (currentEthPrice * 10000 / borrowing[_user].depositDetails[index].ethPriceAtDeposit);
-        uint64 downsideProtectionPercentage = borrowing[msg.sender].depositDetails[Index].downsidePercentage;
+        uint128 ratio = (currentEthPrice * 10000 / treasury.borrowing[_user].depositDetails[index].ethPriceAtDeposit);
+        uint64 downsideProtectionPercentage = treasury.borrowing[msg.sender].depositDetails[Index].downsidePercentage;
         //converting percentage to bips
         uint64 downsideProtection = downsideProtectionPercentage * 100;
         require(ratio<downsideProtection,"You cannot liquidate");
         //Token liquidator needs to provide for liquidating
         
-        uint128 TokenNeededToLiquidate = (borrowing[_user].depositDetails[index].ethPriceAtDeposit - currentEthPrice)*borrowing[_user].depositDetails[index].depositedAmount;
+        uint128 TokenNeededToLiquidate = (treasury.borrowing[_user].depositDetails[index].ethPriceAtDeposit - currentEthPrice)*treasury.borrowing[_user].depositDetails[index].depositedAmount;
         
 
-        borrowing[msg.sender].depositDetails[Index].liquidated = true;
+        treasury.borrowing[msg.sender].depositDetails[Index].liquidated = true;
         //Transfer the require amount 
         Trinity.burnFrom(address(this), TokenNeededToLiquidate);
         //Protocol token will be minted for the liquidator
@@ -337,7 +313,7 @@ contract Borrowing is Ownable {
         LTV = _LTV;
     }
 
-    function calculateRatio(uint256 _amount,uint currentEthPrice) internal returns(uint40){
+    function _calculateRatio(uint256 _amount,uint currentEthPrice) internal returns(uint64){
 
         uint256 netPLCdsPool;
 
@@ -397,7 +373,7 @@ contract Borrowing is Ownable {
 
         // Calculate ratio by dividing currentEthVaultValue by currentCDSPoolValue,
         // since it may return in decimals we multiply it by 1e6
-        uint40 ratio = uint40((currentCDSPoolValue * PRECISION)/currentEthVaultValue);
+        uint64 ratio = uint64((currentCDSPoolValue * PRECISION)/currentEthVaultValue);
         return ratio;
     }
 

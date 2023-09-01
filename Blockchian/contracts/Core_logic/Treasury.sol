@@ -38,23 +38,27 @@ contract Treasury is Ownable{
         uint128 depositedAmount;
         uint64 downsidePercentage;
         uint128 ethPriceAtDeposit;
+        uint128 borrowedAmount;
+        uint128 normalizedAmount;
         bool withdrawed;
         bool liquidated;
         uint64 ethPriceAtWithdraw;
         uint64 withdrawTime;
+        uint128 pTokensAmount;
     }
 
     //Borrower Details
     struct BorrowerDetails {
         uint256 depositedAmount;
         mapping(uint64 => DepositDetails) depositDetails;
-        uint256 borrowedAmount;
+        uint256 totalBorrowedAmount;
         bool hasBorrowed;
         bool hasDeposited;
         //uint64 downsidePercentage;
         //uint128 ETHPrice;
         //uint64 depositedTime;
         uint64 borrowerIndex;
+        uint128 totalPTokens;
     }
 
     //Each Deposit to Aave/Compound
@@ -84,9 +88,10 @@ contract Treasury is Ownable{
 
     mapping(address depositor => BorrowerDetails) public borrowing;
     mapping(Protocol => ProtocolDeposit) public protocolDeposit;
-    uint128 public totalVolumeOfBorrowersAmountinWei;
+    uint256 public totalVolumeOfBorrowersAmountinWei;
     uint256 public totalVolumeOfBorrowersAmountinUSD;
     uint128 public noOfBorrowers;
+    uint256 public totalInterest;
 
     event Deposit(address indexed user,uint256 amount);
     event Withdraw(address indexed user,uint256 amount);
@@ -127,7 +132,7 @@ contract Treasury is Ownable{
         uint128 _ethPrice,
         uint64 _depositTime
         )
-        external payable onlyBorrowingContract returns(bool) {
+        external payable onlyBorrowingContract returns(bool,uint64) {
 
         uint64 borrowerIndex;
         //check if borrower is depositing for the first time or not
@@ -155,7 +160,7 @@ contract Treasury is Ownable{
         totalVolumeOfBorrowersAmountinUSD += (_ethPrice * msg.value);
 
         //Total volume of borrowers in Wei
-        totalVolumeOfBorrowersAmountinWei += uint128(msg.value);
+        totalVolumeOfBorrowersAmountinWei += msg.value;
 
         //Adding depositTime to borrowing struct
         borrowing[user].depositDetails[borrowerIndex].depositedTime = _depositTime;
@@ -164,19 +169,14 @@ contract Treasury is Ownable{
         borrowing[user].depositDetails[borrowerIndex].ethPriceAtDeposit = _ethPrice;
         
         emit Deposit(user,msg.value);
-        return borrowing[user].hasDeposited;
+        return (borrowing[user].hasDeposited,borrowerIndex);
     }
 
-    function withdraw(address toAddress,uint256 _amount) external {
+    function withdraw(address toAddress,uint256 _amount) external onlyBorrowingContract{
         require(_amount > 0, "Cannot withdraw zero Ether");
 
-        // if(depositedAmount == 0){
-        //     depositorDetails[toAddress].hasDeposited = false;
-        // }
-
-        // (bool sent,) = toAddress.call{value: _amount}("");
-        // require(sent, "Failed to send ether");
-
+        (bool sent,) = payable(toAddress).call{value: (_amount*50)/100}("");
+        require(sent, "Failed to send Ether");
         emit Withdraw(toAddress,_amount);
     }
 
