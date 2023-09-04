@@ -40,7 +40,9 @@ contract Treasury is Ownable{
         uint128 ethPriceAtDeposit;
         uint128 borrowedAmount;
         uint128 normalizedAmount;
+        uint8 withdrawNo;
         bool withdrawed;
+        uint128 withdrawAmount;
         bool liquidated;
         uint64 ethPriceAtWithdraw;
         uint64 withdrawTime;
@@ -172,11 +174,19 @@ contract Treasury is Ownable{
         return (borrowing[user].hasDeposited,borrowerIndex);
     }
 
-    function withdraw(address toAddress,uint256 _amount) external onlyBorrowingContract{
+    function withdraw(address borrower,address toAddress,uint256 _amount,uint8 index) external onlyBorrowingContract{
+        // Check the _amount is non zero
         require(_amount > 0, "Cannot withdraw zero Ether");
+        require(borrowing[borrower].depositDetails[index].withdrawNo > 0,"");
 
+        // Send the ETH to Borrower
         (bool sent,) = payable(toAddress).call{value: (_amount*50)/100}("");
         require(sent, "Failed to send Ether");
+
+        borrowing[borrower].depositDetails[index].borrowedAmount -= uint128(_amount);
+        borrowing[borrower].totalBorrowedAmount -= uint128(_amount);
+        borrowing[borrower].depositDetails[index].withdrawAmount += uint128(_amount);
+        
         emit Withdraw(toAddress,_amount);
     }
 
