@@ -174,7 +174,7 @@ contract Treasury is Ownable{
         return (borrowing[user].hasDeposited,borrowerIndex);
     }
 
-    function withdraw(address borrower,address toAddress,uint256 _amount,uint8 index) external onlyBorrowingContract{
+    function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index) external onlyBorrowingContract{
         // Check the _amount is non zero
         require(_amount > 0, "Cannot withdraw zero Ether");
         require(borrowing[borrower].depositDetails[index].withdrawNo > 0,"");
@@ -186,7 +186,8 @@ contract Treasury is Ownable{
         borrowing[borrower].depositDetails[index].borrowedAmount -= uint128(_amount);
         borrowing[borrower].totalBorrowedAmount -= uint128(_amount);
         borrowing[borrower].depositDetails[index].withdrawAmount += uint128(_amount);
-        
+        totalVolumeOfBorrowersAmountinUSD -= (borrowing[borrower].depositDetails[index].ethPriceAtWithdraw * ((50*_amount)/100));
+        totalVolumeOfBorrowersAmountinWei -= ((50*_amount)/100);
         emit Withdraw(toAddress,_amount);
     }
 
@@ -412,5 +413,69 @@ contract Treasury is Ownable{
         return address(this).balance;
     }
 
+    function updateHasBorrowed(address borrower,bool _bool) external {
+        borrowing[borrower].hasBorrowed = _bool;
+    }
+    function updateTotalDepositedAmount(address borrower,uint128 amount) external {
+        borrowing[borrower].depositedAmount -= amount;
+    }
+    function updateTotalBorrowedAmount(address borrower,uint256 amount) external {
+        borrowing[borrower].totalBorrowedAmount += amount;
+    }
+    function updateTotalPTokensIncrease(address borrower,uint128 amount) external {
+        borrowing[borrower].totalPTokens += amount;
+    }
+    function updateTotalPTokensDecrease(address borrower,uint128 amount) external {
+        borrowing[borrower].totalPTokens -= amount;
+    }
+
+
+    function updateBorrowedAmount(address borrower,uint64 index,uint128 amount ) external {
+        borrowing[borrower].depositDetails[index].borrowedAmount = amount;
+    }
+
+    function updateNormalizedAmount(address borrower,uint64 index,uint128 amount) external {
+        borrowing[borrower].depositDetails[index].normalizedAmount = amount;
+    }
+    function updateWithdrawed(address borrower,uint64 index,bool _bool) external {
+        borrowing[borrower].depositDetails[index].withdrawed = _bool;
+    }
+    function updateDepositedAmount(address borrower,uint64 index,uint128 amount) external {
+        borrowing[borrower].depositDetails[index].depositedAmount = amount;
+    }
+    function updateethPriceAtWithdraw(address borrower,uint64 index,uint64 price) external {
+        borrowing[borrower].depositDetails[index].ethPriceAtWithdraw = price;
+    }
+    function updateWithdrawTime(address borrower,uint64 index,uint64 time) external {
+        borrowing[borrower].depositDetails[index].withdrawTime = time;
+    }
+    function updateWithdrawNo(address borrower,uint64 index,uint8 no) external {
+        borrowing[borrower].depositDetails[index].withdrawNo = no;
+    }
+    function updatePTokensAmount(address borrower,uint64 index,uint128 amount) external {
+        borrowing[borrower].depositDetails[index].pTokensAmount = amount;
+    }
+
+    function updateTotalInterest(uint _amount) external{
+        totalInterest = _amount;
+    }
+
+    function getBorrowing(address depositor,uint64 index) external view returns(uint64,DepositDetails memory){
+        return (
+            borrowing[depositor].borrowerIndex,
+            DepositDetails(borrowing[depositor].depositDetails[index].depositedTime,
+            borrowing[depositor].depositDetails[index].depositedAmount,
+            borrowing[depositor].depositDetails[index].downsidePercentage,
+            borrowing[depositor].depositDetails[index].ethPriceAtDeposit,
+            borrowing[depositor].depositDetails[index].borrowedAmount,
+            borrowing[depositor].depositDetails[index].normalizedAmount,
+            borrowing[depositor].depositDetails[index].withdrawNo,
+            borrowing[depositor].depositDetails[index].withdrawed,
+            borrowing[depositor].depositDetails[index].withdrawAmount,
+            borrowing[depositor].depositDetails[index].liquidated,
+            borrowing[depositor].depositDetails[index].ethPriceAtWithdraw,
+            borrowing[depositor].depositDetails[index].withdrawTime,
+            borrowing[depositor].depositDetails[index].pTokensAmount));
+    }
     receive() external payable{}
 }
