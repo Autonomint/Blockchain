@@ -149,9 +149,9 @@ contract Borrowing is Ownable {
         
         // Call the transfer function to mint Trinity and Get the borrowedAmount
         uint256 borrowAmount = _transferToken(msg.sender,msg.value,_ethPrice);
-        treasury.borrowing[msg.sender].hasBorrowed = true;
-        treasury.borrowing[msg.sender].depositDetails[index].borrowedAmount = borrowAmount;
-        treasury.borrowing[msg.sender].totalBorrowedAmount += borrowAmount;
+        treasury.updateHasBorrowed(msg.sender,true);
+        treasury.updateBorrowedAmount(msg.sender,index,uint128(borrowAmount));
+        treasury.updateTotalBorrowedAmount(msg.sender,borrowAmount);
 
         //Call calculateCumulativeRate() to get currentCumulativeRatev
         uint128 currentCumulativeRate = calculateCumulativeRate();
@@ -159,7 +159,7 @@ contract Borrowing is Ownable {
         // Calculate normalizedAmount
         uint256 normalizedAmount = borrowAmount/currentCumulativeRate;
 
-        treasury.borrowing[msg.sender].depositDetails[index].normalizedAmount = normalizedAmount;
+        treasury.updateNormalizedAmount(msg.sender,index,uint128(normalizedAmount));
 
         // Calculate normalizedAmount of Protocol
         totalNormalizedAmount += normalizedAmount;
@@ -185,49 +185,34 @@ contract Borrowing is Ownable {
         // check is _toAddress in not a zero address and isContract address
         require(_toAddress != address(0) && isContract(_toAddress) != true, "To address cannot be a zero and contract address");
 
-        uint64 Index = _index;
+        (uint64 borrowerIndex,ITreasury.DepositDetails memory depositDetails) = treasury.getBorrowing(msg.sender,_index);
 
         // check if borrowerIndex in BorrowerDetails of the msg.sender is greater than or equal to Index
-        if(treasury.borrowing[msg.sender].borrowerIndex >= Index ) {
+        if(borrowerIndex>= _index ) {
             // Check if user amount in the Index is been liquidated or not
-            require(treasury.borrowing[msg.sender].depositDetails[Index].liquidated != true ," User amount has been liquidated");
+            require(depositDetails.liquidated != true ," User amount has been liquidated");
             // check if withdrawed in depositDetails in borrowing of msg.seader is false or not
-            if(treasury.borrowing[msg.sender].depositDetails[Index].withdrawed = false) {
-                // Get the deposited amount from the index
-                uint128 depositedAmount = treasury.borrowing[msg.sender].depositDetails[Index].depositedAmount;
-                
+            if(depositDetails.withdrawed == false) {                
                 // Check whether it is first withdraw
-                if(treasury.borrowing[msg.sender].depositDetails[Index].withdrawNo == 0) {
-                    // Get the ETH price at deposit
-                    uint128 depositEthPrice = treasury.borrowing[msg.sender].depositDetails[Index].ethPriceAtDeposit;
-                    
+                if(depositDetails.withdrawNo== 0) {                    
                     // Calculate the borrowingHealth
-                    uint64 borrowingHealth = ( _ethPrice * 10000) / depositEthPrice ;
+                    uint128 borrowingHealth = (_ethPrice * 10000) / depositDetails.ethPriceAtDeposit;
 
                     // Check if the borrowingHealth is between 8000(0.8) & 10000(1)
-                    if( 8000 < borrowingHealth < 10000 ) {
-
-                        // Calculate the currentCumulativeRate
-                        uint128 currentCumulativeRate = calculateCumulativeRate();
-
+                    if(8000 < borrowingHealth && borrowingHealth < 10000) {
                         // Calculate th borrower's debt
-                        uint128 borrowerDebt = treasury.borrowing[msg.sender].depositDetails[Index].normalizedAmount * currentCumulativeRate;
+                        uint128 borrowerDebt = depositDetails.normalizedAmount * calculateCumulativeRate();
 
                         // Check whether the Borrower have enough Trinty
                         require(Trinity.balanceOf(msg.sender) >= borrowerDebt, "User balance is less than required");
                             
                         // Update the borrower's data    
-                        treasury.borrowing[msg.sender].depositDetails[Index].ethPriceAtWithdraw = _ethPrice;
-                        treasury.borrowing[msg.sender].depositDetails[Index].withdrawTime = _withdrawTime;
-                        treasury.borrowing[msg.sender].depositDetails[Index].withdrawNo = 1;
-
-                        treasury.totalVolumeOfBorrowersAmountinUSD -= (_ethPrice * (depositedAmount/2));
-                        treasury.totalVolumeOfBorrowersAmountinWei -= uint128(depositedAmount/2);
-
-                        uint128 borrowedAmount = treasury.borrowing[msg.sender].depositDetails[Index].borrowedAmount;
+                        treasury.updateethPriceAtWithdraw(msg.sender,_index,_ethPrice);
+                        treasury.updateWithdrawTime(msg.sender,_index,_withdrawTime);
+                        treasury.updateWithdrawNo(msg.sender,_index,1);
 
                         // Calculate interest for the borrower's debt
-                        uint128 interest = borrowerDebt - borrowedAmount;
+                        uint256 interest = borrowerDebt - depositDetails.borrowedAmount;
 
                         // Calculate the amount of Trinity to burn and sent to the treasury
                         uint256 halfValue = (50 *(borrowerDebt-interest))/100;
@@ -238,50 +223,69 @@ contract Borrowing is Ownable {
                         //Transfer the remaining Trinity to the treasury
                         Trinity.transferFrom(msg.sender,treasuryAddress,halfValue);
                         totalNormalizedAmount -= borrowerDebt;
-                        treasury.totalInterest += interest;
+
+                        uint256 totalInterest = treasury.totalInterest();
+                        totalInterest += interest;
+                        treasury.updateTotalInterest(totalInterest);
 
                         // Sent the ETH(depositedAmount) to the toAddress
-                        treasury.withdraw(msg.sender,_toAddress,depositedAmount,Index);
+                        treasury.withdraw(msg.sender,_toAddress,depositDetails.depositedAmount,_index);
 
                         // Mint the pTokens
                         uint128 noOfPTokensminted = _mintPToken(msg.sender,halfValue);
 
                         // Update PToken data
-                        treasury.borrowing[msg.sender].depositDetails[Index].pTokensAmount = noOfPTokensminted;
-                        treasury.borrowing[msg.sender].totalPTokens += noOfPTokensminted;
+                        treasury.updatePTokensAmount(msg.sender,_index,noOfPTokensminted);
+                        treasury.updateTotalPTokensIncrease(msg.sender,noOfPTokensminted);
                     }else{
                         revert("BorrowingHealth is Low");
                     }
                 }
-                // Check whether it is second withdraw
-                if(treasury.borrowing[msg.sender].depositDetails[Index].withdrawNo == 1){
-                    // Check whether the first withdraw passed one month
-                    require(block.timestamp >= (treasury.borrowing[msg.sender].depositDetails[Index].withdrawTime + 30 days),"A month not yet completed since withdraw");
-                    
-                    // Check the user has required pToken
-                    require(protocolToken.balanceOf(msg.sender) == treasury.borrowing[msg.sender].depositDetails[Index].pTokensAmount,"Don't have enough Protocol Tokens");
-                    
-                    // Update Borrower's Data
-                    treasury.borrowing[msg.sender].depositedAmount -= depositedAmount;
-                    treasury.borrowing[msg.sender].depositDetails[Index].depositedAmount = 0;
-                    treasury.borrowing[msg.sender].depositDetails[Index].withdrawed = true;
-                    treasury.borrowing[msg.sender].depositDetails[Index].withdrawNo = 2;
-                    treasury.borrowing[msg.sender].totalPTokens -= treasury.borrowing[msg.sender].depositDetails[Index].pTokensAmount;
-                    treasury.borrowing[msg.sender].depositDetails[Index].pTokensAmount = 0;
-
-                    // Call withdraw function in Treasury
-                    treasury.withdraw(msg.sender,_toAddress,depositedAmount,Index);
+                        // Check whether it is second withdraw
+                if(depositDetails.withdrawNo == 1){
+                    secondWithdraw(
+                        _index,
+                        _toAddress,
+                        depositDetails.withdrawNo,
+                        depositDetails.withdrawTime,
+                        depositDetails.pTokensAmount,
+                        depositDetails.depositedAmount);
                 }else{
                     // update withdrawed to true
                     revert("User already withdraw entire amount");
                 }
+
             }else {
-                // update withdrawed to true
                 revert("User already withdraw entire amount");
             }
         }else {
             // revert if user doens't have the perticular index
             revert("User doens't have the perticular index");
+        }
+    }
+
+    function secondWithdraw(uint64 _index,address _toAddress,uint8 withdrawNo,uint64 withdrawTime,uint128 pTokensAmount,uint128 depositedAmount) internal {
+        // Check whether it is second withdraw
+        if(withdrawNo == 1){
+            // Check whether the first withdraw passed one month
+            require(block.timestamp >= (withdrawTime + 30 days),"A month not yet completed since withdraw");
+                    
+            // Check the user has required pToken
+            require(protocolToken.balanceOf(msg.sender) == pTokensAmount,"Don't have enough Protocol Tokens");
+                
+            // Update Borrower's Data
+            treasury.updateTotalDepositedAmount(msg.sender,uint128(depositedAmount));
+            treasury.updateDepositedAmount(msg.sender,_index,0);
+            treasury.updateWithdrawed(msg.sender,_index,true);
+            treasury.updateWithdrawNo(msg.sender,_index,2);
+            treasury.updateTotalPTokensDecrease(msg.sender,pTokensAmount);
+            treasury.updatePTokensAmount(msg.sender,_index,0);
+
+            // Call withdraw function in Treasury
+            treasury.withdraw(msg.sender,_toAddress,depositedAmount,_index);
+        }else{
+            // update withdrawed to true
+            revert("User already withdraw entire amount");
         }
     }
     
