@@ -413,6 +413,10 @@ contract Treasury is Ownable{
         return address(this).balance;
     }
 
+    function updateDepositDetails(address depositor,uint64 index,DepositDetails memory depositDetail) external {
+            borrowing[depositor].depositDetails[index] = depositDetail;
+    }
+
     function updateHasBorrowed(address borrower,bool _bool) external {
         borrowing[borrower].hasBorrowed = _bool;
     }
@@ -429,33 +433,6 @@ contract Treasury is Ownable{
         borrowing[borrower].totalPTokens -= amount;
     }
 
-
-    function updateBorrowedAmount(address borrower,uint64 index,uint128 amount ) external {
-        borrowing[borrower].depositDetails[index].borrowedAmount = amount;
-    }
-
-    function updateNormalizedAmount(address borrower,uint64 index,uint128 amount) external {
-        borrowing[borrower].depositDetails[index].normalizedAmount = amount;
-    }
-    function updateWithdrawed(address borrower,uint64 index,bool _bool) external {
-        borrowing[borrower].depositDetails[index].withdrawed = _bool;
-    }
-    function updateDepositedAmount(address borrower,uint64 index,uint128 amount) external {
-        borrowing[borrower].depositDetails[index].depositedAmount = amount;
-    }
-    function updateethPriceAtWithdraw(address borrower,uint64 index,uint64 price) external {
-        borrowing[borrower].depositDetails[index].ethPriceAtWithdraw = price;
-    }
-    function updateWithdrawTime(address borrower,uint64 index,uint64 time) external {
-        borrowing[borrower].depositDetails[index].withdrawTime = time;
-    }
-    function updateWithdrawNo(address borrower,uint64 index,uint8 no) external {
-        borrowing[borrower].depositDetails[index].withdrawNo = no;
-    }
-    function updatePTokensAmount(address borrower,uint64 index,uint128 amount) external {
-        borrowing[borrower].depositDetails[index].pTokensAmount = amount;
-    }
-
     function updateTotalInterest(uint _amount) external{
         totalInterest = _amount;
     }
@@ -463,19 +440,7 @@ contract Treasury is Ownable{
     function getBorrowing(address depositor,uint64 index) external view returns(uint64,DepositDetails memory){
         return (
             borrowing[depositor].borrowerIndex,
-            DepositDetails(borrowing[depositor].depositDetails[index].depositedTime,
-            borrowing[depositor].depositDetails[index].depositedAmount,
-            borrowing[depositor].depositDetails[index].downsidePercentage,
-            borrowing[depositor].depositDetails[index].ethPriceAtDeposit,
-            borrowing[depositor].depositDetails[index].borrowedAmount,
-            borrowing[depositor].depositDetails[index].normalizedAmount,
-            borrowing[depositor].depositDetails[index].withdrawNo,
-            borrowing[depositor].depositDetails[index].withdrawed,
-            borrowing[depositor].depositDetails[index].withdrawAmount,
-            borrowing[depositor].depositDetails[index].liquidated,
-            borrowing[depositor].depositDetails[index].ethPriceAtWithdraw,
-            borrowing[depositor].depositDetails[index].withdrawTime,
-            borrowing[depositor].depositDetails[index].pTokensAmount));
+            borrowing[depositor].depositDetails[index]);
     }
     receive() external payable{}
 }
