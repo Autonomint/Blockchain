@@ -20,7 +20,7 @@ import {
 describe("Borrowing Contract",function(){
 
     let CDSContract : CDSTest;
-    let BorrowingContract : Borrowing;
+    let BorrowingContract : BorrowingTest;
     let Token : TrinityStablecoin;
     let pToken : ProtocolToken;
     let treasury : Treasury;
@@ -40,7 +40,7 @@ describe("Borrowing Contract",function(){
         const CDS = await ethers.getContractFactory("CDSTest");
         CDSContract = await CDS.deploy(Token.address);
 
-        const Borrowing = await ethers.getContractFactory("Borrowing");
+        const Borrowing = await ethers.getContractFactory("BorrowingTest");
         BorrowingContract = await Borrowing.deploy(Token.address,CDSContract.address,pToken.address,priceFeedAddress);
 
         const Treasury = await ethers.getContractFactory("Treasury");
@@ -469,5 +469,68 @@ describe("Borrowing Contract",function(){
         // })
     })
 
+    describe("Should withdraw ETH from protocol",function(){
+        it("Should withdraw ETH",async function(){
+            const {BorrowingContract,Token,pToken,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
 
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            console.log("TREASURY BALANCE", await treasury.getBalanceInTreasury());
+
+            await Token.connect(user1).approve(BorrowingContract.address,await Token.balanceOf(user1.address));
+            await BorrowingContract.connect(user1).withDraw(user2.address,1,999,timeStamp);
+
+            console.log("TREASURY BALANCE", await treasury.getBalanceInTreasury());
+            console.log("TRINITY BALANCE AFTER WITHDRAW",await Token.balanceOf(user1.address));
+            console.log("PTOKEN BALANCE AFTER WITHDRAW1",await pToken.balanceOf(user1.address));
+
+            await pToken.connect(user1).approve(BorrowingContract.address,await pToken.balanceOf(user1.address));
+            await BorrowingContract.connect(user1).withDraw(user2.address,1,999,timeStamp);
+            console.log("TREASURY BALANCE", await treasury.getBalanceInTreasury());
+            console.log("PTOKEN BALANCE AFTER WITHDRAW2",await pToken.balanceOf(user1.address));
+        })
+        it("Should revert To address is zero and contract address",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            const tx = BorrowingContract.connect(user1).withDraw(ethers.constants.AddressZero,1,999,timeStamp);
+            expect(tx).to.be.revertedWith("To address cannot be a zero and contract address");
+
+            const tx1 = BorrowingContract.connect(user1).withDraw(treasury.address,1,999,timeStamp);
+            expect(tx1).to.be.revertedWith("To address cannot be a zero and contract address");
+        })
+        it("Should revert if User doens't have the perticular index",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            const tx = BorrowingContract.connect(user1).withDraw(user2.address,1,999,timeStamp);
+            expect(tx).to.be.revertedWith("User doens't have the perticular index");
+        })
+        it("Should revert if BorrowingHealth is Low",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            const tx = BorrowingContract.connect(user1).withDraw(user2.address,1,800,timeStamp);
+            expect(tx).to.be.revertedWith("BorrowingHealth is Low");
+
+            const tx1 = BorrowingContract.connect(user1).withDraw(user2.address,1,1000,timeStamp);
+            expect(tx1).to.be.revertedWith("BorrowingHealth is Low");
+        })
+        it("Should revert if User already withdraw entire amount",async function(){
+            const {BorrowingContract,Token,pToken} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+
+            await Token.connect(user1).approve(BorrowingContract.address,await Token.balanceOf(user1.address));
+            await BorrowingContract.connect(user1).withDraw(user2.address,1,999,timeStamp);
+
+            await pToken.connect(user1).approve(BorrowingContract.address,await pToken.balanceOf(user1.address));
+            await BorrowingContract.connect(user1).withDraw(user2.address,1,999,timeStamp);
+
+            const tx = BorrowingContract.connect(user1).withDraw(user2.address,1,999,timeStamp);
+            expect(tx).to.be.revertedWith("User already withdraw entire amount");
+        })
+    })
 })
