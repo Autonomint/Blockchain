@@ -79,6 +79,7 @@ contract Borrowing is Ownable {
     function initializeTreasury(address _treasury) external onlyOwner{
         require(_treasury != address(0) && isContract(_treasury) != false, "Treasury must be contract address & can't be zero address");
         treasury = ITreasury(_treasury);
+        treasuryAddress = _treasury;
     }
 
     /**
@@ -240,13 +241,11 @@ contract Borrowing is Ownable {
                     }else{
                         revert("BorrowingHealth is Low");
                     }
-                }
-                        // Check whether it is second withdraw
-                if(depositDetails.withdrawNo == 1){
+                }// Check whether it is second withdraw
+                else if(depositDetails.withdrawNo == 1){
                     secondWithdraw(
                         _index,
                         _toAddress,
-                        depositDetails.withdrawNo,
                         depositDetails.withdrawTime,
                         depositDetails.pTokensAmount,
                         depositDetails.depositedAmount);
@@ -254,7 +253,6 @@ contract Borrowing is Ownable {
                     // update withdrawed to true
                     revert("User already withdraw entire amount");
                 }
-
             }else {
                 revert("User already withdraw entire amount");
             }
@@ -264,9 +262,7 @@ contract Borrowing is Ownable {
         }
     }
 
-    function secondWithdraw(uint64 _index,address _toAddress,uint8 withdrawNo,uint64 withdrawTime,uint128 pTokensAmount,uint128 depositedAmount) internal {
-        // Check whether it is second withdraw
-        if(withdrawNo == 1){
+    function secondWithdraw(uint64 _index,address _toAddress,uint64 withdrawTime,uint128 pTokensAmount,uint128 depositedAmount) internal {
             // Check whether the first withdraw passed one month
             require(block.timestamp >= (withdrawTime + 30 days),"A month not yet completed since withdraw");
                     
@@ -280,13 +276,10 @@ contract Borrowing is Ownable {
             treasury.updateWithdrawNo(msg.sender,_index,2);
             treasury.updateTotalPTokensDecrease(msg.sender,pTokensAmount);
             treasury.updatePTokensAmount(msg.sender,_index,0);
-
+            // Burn the pTokens
+            protocolToken.burnFrom(msg.sender,pTokensAmount);
             // Call withdraw function in Treasury
             treasury.withdraw(msg.sender,_toAddress,depositedAmount,_index);
-        }else{
-            // update withdrawed to true
-            revert("User already withdraw entire amount");
-        }
     }
     
     // function getBorrowDetails(address _user, uint64 _index) public view returns(DepositDetails){
