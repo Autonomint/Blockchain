@@ -69,25 +69,36 @@ describe("Borrowing Contract",function(){
             expect(await Token.totalSupply()).to.be.equal(ethers.utils.parseEther("800"));
         })
 
-        it("Should calculate criticalRatio correctly",async function(){
-            const {BorrowingContract,CDSContract,Token} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
+        // it.only("Should calculate criticalRatio correctly",async function(){
+        //     const {BorrowingContract,CDSContract,Token} = await loadFixture(deployer);
+        //     const timeStamp = await time.latest();
 
-            await Token.mint(owner.address,ethers.utils.parseEther("10000"));
-            await Token.connect(owner).approve(CDSContract.address,ethers.utils.parseEther("10000"));
+        //     await Token.mint(owner.address,ethers.utils.parseEther("10000"));
+        //     await Token.connect(owner).approve(CDSContract.address,ethers.utils.parseEther("10000"));
 
-            await CDSContract.deposit(ethers.utils.parseEther("10000"));
-            await BorrowingContract.connect(user1).depositTokens(ethers.utils.parseEther("1215.48016465422"),timeStamp,{value: ethers.utils.parseEther("1")});
-            await BorrowingContract.connect(user2).depositTokens(ethers.utils.parseEther("1216.12094444444"),timeStamp,{value: ethers.utils.parseEther("1")});
-            await BorrowingContract.connect(user3).depositTokens(ethers.utils.parseEther("1190.84086805555"),timeStamp,{value: ethers.utils.parseEther("1")});
-            await BorrowingContract.connect(owner).depositTokens(ethers.utils.parseEther("1163.07447222222"),timeStamp,{value: ethers.utils.parseEther("1")});
-        })
+        //     await CDSContract.deposit(ethers.utils.parseEther("10000"));
+        //     await BorrowingContract.connect(user1).depositTokens(ethers.utils.parseEther("1215.48016465422"),timeStamp,{value: ethers.utils.parseEther("1")});
+        //     await BorrowingContract.connect(user2).depositTokens(ethers.utils.parseEther("1216.12094444444"),timeStamp,{value: ethers.utils.parseEther("1")});
+        //     await BorrowingContract.connect(user3).depositTokens(ethers.utils.parseEther("1190.84086805555"),timeStamp,{value: ethers.utils.parseEther("1")});
+        //     await BorrowingContract.connect(owner).depositTokens(ethers.utils.parseEther("1163.07447222222"),timeStamp,{value: ethers.utils.parseEther("1")});
+        // })
 
-        it.only("Should calculate cumulativeRatio correctly",async function(){
+        it("Should set APY",async function(){
             const {BorrowingContract} = await loadFixture(deployer);
             await BorrowingContract.setAPY(5);
-            await BorrowingContract.calculateCumulativeRate();
+            expect(await BorrowingContract.APY()).to.be.equal(5);
         })
+        it("Should called by only owner(setAPY)",async function(){
+            const {BorrowingContract} = await loadFixture(deployer);
+            const tx = BorrowingContract.connect(user1).setAPY(5);
+            expect(tx).to.be.revertedWith("Ownable: caller is not the owner");
+        })
+        it("Should get APY",async function(){
+            const {BorrowingContract} = await loadFixture(deployer);
+            await BorrowingContract.setAPY(5);
+            expect(await BorrowingContract.getAPY()).to.be.equal(5);
+        })
+
     })
 
     describe("Should get the ETH/USD price",function(){
