@@ -150,8 +150,9 @@ contract Borrowing is Ownable {
         
         // Call the transfer function to mint Trinity and Get the borrowedAmount
         uint256 borrowAmount = _transferToken(msg.sender,msg.value,_ethPrice);
+        (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,index);
+        depositDetail.borrowedAmount = uint128(borrowAmount);
         treasury.updateHasBorrowed(msg.sender,true);
-        treasury.updateBorrowedAmount(msg.sender,index,uint128(borrowAmount));
         treasury.updateTotalBorrowedAmount(msg.sender,borrowAmount);
 
         //Call calculateCumulativeRate() to get currentCumulativeRatev
@@ -160,7 +161,8 @@ contract Borrowing is Ownable {
         // Calculate normalizedAmount
         uint256 normalizedAmount = borrowAmount/currentCumulativeRate;
 
-        treasury.updateNormalizedAmount(msg.sender,index,uint128(normalizedAmount));
+        depositDetail.normalizedAmount = uint128(normalizedAmount);
+        treasury.updateDepositDetails(msg.sender,index,depositDetail);
 
         // Calculate normalizedAmount of Protocol
         totalNormalizedAmount += normalizedAmount;
@@ -186,34 +188,34 @@ contract Borrowing is Ownable {
         // check is _toAddress in not a zero address and isContract address
         require(_toAddress != address(0) && isContract(_toAddress) != true, "To address cannot be a zero and contract address");
 
-        (uint64 borrowerIndex,ITreasury.DepositDetails memory depositDetails) = treasury.getBorrowing(msg.sender,_index);
+        (uint64 borrowerIndex,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,_index);
 
         // check if borrowerIndex in BorrowerDetails of the msg.sender is greater than or equal to Index
-        if(borrowerIndex>= _index ) {
+        if(borrowerIndex >= _index ) {
             // Check if user amount in the Index is been liquidated or not
-            require(depositDetails.liquidated != true ," User amount has been liquidated");
-            // check if withdrawed in depositDetails in borrowing of msg.seader is false or not
-            if(depositDetails.withdrawed == false) {                
+            require(depositDetail.liquidated != true ," User amount has been liquidated");
+            // check if withdrawed in depositDetail in borrowing of msg.seader is false or not
+            if(depositDetail.withdrawed == false) {                
                 // Check whether it is first withdraw
-                if(depositDetails.withdrawNo== 0) {                    
+                if(depositDetail.withdrawNo == 0) {                    
                     // Calculate the borrowingHealth
-                    uint128 borrowingHealth = (_ethPrice * 10000) / depositDetails.ethPriceAtDeposit;
+                    uint128 borrowingHealth = (_ethPrice * 10000) / depositDetail.ethPriceAtDeposit;
 
                     // Check if the borrowingHealth is between 8000(0.8) & 10000(1)
                     if(8000 < borrowingHealth && borrowingHealth < 10000) {
                         // Calculate th borrower's debt
-                        uint128 borrowerDebt = depositDetails.normalizedAmount * calculateCumulativeRate();
+                        uint128 borrowerDebt = depositDetail.normalizedAmount * calculateCumulativeRate();
 
                         // Check whether the Borrower have enough Trinty
                         require(Trinity.balanceOf(msg.sender) >= borrowerDebt, "User balance is less than required");
                             
-                        // Update the borrower's data    
-                        treasury.updateethPriceAtWithdraw(msg.sender,_index,_ethPrice);
-                        treasury.updateWithdrawTime(msg.sender,_index,_withdrawTime);
-                        treasury.updateWithdrawNo(msg.sender,_index,1);
+                        // Update the borrower's data
+                        depositDetail.ethPriceAtWithdraw = _ethPrice;
+                        depositDetail.withdrawTime = _withdrawTime;
+                        depositDetail.withdrawNo = 1;
 
                         // Calculate interest for the borrower's debt
-                        uint256 interest = borrowerDebt - depositDetails.borrowedAmount;
+                        uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
 
                         // Calculate the amount of Trinity to burn and sent to the treasury
                         uint256 halfValue = (50 *(borrowerDebt-interest))/100;
@@ -229,26 +231,27 @@ contract Borrowing is Ownable {
                         totalInterest += interest;
                         treasury.updateTotalInterest(totalInterest);
 
-                        // Sent the ETH(depositedAmount) to the toAddress
-                        treasury.withdraw(msg.sender,_toAddress,depositDetails.depositedAmount,_index);
-
                         // Mint the pTokens
                         uint128 noOfPTokensminted = _mintPToken(msg.sender,halfValue);
 
                         // Update PToken data
-                        treasury.updatePTokensAmount(msg.sender,_index,noOfPTokensminted);
+                        depositDetail.pTokensAmount = noOfPTokensminted;
                         treasury.updateTotalPTokensIncrease(msg.sender,noOfPTokensminted);
+                        
+                        treasury.updateDepositDetails(msg.sender,_index,depositDetail);
+                        // Sent the ETH(depositedAmount) to the toAddress
+                        treasury.withdraw(msg.sender,_toAddress,depositDetail.depositedAmount,_index);
                     }else{
                         revert("BorrowingHealth is Low");
                     }
                 }// Check whether it is second withdraw
-                else if(depositDetails.withdrawNo == 1){
+                else if(depositDetail.withdrawNo == 1){
                     secondWithdraw(
                         _index,
                         _toAddress,
-                        depositDetails.withdrawTime,
-                        depositDetails.pTokensAmount,
-                        depositDetails.depositedAmount);
+                        depositDetail.withdrawTime,
+                        depositDetail.pTokensAmount,
+                        depositDetail.depositedAmount);
                 }else{
                     // update withdrawed to true
                     revert("User already withdraw entire amount");
@@ -268,15 +271,16 @@ contract Borrowing is Ownable {
                     
             // Check the user has required pToken
             require(protocolToken.balanceOf(msg.sender) == pTokensAmount,"Don't have enough Protocol Tokens");
-                
+            (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,_index);
             // Update Borrower's Data
             treasury.updateTotalDepositedAmount(msg.sender,uint128(depositedAmount));
-            treasury.updateDepositedAmount(msg.sender,_index,0);
-            treasury.updateWithdrawed(msg.sender,_index,true);
-            treasury.updateWithdrawNo(msg.sender,_index,2);
+            depositDetail.depositedAmount = 0;
+            depositDetail.withdrawed = true;
+            depositDetail.withdrawNo = 2;
             treasury.updateTotalPTokensDecrease(msg.sender,pTokensAmount);
-            treasury.updatePTokensAmount(msg.sender,_index,0);
-            // Burn the pTokens
+            depositDetail.pTokensAmount = 0;
+            
+            treasury.updateDepositDetails(msg.sender,_index,depositDetail);
             protocolToken.burnFrom(msg.sender,pTokensAmount);
             // Call withdraw function in Treasury
             treasury.withdraw(msg.sender,_toAddress,depositedAmount,_index);
