@@ -4,6 +4,7 @@ pragma solidity 0.8.18;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/interfaces/IERC20.sol";
+import "../interface/ITrinityToken.sol";
 import "../interface/IBorrowing.sol";
 import "../interface/AaveInterfaces/IWETHGateway.sol";
 import "../interface/AaveInterfaces/IPoolAddressesProvider.sol";
@@ -23,12 +24,14 @@ contract Treasury is Ownable{
     error Treasury_CompoundWithdrawFailed();
 
     IBorrowing public borrow;
+    ITrinityToken public trinity;
     IWrappedTokenGatewayV3 public wethGateway;
     IPoolAddressesProvider public aavePoolAddressProvider;
     IATOKEN public aToken;
     ICEther public cEther;
 
     address public borrowingContract;
+    address public cdsContract;  
     address public compoundAddress;
     address public aaveWETH;        //wethGateway Address for Approve
 
@@ -103,19 +106,33 @@ contract Treasury is Ownable{
     event WithdrawFromCompound(uint64 count,uint256 amount);
 
 
-    constructor(address _borrowing,address _wethGateway,address _cEther,address _aavePoolAddressProvider,address _aToken) {
-        borrowingContract = _borrowing;
-        borrow = IBorrowing(_borrowing);
-        wethGateway = IWrappedTokenGatewayV3(_wethGateway);       //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
-        cEther = ICEther(_cEther);                                //0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5
-        compoundAddress = _cEther;
-        aavePoolAddressProvider = IPoolAddressesProvider(_aavePoolAddressProvider);  //0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
-        aToken = IATOKEN(_aToken);                                                   //0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
-        aaveWETH = _wethGateway;
+    constructor(
+        address _borrowing,
+        address _tokenAddress,
+        address _cdsContract,
+        address _wethGateway,
+        address _cEther,
+        address _aavePoolAddressProvider,
+        address _aToken
+        ) {
+            borrowingContract = _borrowing;
+            cdsContract = _cdsContract;
+            borrow = IBorrowing(_borrowing);
+            trinity = ITrinityToken(_tokenAddress);
+            wethGateway = IWrappedTokenGatewayV3(_wethGateway);       //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
+            cEther = ICEther(_cEther);                                //0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5
+            compoundAddress = _cEther;
+            aavePoolAddressProvider = IPoolAddressesProvider(_aavePoolAddressProvider);  //0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
+            aToken = IATOKEN(_aToken);                                                   //0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
+            aaveWETH = _wethGateway;
     }
 
     modifier onlyBorrowingContract() {
         require( msg.sender == borrowingContract, "This function can only called by borrowing contract");
+        _;
+    }
+    modifier onlyCDSContract() {
+        require( msg.sender == cdsContract, "This function can only called by CDS contract");
         _;
     }
 
@@ -442,5 +459,12 @@ contract Treasury is Ownable{
             borrowing[depositor].borrowerIndex,
             borrowing[depositor].depositDetails[index]);
     }
+
+    function approval(address _address, uint _amount) external onlyCDSContract{
+        require(_address != address(0) && _amount != 0, "Input address or amount is invalid");
+        bool state = trinity.approve(_address, _amount);
+        require(state == true, "Approve failed");
+    }
+
     receive() external payable{}
 }

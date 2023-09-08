@@ -39,6 +39,7 @@ interface ITreasury{
         function depositToCompound() external;
         function withdrawFromCompound(uint64 index) external;
         function getBalanceInTreasury() external view returns(uint256);
+        function approval(address _address, uint _amount) external;
 
         function noOfBorrowers() external returns(uint128);
         function totalInterest() external returns(uint256);
