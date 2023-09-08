@@ -39,14 +39,15 @@ describe("Testing contracts ", function(){
         BorrowingContract = await Borrowing.deploy(Token.address,CDSContract.address,pToken.address,priceFeedAddress);
 
         const Treasury = await ethers.getContractFactory("Treasury");
-        treasury = await Treasury.deploy(BorrowingContract.address,wethGateway,cEther,aavePoolAddress,aTokenAddress);
+        treasury = await Treasury.deploy(BorrowingContract.address,Token.address,CDSContract.address,wethGateway,cEther,aavePoolAddress,aTokenAddress);
 
         await BorrowingContract.initializeTreasury(treasury.address);
         await BorrowingContract.setLTV(80);
         await CDSContract.setTreasury(treasury.address);
+        await CDSContract.setWithdrawTimeLimit(1000);
 
         [owner, user1, user2] = await ethers.getSigners();
-        return {Token,pToken,CDSContract,BorrowingContract,owner,user1,user2}
+        return {Token,pToken,CDSContract,BorrowingContract,treasury,owner,user1,user2}
     }
     
     describe("Minting tokens and transfering tokens", async function(){
@@ -85,9 +86,7 @@ describe("Testing contracts ", function(){
 
     describe("Checking revert conditions", function(){
         it("Should revert if zero balance is deposited in CDS",async () => {
-            const {CDSContract,Token} = await loadFixture(deployer);
-            await Token.mint(user1.address,ethers.utils.parseEther("1"));
-            await Token.connect(user1).approve(CDSContract.address,ethers.utils.parseEther("1"));
+            const {CDSContract} = await loadFixture(deployer);
             await expect( CDSContract.connect(user1).deposit(0)).to.be.revertedWith("Deposit amount should not be zero");
         })
 
@@ -100,14 +99,7 @@ describe("Testing contracts ", function(){
 
         it("Should revert with insufficient balance ",async () => {
             const {CDSContract} = await loadFixture(deployer);
-            
             await expect( CDSContract.connect(user1).deposit(ethers.utils.parseEther("1"))).to.be.revertedWith("Insufficient balance with msg.sender")
-        })
-
-        it("Should revert if Withdraw time limit can't be zero",async () => {
-            const {CDSContract} = await loadFixture(deployer);
-            
-            await expect( CDSContract.connect(owner).setWithdrawTimeLimit(0)).to.be.revertedWith("Withdraw time limit can't be zero")
         })
 
         it("Should revert if Input address is invalid",async () => {
@@ -115,45 +107,101 @@ describe("Testing contracts ", function(){
             await expect( CDSContract.connect(owner).setBorrowingContract(ethers.constants.AddressZero)).to.be.revertedWith("Input address is invalid");
             await expect( CDSContract.connect(owner).setBorrowingContract(user1.address)).to.be.revertedWith("Input address is invalid");
         })
+
+        it("Should revert if the index is not valid",async function(){
+            const {CDSContract} = await loadFixture(deployer);
+            expect(CDSContract.connect(user1).withdraw(1)).to.be.revertedWith("user doesn't have the specified index");
+        })
+
+        it("Should revert if the caller is not owner for setTreasury",async function(){
+            const {CDSContract,treasury} = await loadFixture(deployer);
+            expect(CDSContract.connect(user1).setTreasury(treasury.address)).to.be.revertedWith("Ownable: caller is not the owner");
+        })
+
+        it("Should revert if the caller is not owner for setWithdrawTimeLimit",async function(){
+            const {CDSContract} = await loadFixture(deployer);
+            expect(CDSContract.connect(user1).setWithdrawTimeLimit(1000)).to.be.revertedWith("Ownable: caller is not the owner");
+        })
+
+        it("Should revert if the caller is not owner for approval",async function(){
+            const {CDSContract} = await loadFixture(deployer);
+            expect(CDSContract.connect(user1).approval(CDSContract.address,1000)).to.be.revertedWith("Ownable: caller is not the owner");
+        })
+
+        it("Should revert if the caller is not owner for setBorrowingContract",async function(){
+            const {BorrowingContract,CDSContract} = await loadFixture(deployer);
+            expect(CDSContract.connect(user1).setBorrowingContract(BorrowingContract.address)).to.be.revertedWith("Ownable: caller is not the owner");
+        })
+
+        it("Should revert if the Treasury address is zero",async function(){
+            const {CDSContract} = await loadFixture(deployer);
+            expect(CDSContract.connect(owner).setTreasury(ethers.constants.AddressZero)).to.be.revertedWith("Input address is invalid");
+        })
+
+        it("Should revert if the Treasury address is not contract address",async function(){
+            const {CDSContract} = await loadFixture(deployer);
+            expect(CDSContract.connect(owner).setTreasury(user2.address)).to.be.revertedWith("Input address is invalid");
+        })
+
+        it("Should revert if the zero sec is given in setWithdrawTimeLimit",async function(){
+            const {CDSContract} = await loadFixture(deployer);
+            expect(CDSContract.connect(owner).setWithdrawTimeLimit(0)).to.be.revertedWith("Withdraw time limit can't be zero");
+        })
     })
 
-    describe("Checking functions",function(){
-        // it("Should update variables correctly",async function(){
-        //     const {CDSContract} = await loadFixture(deployer);
-        //     await CDSContract.updateLastEthPrice(1500);
-        //     expect (await CDSContract.lastEthPrice()).to.be.equal(1500);     
-        // })
-
-        // it.only("Should calculate cdsAmountToReturn ",async function(){
-        //     const {CDSContract,Token} = await loadFixture(deployer);
-
-        //     await Token.mint(owner.address,ethers.utils.parseEther("1"));
-        //     await Token.connect(owner).approve(CDSContract.address,ethers.utils.parseEther("1"));
-
-        //     await CDSContract.connect(owner).deposit(ethers.utils.parseEther("1"));
-        //     const ethPrice = await CDSContract.lastEthPrice();
-        //     const tx = await CDSContract.connect(user1).cdsAmountToReturn(user1.address,1,ethPrice);
-        //     console.log(tx);
-        // })
-
+    describe("Should update variables correctly",function(){
+        it("Should update lastEthPrice correctly",async function(){
+            const {CDSContract} = await loadFixture(deployer);
+            await CDSContract.updateLastEthPrice(1500);
+            expect (await CDSContract.fallbackEthPrice()).to.be.equal(await CDSContract.fallbackEthPrice());     
+            expect (await CDSContract.lastEthPrice()).to.be.equal(1500);     
+        })
+        it("Should update borrowing correctly",async function(){
+            const {BorrowingContract,CDSContract} = await loadFixture(deployer);
+            await CDSContract.connect(owner).setBorrowingContract(BorrowingContract.address);
+            expect (await CDSContract.borrowingContract()).to.be.equal(BorrowingContract.address);     
+        })
+        it("Should update treasury correctly",async function(){
+            const {treasury,CDSContract} = await loadFixture(deployer);
+            await CDSContract.connect(owner).setTreasury(treasury.address);
+            expect (await CDSContract.treasuryAddress()).to.be.equal(treasury.address);     
+        })
+        it("Should update withdrawTime correctly",async function(){
+            const {CDSContract} = await loadFixture(deployer);
+            await CDSContract.connect(owner).setWithdrawTimeLimit(1500);
+            expect (await CDSContract.withdrawTimeLimit()).to.be.equal(1500);     
+        })
     })
 
-    // describe("To check CDS withdrawl function",function(){
-    //     it.only("Should withdraw from cds",async () => {
-    //         const {CDSContract,BorrowingContract,Token} = await loadFixture(deployer);
+    describe("To check CDS withdrawl function",function(){
+        it("Should withdraw from cds",async () => {
+            const {CDSContract,treasury,Token} = await loadFixture(deployer);
 
-    //         await Token.mint(user1.address,ethers.utils.parseEther("1000"));
-    //         await Token.connect(user1).approve(CDSContract.address,ethers.utils.parseEther("1000"));
+            await Token.mint(user1.address,ethers.utils.parseEther("1000"));
+            await Token.connect(user1).approve(CDSContract.address,ethers.utils.parseEther("1000"));
             
-    //         const timestamp = await time.latest();
-    //         console.log("BEFORE DEPOSIT TO CDS",await Token.balanceOf(user1.address));
-    //         await CDSContract.connect(user1).deposit(ethers.utils.parseEther("1000"));
-    //         console.log("AFTER DEPOSIT TO CDS",await Token.balanceOf(user1.address));
+            const timestamp = await time.latest();
+            console.log("BEFORE DEPOSIT TO CDS",await Token.balanceOf(user1.address));
+            await CDSContract.connect(user1).deposit(ethers.utils.parseEther("1000"));
+            console.log("AFTER DEPOSIT TO CDS",await Token.balanceOf(user1.address));
 
-    //         await BorrowingContract.connect(user2).depositTokens(100,timestamp,{value: ethers.utils.parseEther("1000")});
-    //         await helpers.time.increase(3600);
-    //         await CDSContract.connect(user1).withdraw(1);
-    //         console.log("AFTER WITHDRAW FROM CDS",await Token.balanceOf(user1.address));
+            await time.increase(1000);
+            await CDSContract.approval(CDSContract.address,await Token.balanceOf(treasury.address));
+            await CDSContract.connect(user1).withdraw(1);
+            console.log("AFTER WITHDRAW FROM CDS",await Token.balanceOf(user1.address));
+        })
+    })
+    // describe("To check cdsAmountToReturn function",function(){
+    //     it("Should calculate cdsAmountToReturn ",async function(){
+    //         const {CDSContract,Token} = await loadFixture(deployer);
+
+    //         await Token.mint(owner.address,ethers.utils.parseEther("1"));
+    //         await Token.connect(owner).approve(CDSContract.address,ethers.utils.parseEther("1"));
+
+    //         await CDSContract.connect(owner).deposit(ethers.utils.parseEther("1"));
+    //         const ethPrice = await CDSContract.lastEthPrice();
+    //         const tx = await CDSContract.connect(user1).cdsAmountToReturn(user1.address,1,ethPrice);
+    //         console.log(tx);
     //     })
     // })
 })
