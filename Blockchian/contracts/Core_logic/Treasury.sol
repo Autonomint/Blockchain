@@ -97,6 +97,7 @@ contract Treasury is Ownable{
     uint256 public totalVolumeOfBorrowersAmountinUSD;
     uint128 public noOfBorrowers;
     uint256 public totalInterest;
+    uint256 public totalInterestFromLiquidation;
 
     event Deposit(address indexed user,uint256 amount);
     event Withdraw(address indexed user,uint256 amount);
@@ -453,6 +454,9 @@ contract Treasury is Ownable{
     function updateTotalInterest(uint _amount) external{
         totalInterest = _amount;
     }
+    function updateTotalInterestFromLiquidation(uint _amount) external{
+        totalInterestFromLiquidation = _amount;
+    }
 
     function getBorrowing(address depositor,uint64 index) external view returns(uint64,DepositDetails memory){
         return (
@@ -464,6 +468,19 @@ contract Treasury is Ownable{
         require(_address != address(0) && _amount != 0, "Input address or amount is invalid");
         bool state = trinity.approve(_address, _amount);
         require(state == true, "Approve failed");
+    }
+
+    /**
+     * @dev This function withdraw interest.
+     * @param toAddress The address to whom to transfer StableCoins.
+     * @param amount The amount of stablecoins to withdraw.
+     */
+
+    function withdrawInterest(address toAddress,uint256 amount) external onlyOwner{
+        require(toAddress != address(0) && amount != 0, "Input address or amount is invalid");
+        require(amount <= (totalInterest + totalInterestFromLiquidation));
+        bool sent = trinity.transfer(toAddress,amount);
+        require(sent, "Failed to send Ether");
     }
 
     receive() external payable{}
