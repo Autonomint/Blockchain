@@ -36,6 +36,7 @@ contract Borrowing is Ownable {
     }
 
     address public treasuryAddress;
+    address public cdsAddress;
     uint8 private LTV; // LTV is a percentage eg LTV = 60 is 60%, must be divided by 100 in calculations
     uint8 private APY;
     uint128 public totalVolumeOfBorrowersinWei;
@@ -61,6 +62,7 @@ contract Borrowing is Ownable {
         ){
         Trinity = ITrinityToken(_tokenAddress);
         cds = CDSInterface(_cds);
+        cdsAddress = _cds;
         protocolToken = IProtocolToken(_protocolToken);
         priceFeedAddress = _priceFeedAddress;                       //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
         lastEthprice = uint128(getUSDValue());
@@ -184,6 +186,14 @@ contract Borrowing is Ownable {
         treasury.withdrawFromCompound(index);
     }
 
+    /**
+     * @dev This function withdraw ETH.
+     * @param _toAddress The address to whom to transfer ETH.
+     * @param _index Index of the borrow
+     * @param _ethPrice Current ETH Price.
+     * @param _withdrawTime time right now
+     */
+
     function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime) external {
         // check is _toAddress in not a zero address and isContract address
         require(_toAddress != address(0) && isContract(_toAddress) != true, "To address cannot be a zero and contract address");
@@ -247,8 +257,8 @@ contract Borrowing is Ownable {
                 }// Check whether it is second withdraw
                 else if(depositDetail.withdrawNo == 1){
                     secondWithdraw(
-                        _index,
                         _toAddress,
+                        _index,
                         depositDetail.withdrawTime,
                         depositDetail.pTokensAmount,
                         depositDetail.depositedAmount);
@@ -265,7 +275,16 @@ contract Borrowing is Ownable {
         }
     }
 
-    function secondWithdraw(uint64 _index,address _toAddress,uint64 withdrawTime,uint128 pTokensAmount,uint128 depositedAmount) internal {
+    /**
+     * @dev This function withdraw ETH.
+     * @param _toAddress The address to whom to transfer ETH.
+     * @param _index Index of the borrow
+     * @param pTokensAmount Amount of pTokens transferred.
+     * @param withdrawTime time at first withdraw
+     * @param depositedAmount Deposited Amount of the borrower
+     */
+
+    function secondWithdraw(address _toAddress,uint64 _index,uint64 withdrawTime,uint128 pTokensAmount,uint128 depositedAmount) internal {
             // Check whether the first withdraw passed one month
             require(block.timestamp >= (withdrawTime + 30 days),"A month not yet completed since withdraw");
                     
@@ -294,32 +313,51 @@ contract Borrowing is Ownable {
 
 
 
-    //To liquidate a users eth by any other user,
+    /**
+     * @dev This function liquidate ETH which are below downside protection.
+     * @param _user The address to whom to liquidate ETH.
+     * @param _index Index of the borrow
+     * @param currentEthPrice Current ETH Price.
+     */
 
-    function Liquidate(uint64 index,uint64 currentEthPrice,uint64 protocolTokenValue, address _user) external{
+    function liquidate(address _user,uint64 _index,uint64 currentEthPrice) external{
 
-        //To check if the ratio is less than 0.8 & converting into Bips
-        require(msg.sender!=_user,"You cannot liquidate your own assets!");
-        uint64 Index = index;
-        uint128 ratio = (currentEthPrice * 10000 / treasury.borrowing[_user].depositDetails[index].ethPriceAtDeposit);
-        uint64 downsideProtectionPercentage = treasury.borrowing[msg.sender].depositDetails[Index].downsidePercentage;
-        //converting percentage to bips
-        uint64 downsideProtection = downsideProtectionPercentage * 100;
-        require(ratio<downsideProtection,"You cannot liquidate");
-        //Token liquidator needs to provide for liquidating
+        // Check whether the liquidator 
+        require(_user != address(0), "To address cannot be a zero address");
+        // require(msg.sender != _user,"You cannot liquidate your own assets!");
+        address borrower = _user;
+        uint64 index = _index;
+
+        // Get the borrower details
+        (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(borrower,index);
+
+        // Check whether the position is eligible or not for liquidation
+        uint128 ratio = ((currentEthPrice * 10000) / depositDetail.ethPriceAtDeposit);
+        require(ratio < 8000,"You cannot liquidate");
+
+        //Update the position to liquidated     
+        depositDetail.liquidated = true;
+
+        // Calculate borrower's debt 
+        uint128 borrowerDebt = depositDetail.normalizedAmount * calculateCumulativeRate();
         
-        uint128 TokenNeededToLiquidate = (treasury.borrowing[_user].depositDetails[index].ethPriceAtDeposit - currentEthPrice)*treasury.borrowing[_user].depositDetails[index].depositedAmount;
-        
+        uint128 returnToTreasury = borrowerDebt /*+ uint128 fees*/;
+        uint128 returnToDirac = (((depositDetail.depositedAmount * currentEthPrice) - returnToTreasury)*10)/100;
 
-        treasury.borrowing[msg.sender].depositDetails[Index].liquidated = true;
-        //Transfer the require amount 
-        Trinity.burnFrom(address(this), TokenNeededToLiquidate);
-        //Protocol token will be minted for the liquidator
-        //multipling by 10 and dividing by 100 to get 10%,  
-        //Denominator = 100 * 2(protocol token value in dollar) = 200
-        uint128 amountToMint = (110 * TokenNeededToLiquidate) / (100*protocolTokenValue);  
+        //Update totalInterestFromLiquidation
+        uint256 totalInterestFromLiquidation = treasury.totalInterestFromLiquidation();
+        totalInterestFromLiquidation += uint256(returnToTreasury + returnToDirac);
+        treasury.updateTotalInterestFromLiquidation(totalInterestFromLiquidation);
 
-        protocolToken.mint(msg.sender, amountToMint);
+        //Transfer the require amount
+        Trinity.transferFrom(cdsAddress,treasuryAddress,(returnToTreasury + returnToDirac));
+
+        // Burn the borrow amount
+        Trinity.burnFrom(treasuryAddress, depositDetail.borrowedAmount);
+
+        // Transfer ETH to CDS Pool
+        (bool sent,) = payable(cdsAddress).call{value: depositDetail.depositedAmount}("");
+        require(sent, "Failed to send Ether");
 
     }
 
