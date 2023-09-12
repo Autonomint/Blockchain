@@ -43,6 +43,7 @@ interface ITreasury{
 
         function noOfBorrowers() external returns(uint128);
         function totalInterest() external returns(uint256);
+        function totalInterestFromLiquidation() external returns(uint256);
 
         function updateHasBorrowed(address borrower,bool _bool) external;
         function updateTotalDepositedAmount(address borrower,uint128 amount) external;
@@ -53,6 +54,7 @@ interface ITreasury{
         function getBorrowing(address depositor,uint64 index) external view returns(uint64,DepositDetails memory);
         function updateDepositDetails(address depositor,uint64 index,DepositDetails memory depositDetail) external;
         function updateTotalInterest(uint _amount) external;
+        function updateTotalInterestFromLiquidation(uint _amount) external;
 
         event Deposit(address indexed user,uint256 amount);
         event Withdraw(address indexed user,uint256 amount);
