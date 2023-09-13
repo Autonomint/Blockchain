@@ -251,4 +251,6 @@ contract CDS is Ownable{
         uint128 value = (_amount * vaultBal * priceDiff) / treasuryBal;
         return value;
     }
+
+    receive() external payable{}
 }
