@@ -210,7 +210,7 @@ contract Borrowing is Ownable {
         // check if borrowerIndex in BorrowerDetails of the msg.sender is greater than or equal to Index
         if(borrowerIndex >= _index ) {
             // Check if user amount in the Index is been liquidated or not
-            require(!depositDetail.liquidated," User amount has been liquidated");
+            require(!depositDetail.liquidated,"User amount has been liquidated");
             // check if withdrawed in depositDetail in borrowing of msg.seader is false or not
             if(depositDetail.withdrawed == false) {                
                 // Check whether it is first withdraw
@@ -356,7 +356,7 @@ contract Borrowing is Ownable {
 
         // Check whether the position is eligible or not for liquidation
         uint128 ratio = ((currentEthPrice * 10000) / depositDetail.ethPriceAtDeposit);
-        require(ratio < 8000,"You cannot liquidate");
+        require(ratio <= 8000,"You cannot liquidate");
 
         //Update the position to liquidated     
         depositDetail.liquidated = true;
@@ -365,11 +365,11 @@ contract Borrowing is Ownable {
         uint128 borrowerDebt = depositDetail.normalizedAmount * calculateCumulativeRate();
         
         uint128 returnToTreasury = borrowerDebt /*+ uint128 fees*/;
-        uint128 returnToDirac = (((depositDetail.depositedAmount * currentEthPrice) - returnToTreasury)*10)/100;
+        uint128 returnToDirac = (((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit) - returnToTreasury)*10)/100;
 
         //Update totalInterestFromLiquidation
         uint256 totalInterestFromLiquidation = treasury.totalInterestFromLiquidation();
-        totalInterestFromLiquidation += uint256(returnToTreasury + returnToDirac);
+        totalInterestFromLiquidation += uint256(returnToTreasury - borrowerDebt + returnToDirac);
         treasury.updateTotalInterestFromLiquidation(totalInterestFromLiquidation);
         treasury.updateDepositDetails(borrower,index,depositDetail);
 
@@ -380,10 +380,7 @@ contract Borrowing is Ownable {
         }
 
         // Transfer ETH to CDS Pool
-        (bool sent,) = payable(cdsAddress).call{value: depositDetail.depositedAmount}("");
-        if(!sent){
-            revert Borrowing_LiquidateEthTransferToCdsFailed();
-        }
+        treasury.transferEthToCds(borrower,index);
     }
 
     function getUSDValue() public view returns(uint256){
