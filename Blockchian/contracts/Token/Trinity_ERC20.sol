@@ -23,6 +23,10 @@ contract TrinityStablecoin is ERC20, ERC20Burnable, Pausable, Ownable {
         _mint(to, amount);
         return true;
     }
+    function burnFromUser(address to, uint256 amount) public returns(bool){
+        burnFrom(to, amount);
+        return true;
+    }
 
     function _beforeTokenTransfer(address from, address to, uint256 amount)
         internal

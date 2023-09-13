@@ -24,6 +24,11 @@ contract ProtocolToken is ERC20, ERC20Burnable, Pausable, Ownable {
         return true;
     }
 
+    function burnFromUser(address to, uint256 amount) public returns(bool){
+        burnFrom(to, amount);
+        return true;
+    }
+
     function _beforeTokenTransfer(address from, address to, uint256 amount)
         internal
         whenNotPaused
