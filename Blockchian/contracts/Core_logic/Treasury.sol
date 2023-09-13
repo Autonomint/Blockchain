@@ -192,7 +192,7 @@ contract Treasury is Ownable{
         return (borrowing[user].hasDeposited,borrowerIndex);
     }
 
-    function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index) external onlyBorrowingContract{
+    function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index) external onlyBorrowingContract returns(bool){
         // Check the _amount is non zero
         require(_amount > 0, "Cannot withdraw zero Ether");
         require(borrowing[borrower].depositDetails[index].withdrawNo > 0,"");
@@ -207,6 +207,7 @@ contract Treasury is Ownable{
         totalVolumeOfBorrowersAmountinUSD -= (borrowing[borrower].depositDetails[index].ethPriceAtWithdraw * ((50*_amount)/100));
         totalVolumeOfBorrowersAmountinWei -= ((50*_amount)/100);
         emit Withdraw(toAddress,_amount);
+        return true;
     }
 
     /**
