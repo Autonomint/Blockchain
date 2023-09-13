@@ -13,10 +13,14 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
 contract Borrowing is Ownable {
 
     error Borrowing_DepositFailed();
-    error Borrowing_MintFailed();
-    error Borrowing_TreasuryBalanceZero();
     error Borrowing_GettingETHPriceFailed();
-    error Borrowing_LowBorrowingHealth();
+    error Borrowing_MUSDMintFailed();
+    error Borrowing_pTokenMintFailed();
+    error Borrowing_WithdrawMUSDTransferFailed();
+    error Borrowing_WithdrawEthTransferFailed();
+    error Borrowing_WithdrawBurnFailed();
+    error Borrowing_LiquidateBurnFailed();
+    error Borrowing_LiquidateEthTransferToCdsFailed();
 
     ITrinityToken public Trinity; // our stablecoin
 
@@ -37,10 +41,9 @@ contract Borrowing is Ownable {
 
     address public treasuryAddress;
     address public cdsAddress;
+    address public admin;
     uint8 private LTV; // LTV is a percentage eg LTV = 60 is 60%, must be divided by 100 in calculations
     uint8 private APY;
-    uint128 public totalVolumeOfBorrowersinWei;
-    uint128 public totalVolumeOfBorrowersinUSD;
     uint256 public totalNormalizedAmount;
     address public priceFeedAddress;
     uint128 public lastEthprice;
@@ -68,8 +71,12 @@ contract Borrowing is Ownable {
         lastEthprice = uint128(getUSDValue());
     }
 
+    modifier onlyAdmin(address _address){
+        require(_address == admin);
+        _;
+    }
+
     // Function to check if an address is a contract
-    
     function isContract(address addr) internal view returns (bool) {
     uint size;
     assembly {
@@ -105,7 +112,7 @@ contract Borrowing is Ownable {
         bool minted = Trinity.mint(_borrower, tokensToLend);
         
         if(!minted){
-            revert Borrowing_MintFailed();
+            revert Borrowing_MUSDMintFailed();
         }
         return tokensToLend;
     }
@@ -121,7 +128,7 @@ contract Borrowing is Ownable {
         bool minted = protocolToken.mint(_toAddress,amount);
 
         if(!minted){
-            revert Borrowing_MintFailed();
+            revert Borrowing_pTokenMintFailed();
         }
         return amount;
     }
@@ -203,7 +210,7 @@ contract Borrowing is Ownable {
         // check if borrowerIndex in BorrowerDetails of the msg.sender is greater than or equal to Index
         if(borrowerIndex >= _index ) {
             // Check if user amount in the Index is been liquidated or not
-            require(depositDetail.liquidated != true ," User amount has been liquidated");
+            require(!depositDetail.liquidated," User amount has been liquidated");
             // check if withdrawed in depositDetail in borrowing of msg.seader is false or not
             if(depositDetail.withdrawed == false) {                
                 // Check whether it is first withdraw
@@ -231,10 +238,16 @@ contract Borrowing is Ownable {
                         uint256 halfValue = (50 *(borrowerDebt-interest))/100;
 
                         // Burn the Trinity from the Borrower
-                        Trinity.burnFrom(msg.sender, halfValue);
+                        bool success = Trinity.burnFromUser(msg.sender, halfValue);
+                        if(!success){
+                            revert Borrowing_WithdrawBurnFailed();
+                        }
 
                         //Transfer the remaining Trinity to the treasury
-                        Trinity.transferFrom(msg.sender,treasuryAddress,halfValue);
+                        bool transfer = Trinity.transferFrom(msg.sender,treasuryAddress,halfValue);
+                        if(!transfer){
+                            revert Borrowing_WithdrawMUSDTransferFailed();
+                        }
                         totalNormalizedAmount -= borrowerDebt;
 
                         uint256 totalInterest = treasury.totalInterest();
@@ -250,7 +263,10 @@ contract Borrowing is Ownable {
                         
                         treasury.updateDepositDetails(msg.sender,_index,depositDetail);
                         // Sent the ETH(depositedAmount) to the toAddress
-                        treasury.withdraw(msg.sender,_toAddress,depositDetail.depositedAmount,_index);
+                        bool sent = treasury.withdraw(msg.sender,_toAddress,depositDetail.depositedAmount,_index);
+                        if(!sent){
+                            revert Borrowing_WithdrawEthTransferFailed();
+                        }
                     }else{
                         revert("BorrowingHealth is Low");
                     }
@@ -300,9 +316,15 @@ contract Borrowing is Ownable {
             depositDetail.pTokensAmount = 0;
             
             treasury.updateDepositDetails(msg.sender,_index,depositDetail);
-            protocolToken.burnFrom(msg.sender,pTokensAmount);
+            bool success = protocolToken.burnFromUser(msg.sender,pTokensAmount);
+            if(!success){
+                revert Borrowing_WithdrawBurnFailed();
+            }
             // Call withdraw function in Treasury
-            treasury.withdraw(msg.sender,_toAddress,depositedAmount,_index);
+            bool sent = treasury.withdraw(msg.sender,_toAddress,depositedAmount,_index);
+            if(!sent){
+                revert Borrowing_WithdrawEthTransferFailed();
+            }
     }
     
     // function getBorrowDetails(address _user, uint64 _index) public view returns(DepositDetails){
@@ -320,16 +342,17 @@ contract Borrowing is Ownable {
      * @param currentEthPrice Current ETH Price.
      */
 
-    function liquidate(address _user,uint64 _index,uint64 currentEthPrice) external{
+    function liquidate(address _user,uint64 _index,uint64 currentEthPrice) external onlyAdmin(msg.sender){
 
         // Check whether the liquidator 
         require(_user != address(0), "To address cannot be a zero address");
-        // require(msg.sender != _user,"You cannot liquidate your own assets!");
+        require(msg.sender != _user,"You cannot liquidate your own assets!");
         address borrower = _user;
         uint64 index = _index;
 
         // Get the borrower details
         (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(borrower,index);
+        require(depositDetail.depositedAmount <= treasury.getBalanceInTreasury(),"Not enough funds in treasury");
 
         // Check whether the position is eligible or not for liquidation
         uint128 ratio = ((currentEthPrice * 10000) / depositDetail.ethPriceAtDeposit);
@@ -348,17 +371,19 @@ contract Borrowing is Ownable {
         uint256 totalInterestFromLiquidation = treasury.totalInterestFromLiquidation();
         totalInterestFromLiquidation += uint256(returnToTreasury + returnToDirac);
         treasury.updateTotalInterestFromLiquidation(totalInterestFromLiquidation);
-
-        //Transfer the require amount
-        Trinity.transferFrom(cdsAddress,treasuryAddress,(returnToTreasury + returnToDirac));
+        treasury.updateDepositDetails(borrower,index,depositDetail);
 
         // Burn the borrow amount
-        Trinity.burnFrom(treasuryAddress, depositDetail.borrowedAmount);
+        bool success = Trinity.burnFromUser(treasuryAddress, depositDetail.borrowedAmount);
+        if(!success){
+            revert Borrowing_LiquidateBurnFailed();
+        }
 
         // Transfer ETH to CDS Pool
         (bool sent,) = payable(cdsAddress).call{value: depositDetail.depositedAmount}("");
-        require(sent, "Failed to send Ether");
-
+        if(!sent){
+            revert Borrowing_LiquidateEthTransferToCdsFailed();
+        }
     }
 
     function getUSDValue() public view returns(uint256){
