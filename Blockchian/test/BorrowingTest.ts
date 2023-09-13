@@ -239,17 +239,17 @@ describe("Borrowing Contract",function(){
 
         it("Should revert if the address is zero",async function(){
             const {treasury} = await loadFixture(deployer);
-            expect(treasury.connect(owner).withdrawInterest(ethers.constants.AddressZero,100)).to.be.revertedWith("Input address or amount is invalid");
-        })
-
-        it("Should revert if the amount is zero",async function(){
-            const {treasury} = await loadFixture(deployer);
-            expect(treasury.connect(owner).withdrawInterest(user1.address,0)).to.be.revertedWith("Input address or amount is invalid");
+            expect(treasury.connect(owner).withdrawInterest(ethers.constants.AddressZero,0)).to.be.revertedWith("Input address or amount is invalid");
         })
 
         it("Should revert if the caller is not owner",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             expect(treasury.connect(user1).withdrawInterest(user1.address,100)).to.be.revertedWith("Ownable: caller is not the owner");
+        })
+
+        it("Should revert if Treasury don't have enough interest",async function(){
+            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            expect(treasury.connect(owner).withdrawInterest(user1.address,100)).to.be.revertedWith("Treasury don't have enough interest");
         })
 
         it("Should revert if Input address or amount is invalid",async () => {
