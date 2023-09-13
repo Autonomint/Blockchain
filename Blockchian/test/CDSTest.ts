@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers, network } from "hardhat";
 import type { Wallet } from "ethers";
-import {Borrowing,Treasury,TrinityStablecoin,ProtocolToken,CDSTest} from "../typechain-types";
+import {BorrowingTest,Treasury,TrinityStablecoin,ProtocolToken,CDSTest} from "../typechain-types";
 import { loadFixture,time } from'@nomicfoundation/hardhat-network-helpers';
 import { ChildProcess } from "child_process";
 import { token } from "../typechain-types/contracts";
@@ -17,7 +17,7 @@ import {
 describe("Testing contracts ", function(){
 
     let CDSContract : CDSTest;
-    let BorrowingContract : Borrowing;
+    let BorrowingContract : BorrowingTest;
     let treasury : Treasury;
     let Token : TrinityStablecoin;
     let pToken : ProtocolToken;
@@ -35,7 +35,7 @@ describe("Testing contracts ", function(){
         const CDS = await ethers.getContractFactory("CDSTest");
         CDSContract = await CDS.deploy(Token.address);
 
-        const Borrowing = await ethers.getContractFactory("Borrowing");
+        const Borrowing = await ethers.getContractFactory("BorrowingTest");
         BorrowingContract = await Borrowing.deploy(Token.address,CDSContract.address,pToken.address,priceFeedAddress);
 
         const Treasury = await ethers.getContractFactory("Treasury");
@@ -189,6 +189,21 @@ describe("Testing contracts ", function(){
             await CDSContract.approval(CDSContract.address,await Token.balanceOf(treasury.address));
             await CDSContract.connect(user1).withdraw(1);
             console.log("AFTER WITHDRAW FROM CDS",await Token.balanceOf(user1.address));
+        })
+
+        it("Should revert Already withdrawn",async () => {
+            const {CDSContract,treasury,Token} = await loadFixture(deployer);
+
+            await Token.mint(user1.address,ethers.utils.parseEther("1000"));
+            await Token.connect(user1).approve(CDSContract.address,ethers.utils.parseEther("1000"));
+            
+            await CDSContract.connect(user1).deposit(ethers.utils.parseEther("1000"));
+
+            await time.increase(1000);
+            await CDSContract.approval(CDSContract.address,await Token.balanceOf(treasury.address));
+            await CDSContract.connect(user1).withdraw(1);
+            const tx =  CDSContract.connect(user1).withdraw(1);
+            expect(tx).to.be.revertedWith("Already withdrawn");
         })
     })
     // describe("To check cdsAmountToReturn function",function(){
