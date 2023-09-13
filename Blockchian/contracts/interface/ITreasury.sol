@@ -33,7 +33,7 @@ interface ITreasury{
         }
 
         function deposit(address user,uint128 _ethPrice,uint64 _depositTime) external payable returns(bool,uint64);
-        function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index) external;
+        function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index) external returns(bool);
         function depositToAave() external;
         function withdrawFromAave(uint64 index,uint256 amount) external;
         function depositToCompound() external;
