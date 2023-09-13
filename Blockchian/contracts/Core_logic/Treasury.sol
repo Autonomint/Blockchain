@@ -480,7 +480,7 @@ contract Treasury is Ownable{
 
     function withdrawInterest(address toAddress,uint256 amount) external onlyOwner{
         require(toAddress != address(0) && amount != 0, "Input address or amount is invalid");
-        require(amount <= (totalInterest + totalInterestFromLiquidation));
+        require(amount <= (totalInterest + totalInterestFromLiquidation),"Treasury don't have enough interest");
         bool sent = trinity.transfer(toAddress,amount);
         require(sent, "Failed to send Ether");
     }
