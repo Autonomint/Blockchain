@@ -193,20 +193,20 @@ contract Treasury is Ownable{
         return (borrowing[user].hasDeposited,borrowerIndex);
     }
 
-    function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index) external onlyBorrowingContract returns(bool){
+    function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index,uint64 _ethPrice) external onlyBorrowingContract returns(bool){
         // Check the _amount is non zero
         require(_amount > 0, "Cannot withdraw zero Ether");
         require(borrowing[borrower].depositDetails[index].withdrawNo > 0,"");
-
+        uint256 amount = (_amount *50)/100;
         // Send the ETH to Borrower
-        (bool sent,) = payable(toAddress).call{value: (_amount*50)/100}("");
+        (bool sent,) = payable(toAddress).call{value: amount}("");
         require(sent, "Failed to send Ether");
-
-        borrowing[borrower].depositDetails[index].borrowedAmount -= uint128(_amount);
-        borrowing[borrower].totalBorrowedAmount -= uint128(_amount);
-        borrowing[borrower].depositDetails[index].withdrawAmount += uint128(_amount);
-        totalVolumeOfBorrowersAmountinUSD -= (borrowing[borrower].depositDetails[index].ethPriceAtWithdraw * ((50*_amount)/100));
-        totalVolumeOfBorrowersAmountinWei -= ((50*_amount)/100);
+        if(borrowing[borrower].depositDetails[index].withdrawNo == 1){
+            borrowing[borrower].totalBorrowedAmount -= borrowing[borrower].depositDetails[index].borrowedAmount;
+        }
+        borrowing[borrower].depositDetails[index].withdrawAmount += uint128(amount);
+        totalVolumeOfBorrowersAmountinUSD -= (_ethPrice * amount);
+        totalVolumeOfBorrowersAmountinWei -= amount;
         emit Withdraw(toAddress,_amount);
         return true;
     }
@@ -218,7 +218,7 @@ contract Treasury is Ownable{
     function depositToAave() external onlyBorrowingContract{
 
         //Divide the Total ETH in the contract to 1/4
-        uint256 share = (address(this).balance)/4;
+        uint256 share = ((address(this).balance)*25)/100;
 
         //Check the amount to be deposited is greater than zero
         if(share == 0){
@@ -326,7 +326,7 @@ contract Treasury is Ownable{
     function depositToCompound() external onlyBorrowingContract{
 
         //Divide the Total ETH in the contract to 1/4
-        uint256 share = (address(this).balance)/4;
+        uint256 share = ((address(this).balance)*25)/100;
 
         //Check the amount to be deposited is greater than zero       
         if(share == 0){
