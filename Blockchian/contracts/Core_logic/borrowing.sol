@@ -50,7 +50,7 @@ contract Borrowing is Ownable {
     uint256 public lastEthVaultValue;
     uint256 public lastCDSPoolValue;
     uint256 public lastTotalCDSPool;
-    uint128 lastCumulativeRate;
+    uint128 public lastCumulativeRate;
     uint128 private lastEventTime;
 
     uint128 FEED_PRECISION = 1e10; // ETH/USD had 8 decimals
@@ -69,10 +69,11 @@ contract Borrowing is Ownable {
         protocolToken = IProtocolToken(_protocolToken);
         priceFeedAddress = _priceFeedAddress;                       //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
         lastEthprice = uint128(getUSDValue());
+        lastEventTime = uint128(block.timestamp);
     }
 
-    modifier onlyAdmin(address _address){
-        require(_address == admin);
+    modifier onlyAdmin(){
+        require(msg.sender == admin);
         _;
     }
 
@@ -164,7 +165,7 @@ contract Borrowing is Ownable {
         treasury.updateHasBorrowed(msg.sender,true);
         treasury.updateTotalBorrowedAmount(msg.sender,borrowAmount);
 
-        //Call calculateCumulativeRate() to get currentCumulativeRatev
+        //Call calculateCumulativeRate() to get currentCumulativeRate
         uint128 currentCumulativeRate = calculateCumulativeRate();
 
         // Calculate normalizedAmount
@@ -204,6 +205,9 @@ contract Borrowing is Ownable {
     function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime) external {
         // check is _toAddress in not a zero address and isContract address
         require(_toAddress != address(0) && isContract(_toAddress) != true, "To address cannot be a zero and contract address");
+
+        lastEthprice = uint128(_ethPrice);
+        lastEventTime = uint128(block.timestamp);
 
         (uint64 borrowerIndex,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,_index);
 
@@ -263,7 +267,7 @@ contract Borrowing is Ownable {
                         
                         treasury.updateDepositDetails(msg.sender,_index,depositDetail);
                         // Sent the ETH(depositedAmount) to the toAddress
-                        bool sent = treasury.withdraw(msg.sender,_toAddress,depositDetail.depositedAmount,_index);
+                        bool sent = treasury.withdraw(msg.sender,_toAddress,depositDetail.depositedAmount,_index,_ethPrice);
                         if(!sent){
                             revert Borrowing_WithdrawEthTransferFailed();
                         }
@@ -275,6 +279,7 @@ contract Borrowing is Ownable {
                     secondWithdraw(
                         _toAddress,
                         _index,
+                        _ethPrice,
                         depositDetail.withdrawTime,
                         depositDetail.pTokensAmount,
                         depositDetail.depositedAmount);
@@ -300,7 +305,7 @@ contract Borrowing is Ownable {
      * @param depositedAmount Deposited Amount of the borrower
      */
 
-    function secondWithdraw(address _toAddress,uint64 _index,uint64 withdrawTime,uint128 pTokensAmount,uint128 depositedAmount) internal {
+    function secondWithdraw(address _toAddress,uint64 _index,uint64 _ethPrice,uint64 withdrawTime,uint128 pTokensAmount,uint128 depositedAmount) internal {
             // Check whether the first withdraw passed one month
             require(block.timestamp >= (withdrawTime + 30 days),"A month not yet completed since withdraw");
                     
@@ -314,14 +319,18 @@ contract Borrowing is Ownable {
             depositDetail.withdrawNo = 2;
             treasury.updateTotalPTokensDecrease(msg.sender,pTokensAmount);
             depositDetail.pTokensAmount = 0;
-            
             treasury.updateDepositDetails(msg.sender,_index,depositDetail);
+
+            bool transfer = Trinity.burnFromUser(treasuryAddress, (depositDetail.borrowedAmount*50)/100);
+            if(!transfer){
+                revert Borrowing_WithdrawBurnFailed();
+            }
             bool success = protocolToken.burnFromUser(msg.sender,pTokensAmount);
             if(!success){
                 revert Borrowing_WithdrawBurnFailed();
             }
             // Call withdraw function in Treasury
-            bool sent = treasury.withdraw(msg.sender,_toAddress,depositedAmount,_index);
+            bool sent = treasury.withdraw(msg.sender,_toAddress,depositedAmount,_index,_ethPrice);
             if(!sent){
                 revert Borrowing_WithdrawEthTransferFailed();
             }
@@ -342,7 +351,7 @@ contract Borrowing is Ownable {
      * @param currentEthPrice Current ETH Price.
      */
 
-    function liquidate(address _user,uint64 _index,uint64 currentEthPrice) external onlyAdmin(msg.sender){
+    function liquidate(address _user,uint64 _index,uint64 currentEthPrice) external onlyAdmin{
 
         // Check whether the liquidator 
         require(_user != address(0), "To address cannot be a zero address");
@@ -352,6 +361,7 @@ contract Borrowing is Ownable {
 
         // Get the borrower details
         (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(borrower,index);
+        require(!depositDetail.liquidated,"Already Liquidated");
         require(depositDetail.depositedAmount <= treasury.getBalanceInTreasury(),"Not enough funds in treasury");
 
         // Check whether the position is eligible or not for liquidation
