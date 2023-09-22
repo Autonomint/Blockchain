@@ -53,9 +53,9 @@ contract Borrowing is Ownable {
     uint128 public lastCumulativeRate;
     uint128 private lastEventTime;
 
-    uint128 FEED_PRECISION = 1e10; // ETH/USD had 8 decimals
-    uint128 PRECISION = 1e28;
-    uint128 RATIO_PRECISION = 1e3;
+    uint128 PRECISION = 1e6;
+    uint128 RATIO_PRECISION = 1e4;
+    uint128 RATE_PRECISION = 1e27;
 
     constructor(
         address _tokenAddress,
@@ -107,7 +107,7 @@ contract Borrowing is Ownable {
         // tokenValueConversion is in USD, and our stablecoin is pegged to USD in 1:1 ratio
         // Hence if tokenValueConversion = 1, then equivalent stablecoin tokens = tokenValueConversion
 
-        uint256 tokensToLend = tokenValueConversion * LTV / 100;
+        uint256 tokensToLend = (tokenValueConversion * LTV) / RATIO_PRECISION;
 
         //Call the mint function in Trinity
         bool minted = Trinity.mint(_borrower, tokensToLend);
@@ -146,7 +146,7 @@ contract Borrowing is Ownable {
 
         //Call calculateInverseOfRatio function to find ratio
         uint64 ratio = _calculateRatio(msg.value,uint128(_ethPrice));
-        require(ratio < (5 * FEED_PRECISION),"Not enough fund in CDS");
+        require(ratio < (5 * RATIO_PRECISION),"Not enough fund in CDS");
         
         //Call the deposit function in Treasury contract
         (bool deposited,uint64 index) = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
@@ -155,9 +155,7 @@ contract Borrowing is Ownable {
         if(!deposited){
             revert Borrowing_DepositFailed();
         }
-        lastEthprice = uint128(_ethPrice);
-        lastEventTime = uint128(block.timestamp);
-        
+
         // Call the transfer function to mint Trinity and Get the borrowedAmount
         uint256 borrowAmount = _transferToken(msg.sender,msg.value,_ethPrice);
         (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,index);
@@ -169,13 +167,15 @@ contract Borrowing is Ownable {
         uint128 currentCumulativeRate = calculateCumulativeRate();
 
         // Calculate normalizedAmount
-        uint256 normalizedAmount = borrowAmount/currentCumulativeRate;
+        uint256 normalizedAmount = (borrowAmount * RATE_PRECISION)/currentCumulativeRate;
 
         depositDetail.normalizedAmount = uint128(normalizedAmount);
         treasury.updateDepositDetails(msg.sender,index,depositDetail);
 
         // Calculate normalizedAmount of Protocol
         totalNormalizedAmount += normalizedAmount;
+        lastEthprice = uint128(_ethPrice);
+        lastEventTime = uint128(block.timestamp);
     }
 
     function depositToAaveProtocol() external onlyOwner{
@@ -225,8 +225,7 @@ contract Borrowing is Ownable {
                     // Check if the borrowingHealth is between 8000(0.8) & 10000(1)
                     if(8000 < borrowingHealth && borrowingHealth < 10000) {
                         // Calculate th borrower's debt
-                        uint128 borrowerDebt = depositDetail.normalizedAmount * calculateCumulativeRate();
-
+                        uint128 borrowerDebt = (depositDetail.normalizedAmount * calculateCumulativeRate())/RATE_PRECISION;
                         // Check whether the Borrower have enough Trinty
                         require(Trinity.balanceOf(msg.sender) >= borrowerDebt, "User balance is less than required");
                             
@@ -239,7 +238,7 @@ contract Borrowing is Ownable {
                         uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
 
                         // Calculate the amount of Trinity to burn and sent to the treasury
-                        uint256 halfValue = (50 *(borrowerDebt-interest))/100;
+                        {uint256 halfValue = (50 *(borrowerDebt-interest))/100;
 
                         // Burn the Trinity from the Borrower
                         bool success = Trinity.burnFromUser(msg.sender, halfValue);
@@ -265,7 +264,7 @@ contract Borrowing is Ownable {
                         depositDetail.pTokensAmount = noOfPTokensminted;
                         treasury.updateTotalPTokensIncrease(msg.sender,noOfPTokensminted);
                         
-                        treasury.updateDepositDetails(msg.sender,_index,depositDetail);
+                        treasury.updateDepositDetails(msg.sender,_index,depositDetail);}
                         // Sent the ETH(depositedAmount) to the toAddress
                         bool sent = treasury.withdraw(msg.sender,_toAddress,depositDetail.depositedAmount,_index,_ethPrice);
                         if(!sent){
@@ -372,7 +371,7 @@ contract Borrowing is Ownable {
         depositDetail.liquidated = true;
 
         // Calculate borrower's debt 
-        uint128 borrowerDebt = depositDetail.normalizedAmount * calculateCumulativeRate();
+        uint128 borrowerDebt = (depositDetail.normalizedAmount * calculateCumulativeRate())/RATE_PRECISION;
         
         uint128 returnToTreasury = borrowerDebt /*+ uint128 fees*/;
         uint128 returnToDirac = (((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit) - returnToTreasury)*10)/100;
@@ -396,7 +395,7 @@ contract Borrowing is Ownable {
     function getUSDValue() public view returns(uint256){
         AggregatorV3Interface priceFeed = AggregatorV3Interface(priceFeedAddress);
         (,int256 price,,,) = priceFeed.latestRoundData();
-        return (uint256(price) * FEED_PRECISION);
+        return (uint256(price) / PRECISION);
     }
 
     function setLTV(uint8 _LTV) external onlyOwner {
@@ -423,7 +422,7 @@ contract Borrowing is Ownable {
 
         uint256 currentEthVaultValue;
         uint256 currentCDSPoolValue;
-
+ 
         // Check it is the first deposit
         if(noOfBorrowers == 0){
 
@@ -468,6 +467,7 @@ contract Borrowing is Ownable {
     }
 
     function setAPY(uint8 _apy) external onlyOwner{
+        require(_apy != 0,"APY should not be zero");
         APY = _apy;
     }
 
@@ -476,34 +476,47 @@ contract Borrowing is Ownable {
     }
 
     function calculateCumulativeRate() public returns(uint128){
-        // Get the APY
-        uint128 apy = uint128(getAPY());
-
         // Get the noOfBorrowers
         uint128 noOfBorrowers = treasury.noOfBorrowers();
 
-        // r**n = apyRate
-        // calculate 1/n
-        uint128 nThpower =  ((1 * PRECISION)/365 days);
-
-        // calculate apyRate ( 1 + apy)
-        uint256 apyRate =  ((1* RATIO_PRECISION)+(apy * RATIO_PRECISION)/100);
-
-        // calculate rate per second
-        uint256 ratePerSec = apyRate ** nThpower;      
-
-        console.log(ratePerSec);        //1.0000000015471259578632124490459
-
+        uint128 ratePerSec = 1000000001547125957863212449;
         uint128 currentCumulativeRate;
 
         //If first event
         if(noOfBorrowers == 0){
-            currentCumulativeRate = uint128(ratePerSec);
+            currentCumulativeRate = ratePerSec;
             lastCumulativeRate = currentCumulativeRate;
         }else{
-            currentCumulativeRate = uint128(ratePerSec * lastCumulativeRate * (uint128(block.timestamp) - lastEventTime));
-            lastCumulativeRate = currentCumulativeRate;
+            uint256 timeInterval = uint128(block.timestamp) - lastEventTime;
+            //console.log("TIME INTERVAL",timeInterval);
+            currentCumulativeRate = uint128(lastCumulativeRate * _rpow(ratePerSec,timeInterval,RATE_PRECISION));
+            lastCumulativeRate = currentCumulativeRate/RATE_PRECISION;
         }
-        return currentCumulativeRate;
+        //console.log("CURRENT CUMULATIVE RATE",currentCumulativeRate/RATE_PRECISION);
+        return (currentCumulativeRate/RATE_PRECISION);
+    }
+
+    function _rpow(uint x, uint n, uint b) internal pure returns (uint z) {
+      assembly {
+        switch x case 0 {switch n case 0 {z := b} default {z := 0}}
+        default {
+          switch mod(n, 2) case 0 { z := b } default { z := x }
+          let half := div(b, 2)  // for rounding.
+          for { n := div(n, 2) } n { n := div(n,2) } {
+            let xx := mul(x, x)
+            if iszero(eq(div(xx, x), x)) { revert(0,0) }
+            let xxRound := add(xx, half)
+            if lt(xxRound, xx) { revert(0,0) }
+            x := div(xxRound, b)
+            if mod(n,2) {
+              let zx := mul(z, x)
+              if and(iszero(iszero(x)), iszero(eq(div(zx, x), z))) { revert(0,0) }
+              let zxRound := add(zx, half)
+              if lt(zxRound, zx) { revert(0,0) }
+              z := div(zxRound, b)
+            }
+          }
+        }
+      }
     }
 }
