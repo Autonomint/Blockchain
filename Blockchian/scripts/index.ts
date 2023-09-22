@@ -1,0 +1,5 @@
+export const wethGateway = "0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C";
+export const cEther = "0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5";
+export const priceFeedAddress = "0x694AA1769357215DE4FAC081bf1f309aDC325306";
+export const aavePoolAddress = "0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e";
+export const aTokenAddress = "0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8";
