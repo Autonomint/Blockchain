@@ -1,4 +1,6 @@
 import { ethers } from "hardhat";
+import hre = require("hardhat");
+
 import {
   wethGateway,
   cEther,
@@ -12,15 +14,28 @@ async function main() {
   await deployedTrinityStablecoin.deployed();
   console.log("TRINITY ADDRESS",deployedTrinityStablecoin.address);
 
+  await hre.run("verify:verify", {
+    address: deployedTrinityStablecoin.address,
+  });
+
   const ProtocolToken = await ethers.getContractFactory("ProtocolToken");
   const deployedProtocolToken = await ProtocolToken.deploy();
   await deployedProtocolToken.deployed();
   console.log("DIRAC ADDRESS",deployedProtocolToken.address);
 
+  await hre.run("verify:verify", {
+    address: deployedProtocolToken.address,
+  });
+
   const CDS = await ethers.getContractFactory("CDSTest");
   const deployedCDS = await CDS.deploy(deployedTrinityStablecoin.address,priceFeedAddress);
   await deployedCDS.deployed();
   console.log("CDS ADDRESS",deployedCDS.address);
+
+  await hre.run("verify:verify", {
+    address: deployedCDS.address,
+    constructorArguments: [deployedTrinityStablecoin.address,priceFeedAddress],
+  });
 
 
   const Borrowing = await ethers.getContractFactory("BorrowingTest");
@@ -28,10 +43,20 @@ async function main() {
   await deployedBorrowing.deployed();
   console.log("BORROWING ADDRESS",deployedBorrowing.address);
 
+  await hre.run("verify:verify", {
+    address: deployedBorrowing.address,
+    constructorArguments: [deployedTrinityStablecoin.address,deployedCDS.address,deployedProtocolToken.address,priceFeedAddress],
+  });
+
   const Treasury = await ethers.getContractFactory("Treasury");
   const deployedTreasury = await Treasury.deploy(deployedBorrowing.address,deployedTrinityStablecoin.address,deployedCDS.address,wethGateway,cEther,aavePoolAddress,aTokenAddress);
   await deployedTreasury.deployed();
   console.log("TREASURY ADDRESS",deployedTreasury.address);
+
+  await hre.run("verify:verify", {
+    address: deployedTreasury.address,
+    constructorArguments: [deployedBorrowing.address,deployedTrinityStablecoin.address,deployedCDS.address,wethGateway,cEther,aavePoolAddress,aTokenAddress],
+  });
 
   await deployedBorrowing.initializeTreasury(deployedTreasury.address);
   await deployedBorrowing.setLTV(80);
