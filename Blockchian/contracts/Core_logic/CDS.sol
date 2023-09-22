@@ -47,11 +47,9 @@ contract CDS is Ownable{
 
     mapping (address => CdsDetails) public cdsDetails;
 
-    constructor(address _trinity) {
+    constructor(address _trinity,address priceFeed) {
         Trinity_token = ITrinityToken(_trinity); // _trinity token contract address
-        dataFeed = AggregatorV3Interface(
-            0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
-        );
+        dataFeed = AggregatorV3Interface(priceFeed);
         lastEthPrice = getLatestData();
     }
 
