@@ -49,6 +49,7 @@ describe("Borrowing Contract",function(){
         await BorrowingContract.initializeTreasury(treasury.address);
         await BorrowingContract.setLTV(80);
         await CDSContract.setTreasury(treasury.address);
+        await BorrowingContract.calculateCumulativeRate();
 
         const provider = new ethers.providers.JsonRpcProvider(INFURA_URL);
         const signer = new ethers.Wallet("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",provider);
@@ -65,27 +66,27 @@ describe("Borrowing Contract",function(){
         it("Should deposit ETH",async function(){
             const {BorrowingContract,Token} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
             expect(await Token.totalSupply()).to.be.equal(ethers.utils.parseEther("800"));
         })
 
-        // it.only("Should calculate criticalRatio correctly",async function(){
-        //     const {BorrowingContract,CDSContract,Token} = await loadFixture(deployer);
-        //     const timeStamp = await time.latest();
+        it("Should calculate criticalRatio correctly",async function(){
+            const {BorrowingContract,CDSContract,Token} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
 
-        //     await Token.mint(owner.address,ethers.utils.parseEther("10000"));
-        //     await Token.connect(owner).approve(CDSContract.address,ethers.utils.parseEther("10000"));
+            await Token.mint(owner.address,ethers.utils.parseEther("4999"));
+            await Token.connect(owner).approve(CDSContract.address,ethers.utils.parseEther("4999"));
 
-        //     await CDSContract.deposit(ethers.utils.parseEther("10000"));
-        //     await BorrowingContract.connect(user1).depositTokens(ethers.utils.parseEther("1215.48016465422"),timeStamp,{value: ethers.utils.parseEther("1")});
-        //     await BorrowingContract.connect(user2).depositTokens(ethers.utils.parseEther("1216.12094444444"),timeStamp,{value: ethers.utils.parseEther("1")});
-        //     await BorrowingContract.connect(user3).depositTokens(ethers.utils.parseEther("1190.84086805555"),timeStamp,{value: ethers.utils.parseEther("1")});
-        //     await BorrowingContract.connect(owner).depositTokens(ethers.utils.parseEther("1163.07447222222"),timeStamp,{value: ethers.utils.parseEther("1")});
-        // })
+            await CDSContract.deposit(ethers.utils.parseEther("4999"));
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
+            // await BorrowingContract.connect(user2).depositTokens(ethers.utils.parseEther("1216.12094444444"),timeStamp,{value: ethers.utils.parseEther("1")});
+            // await BorrowingContract.connect(user3).depositTokens(ethers.utils.parseEther("1190.84086805555"),timeStamp,{value: ethers.utils.parseEther("1")});
+            // await BorrowingContract.connect(owner).depositTokens(ethers.utils.parseEther("1163.07447222222"),timeStamp,{value: ethers.utils.parseEther("1")});
+        })
 
         it("Should set APY",async function(){
             const {BorrowingContract} = await loadFixture(deployer);
-            await BorrowingContract.setAPY(5);
+            await BorrowingContract.connect(owner).setAPY(5);
             expect(await BorrowingContract.APY()).to.be.equal(5);
         })
         it("Should called by only owner(setAPY)",async function(){
@@ -99,13 +100,22 @@ describe("Borrowing Contract",function(){
             expect(await BorrowingContract.getAPY()).to.be.equal(5);
         })
 
+        it("Should calculate CumulativeRate",async function(){
+            const {BorrowingContract,Token,CDSContract} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await Token.mint(owner.address,ethers.utils.parseEther("4000"));
+            await Token.connect(owner).approve(CDSContract.address,ethers.utils.parseEther("4000"));
+
+            await CDSContract.deposit(ethers.utils.parseEther("4000"));
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
+        })
     })
 
     describe("Should get the ETH/USD price",function(){
         it("Should get ETH/USD price",async function(){
             const {BorrowingContract} = await loadFixture(deployer);
             const tx = await BorrowingContract.getUSDValue();
-            console.log("ETH/USD",tx);
+            console.log("ETH/USD : ",tx.toString());
         })
     })
 
@@ -113,7 +123,7 @@ describe("Borrowing Contract",function(){
         it("Should revert if zero eth is deposited",async function(){
             const {BorrowingContract} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            const tx =  BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("0")});
+            const tx =  BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("0")});
             expect(tx).to.be.revertedWith("Cannot deposit zero tokens");
         })
 
@@ -121,7 +131,7 @@ describe("Borrowing Contract",function(){
             const {BorrowingContract} = await loadFixture(deployer);
             await BorrowingContract.setLTV(0);          
             const timeStamp = await time.latest();
-            const tx =  BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            const tx =  BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
             expect(tx).to.be.revertedWith("LTV must be set to non-zero value before providing loans");
         })
 
@@ -174,11 +184,11 @@ describe("Borrowing Contract",function(){
             await Token.connect(owner).approve(CDSContract.address,ethers.utils.parseEther("10000"));
 
             await CDSContract.deposit(ethers.utils.parseEther("10000"));
-            const tx = BorrowingContract.connect(user1).depositTokens(ethers.utils.parseEther("1215.48016465422"),timeStamp,{value: ethers.utils.parseEther("1")});
+            const tx = BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
             expect(tx).to.be.revertedWith("Not enough fund in CDS");
         })
 
-        // it.only("Should revert Borrower address can't be zero",async function(){
+        // it("Should revert Borrower address can't be zero",async function(){
         //     const {BorrowingContract,Token} = await loadFixture(deployer);
         //     const timeStamp = await time.latest();
         //     const tx = BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
@@ -208,7 +218,7 @@ describe("Borrowing Contract",function(){
         })
         it("Should revert if called by other than borrowing contract",async function(){
             const {treasury} = await loadFixture(deployer);
-            const tx =  treasury.connect(user1).withdraw(user1.address,user1.address,1000,1);
+            const tx =  treasury.connect(user1).withdraw(user1.address,user1.address,1000,1,1000);
             expect(tx).to.be.revertedWith("This function can only called by borrowing contract");    
         })
 
@@ -270,7 +280,7 @@ describe("Borrowing Contract",function(){
         it("Should update deposited amount",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
             const tx = await treasury.borrowing(user1.address);
             expect(tx[0]).to.be.equal(ethers.utils.parseEther("1"))
         })
@@ -278,9 +288,9 @@ describe("Borrowing Contract",function(){
         it("Should update depositedAmount correctly if deposited multiple times",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("2")});
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("3")});                    
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("2")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("3")});                    
             const tx = await treasury.borrowing(user1.address);
             expect(tx[0]).to.be.equal(ethers.utils.parseEther("6"))
         })
@@ -288,7 +298,7 @@ describe("Borrowing Contract",function(){
         it("Should update hasDeposited or not",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
             const tx = await treasury.borrowing(user1.address);
             expect(tx[3]).to.be.equal(true);
         })
@@ -296,7 +306,7 @@ describe("Borrowing Contract",function(){
         it("Should update borrowerIndex",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
             const tx = await treasury.borrowing(user1.address);
             expect(tx[4]).to.be.equal(1);
         })
@@ -304,9 +314,9 @@ describe("Borrowing Contract",function(){
         it("Should update borrowerIndex correctly if deposited multiple times",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("2")});
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("3")});                    
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("2")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("3")});                    
             const tx = await treasury.borrowing(user1.address);
             expect(tx[4]).to.be.equal(3);
         })
@@ -314,23 +324,23 @@ describe("Borrowing Contract",function(){
         it("Should update totalVolumeOfBorrowersinUSD",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("2")});
-            expect(await treasury.totalVolumeOfBorrowersAmountinUSD()).to.be.equal(ethers.utils.parseEther("2000"));
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("2")});
+            expect(await treasury.totalVolumeOfBorrowersAmountinUSD()).to.be.equal(ethers.utils.parseEther("200000"));
         })
 
         it("Should update totalVolumeOfBorrowersinUSD if multiple users deposit in different ethPrice",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("2")});
-            await BorrowingContract.connect(user2).depositTokens(1500,timeStamp,{value: ethers.utils.parseEther("2")});
-            expect(await treasury.totalVolumeOfBorrowersAmountinUSD()).to.be.equal(ethers.utils.parseEther("5000"));
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("2")});
+            await BorrowingContract.connect(user2).depositTokens(150000,timeStamp,{value: ethers.utils.parseEther("2")});
+            expect(await treasury.totalVolumeOfBorrowersAmountinUSD()).to.be.equal(ethers.utils.parseEther("500000"));
         })
 
         it("Should update totalVolumeOfBorrowersinWei",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("2")});
-            await BorrowingContract.connect(user2).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("3")});          
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("2")});
+            await BorrowingContract.connect(user2).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("3")});          
             expect(await treasury.totalVolumeOfBorrowersAmountinWei()).to.be.equal(ethers.utils.parseEther("5"));
         })
 
@@ -357,7 +367,7 @@ describe("Borrowing Contract",function(){
         it("Should deposit eth and mint aTokens",async function(){
             const {BorrowingContract,aToken} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("100")});
             await BorrowingContract.connect(owner).depositToAaveProtocol();
             //console.log(await aToken.balanceOf("0xb1CCF81aF23C05B99D5AaEa9F521a5e912E17767"));
             //expect(await aToken.balanceOf(treasury.address)).to.be.equal(ethers.utils.parseEther("25"))
@@ -373,7 +383,7 @@ describe("Borrowing Contract",function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("100")});
             await BorrowingContract.connect(owner).depositToAaveProtocol();
 
             await BorrowingContract.connect(owner).withdrawFromAaveProtocol(1,ethers.utils.parseEther("10"));
@@ -392,21 +402,21 @@ describe("Borrowing Contract",function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
-            console.log(await treasury.getBalanceInTreasury());
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("100")});
+            console.log("TREASURY BALANCE AFTER DEPOSIT : ",(await treasury.getBalanceInTreasury()).toString());
 
             await BorrowingContract.connect(owner).depositToAaveProtocol();
-            console.log(await treasury.getBalanceInTreasury());
+            console.log("TREASURY BALANCE AFTER DEPOSIT TO AAVE : ",(await treasury.getBalanceInTreasury()).toString());
 
             await BorrowingContract.connect(owner).withdrawFromAaveProtocol(1,ethers.utils.parseEther("25"));
-            console.log(await treasury.getBalanceInTreasury());
+            console.log("TREASURY BALANCE AFTER WITHDRAW FROM AAVE : ",(await treasury.getBalanceInTreasury()).toString());
         })
 
         it("Should update deposit index correctly",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("100")});
             await BorrowingContract.connect(owner).depositToAaveProtocol();
             await BorrowingContract.connect(owner).depositToAaveProtocol();
 
@@ -418,7 +428,7 @@ describe("Borrowing Contract",function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("100")});
             await BorrowingContract.connect(owner).depositToAaveProtocol();
             await BorrowingContract.connect(owner).depositToAaveProtocol();
 
@@ -444,7 +454,7 @@ describe("Borrowing Contract",function(){
             const {BorrowingContract,treasury,cETH} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("100")});
 
             await BorrowingContract.connect(owner).depositToCompoundProtocol();
             //console.log(await cETH.balanceOf(treasury.address));         
@@ -466,7 +476,7 @@ describe("Borrowing Contract",function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("100")});
             await BorrowingContract.connect(owner).depositToCompoundProtocol();
 
             await BorrowingContract.connect(owner).withdrawFromCompoundProtocol(1);
@@ -478,21 +488,21 @@ describe("Borrowing Contract",function(){
             const {BorrowingContract,treasury,cETH} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
-            console.log(await treasury.getBalanceInTreasury());
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("100")});
+            console.log("TREASURY BALANCE AFTER DEPOSIT : ",(await treasury.getBalanceInTreasury()).toString());
 
             const tx = await BorrowingContract.connect(owner).depositToCompoundProtocol();
-            console.log(await treasury.getBalanceInTreasury());
+            console.log("TREASURY BALANCE AFTER DEPOSIT TO COMPOUND : ",(await treasury.getBalanceInTreasury()).toString());
 
             await BorrowingContract.connect(owner).withdrawFromCompoundProtocol(1);
-            console.log(await treasury.getBalanceInTreasury());
+            console.log("TREASURY BALANCE AFTER WITHDRAW FROM COMPOUND : ",(await treasury.getBalanceInTreasury()).toString());
         })
 
         it("Should update deposit index correctly",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("100")});
             await BorrowingContract.connect(owner).depositToCompoundProtocol();
             await BorrowingContract.connect(owner).depositToCompoundProtocol();
 
@@ -504,7 +514,7 @@ describe("Borrowing Contract",function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("100")});
             await BorrowingContract.connect(owner).depositToCompoundProtocol();
             await BorrowingContract.connect(owner).depositToCompoundProtocol();
 
@@ -545,21 +555,20 @@ describe("Borrowing Contract",function(){
         it("Should withdraw ETH",async function(){
             const {BorrowingContract,Token,pToken,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
-            console.log("TREASURY BALANCE", await treasury.getBalanceInTreasury());
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("100")});
+            console.log("TREASURY BALANCE : ", (await treasury.getBalanceInTreasury()).toString());
 
             await Token.connect(user1).approve(BorrowingContract.address,await Token.balanceOf(user1.address));
-            await BorrowingContract.connect(user1).withDraw(user2.address,1,999,timeStamp);
+            await BorrowingContract.connect(user1).withDraw(user2.address,1,99900,timeStamp);
 
-            console.log("TREASURY BALANCE", await treasury.getBalanceInTreasury());
-            console.log("TRINITY BALANCE AFTER WITHDRAW",await Token.balanceOf(user1.address));
-            console.log("PTOKEN BALANCE AFTER WITHDRAW1",await pToken.balanceOf(user1.address));
+            console.log("TREASURY BALANCE : ", await treasury.getBalanceInTreasury());
+            console.log("TRINITY BALANCE AFTER WITHDRAW : ",(await Token.balanceOf(user1.address)).toString());
+            console.log("PTOKEN BALANCE AFTER WITHDRAW1 : ",(await pToken.balanceOf(user1.address)).toString());
 
             await pToken.connect(user1).approve(BorrowingContract.address,await pToken.balanceOf(user1.address));
-            await BorrowingContract.connect(user1).withDraw(user2.address,1,999,timeStamp);
-            console.log("TREASURY BALANCE", await treasury.getBalanceInTreasury());
-            console.log("PTOKEN BALANCE AFTER WITHDRAW2",await pToken.balanceOf(user1.address));
+            await BorrowingContract.connect(user1).withDraw(user2.address,1,99900,timeStamp);
+            console.log("TREASURY BALANCE", (await treasury.getBalanceInTreasury()).toString());
+            console.log("PTOKEN BALANCE AFTER WITHDRAW2 : ",(await pToken.balanceOf(user1.address)).toString());
         })
         it("Should revert To address is zero and contract address",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
@@ -582,7 +591,7 @@ describe("Borrowing Contract",function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("100")});
             const tx = BorrowingContract.connect(user1).withDraw(user2.address,1,800,timeStamp);
             expect(tx).to.be.revertedWith("BorrowingHealth is Low");
         })
@@ -590,15 +599,15 @@ describe("Borrowing Contract",function(){
             const {BorrowingContract,Token,pToken} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("100")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("100")});
 
             await Token.connect(user1).approve(BorrowingContract.address,await Token.balanceOf(user1.address));
-            await BorrowingContract.connect(user1).withDraw(user2.address,1,999,timeStamp);
+            await BorrowingContract.connect(user1).withDraw(user2.address,1,99900,timeStamp);
 
             await pToken.connect(user1).approve(BorrowingContract.address,await pToken.balanceOf(user1.address));
-            await BorrowingContract.connect(user1).withDraw(user2.address,1,999,timeStamp);
+            await BorrowingContract.connect(user1).withDraw(user2.address,1,99900,timeStamp);
 
-            const tx = BorrowingContract.connect(user1).withDraw(user2.address,1,999,timeStamp);
+            const tx = BorrowingContract.connect(user1).withDraw(user2.address,1,99900,timeStamp);
             expect(tx).to.be.revertedWith("User already withdraw entire amount");
         })
 
@@ -607,8 +616,8 @@ describe("Borrowing Contract",function(){
             const timeStamp = await time.latest();
             await Token.mint(user2.address,ethers.utils.parseEther("2000"))
 
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
 
             await Token.connect(user2).approve(CDSContract.address,ethers.utils.parseEther("2000"));
             await CDSContract.connect(user2).deposit(ethers.utils.parseEther("2000"));
@@ -623,9 +632,9 @@ describe("Borrowing Contract",function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
             await Token.connect(user1).transfer(user2.address,ethers.utils.parseEther("0.25"));
-            const tx = BorrowingContract.connect(user1).withDraw(user2.address,1,900,timeStamp);
+            const tx = BorrowingContract.connect(user1).withDraw(user2.address,1,90000,timeStamp);
             expect(tx).to.be.revertedWith("User balance is less than required");
         })
 
@@ -633,13 +642,13 @@ describe("Borrowing Contract",function(){
             const {BorrowingContract,Token,pToken} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
 
             await Token.connect(user1).approve(BorrowingContract.address,await Token.balanceOf(user1.address));
-            await BorrowingContract.connect(user1).withDraw(user2.address,1,999,timeStamp);
+            await BorrowingContract.connect(user1).withDraw(user2.address,1,99900,timeStamp);
             await pToken.connect(user1).transfer(user2.address,ethers.utils.parseEther("0.1"));
 
-            const tx = BorrowingContract.connect(user1).withDraw(user2.address,1,999,timeStamp);
+            const tx = BorrowingContract.connect(user1).withDraw(user2.address,1,99900,timeStamp);
             expect(tx).to.be.revertedWith("Don't have enough Protocol Tokens");
         })
     })
@@ -650,8 +659,8 @@ describe("Borrowing Contract",function(){
             const timeStamp = await time.latest();
             await Token.mint(user2.address,ethers.utils.parseEther("2000"))
 
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
-            await BorrowingContract.connect(user1).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
 
             await Token.connect(user2).approve(CDSContract.address,ethers.utils.parseEther("2000"));
             await CDSContract.connect(user2).deposit(ethers.utils.parseEther("2000"));
@@ -668,26 +677,26 @@ describe("Borrowing Contract",function(){
 
         it("Should revert You cannot liquidate your own assets!",async function(){
             const {BorrowingContract} = await loadFixture(deployer);
-            const tx = BorrowingContract.connect(user1).liquidate(user1.address,1,1000);
+            const tx = BorrowingContract.connect(user1).liquidate(user1.address,1,100000);
             expect(tx).to.be.revertedWith("You cannot liquidate your own assets!");
         })
 
         it("Should revert Not enough funds in treasury",async function(){
             const {BorrowingContract} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            await BorrowingContract.connect(user2).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user2).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
             await BorrowingContract.connect(owner).depositToAaveProtocol();
 
-            const tx = BorrowingContract.connect(user1).liquidate(user2.address,1,1000);
+            const tx = BorrowingContract.connect(user1).liquidate(user2.address,1,100000);
             expect(tx).to.be.revertedWith("Not enough funds in treasury");
         })
 
         it("Should revert You cannot liquidate",async function(){
             const {BorrowingContract} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            await BorrowingContract.connect(user2).depositTokens(1000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user2).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
 
-            const tx = BorrowingContract.connect(user1).liquidate(user2.address,1,1000);
+            const tx = BorrowingContract.connect(user1).liquidate(user2.address,1,100000);
             expect(tx).to.be.revertedWith("You cannot liquidate");
         })
     })
