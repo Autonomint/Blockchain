@@ -22,7 +22,7 @@ contract Treasury is Ownable{
     error Treasury_AaveWithdrawFailed();
     error Treasury_CompoundDepositAndMintFailed();
     error Treasury_CompoundWithdrawFailed();
-    error Treasury_EthTransferToCdsFailed();
+    error Treasury_EthTransferToCdsLiquidatorFailed();
 
     IBorrowing public borrow;
     ITrinityToken public trinity;
@@ -454,10 +454,11 @@ contract Treasury is Ownable{
     }
 
     function updateTotalInterest(uint _amount) external{
-        totalInterest = _amount;
+        totalInterest += _amount;
     }
+
     function updateTotalInterestFromLiquidation(uint _amount) external{
-        totalInterestFromLiquidation = _amount;
+        totalInterestFromLiquidation += _amount;
     }
 
     function getBorrowing(address depositor,uint64 index) external view returns(uint64,DepositDetails memory){
@@ -485,10 +486,10 @@ contract Treasury is Ownable{
         require(sent, "Failed to send Ether");
     }
 
-    function transferEthToCds(address borrower,uint64 index) external onlyBorrowingContract{
-        (bool sent,) = payable(cdsContract).call{value: borrowing[borrower].depositDetails[index].depositedAmount}("");
+    function transferEthToCdsLiquidators(address borrower,uint128 amount) external onlyCDSContract{
+        (bool sent,) = payable(borrower).call{value: amount}("");
         if(!sent){
-            revert Treasury_EthTransferToCdsFailed();
+            revert Treasury_EthTransferToCdsLiquidatorFailed();
         }
     }
 
