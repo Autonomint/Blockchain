@@ -52,6 +52,7 @@ contract Borrowing is Ownable {
     uint256 public lastTotalCDSPool;
     uint128 public lastCumulativeRate;
     uint128 private lastEventTime;
+    uint128 public noOfLiquidations;
 
     uint128 PRECISION = 1e6;
     uint128 RATIO_PRECISION = 1e4;
@@ -253,9 +254,7 @@ contract Borrowing is Ownable {
                         }
                         totalNormalizedAmount -= borrowerDebt;
 
-                        uint256 totalInterest = treasury.totalInterest();
-                        totalInterest += interest;
-                        treasury.updateTotalInterest(totalInterest);
+                        treasury.updateTotalInterest(interest);
 
                         // Mint the pTokens
                         uint128 noOfPTokensminted = _mintPToken(msg.sender,halfValue);
@@ -357,6 +356,7 @@ contract Borrowing is Ownable {
         require(msg.sender != _user,"You cannot liquidate your own assets!");
         address borrower = _user;
         uint64 index = _index;
+        ++noOfLiquidations;
 
         // Get the borrower details
         (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(borrower,index);
@@ -372,13 +372,20 @@ contract Borrowing is Ownable {
 
         // Calculate borrower's debt 
         uint128 borrowerDebt = (depositDetail.normalizedAmount * calculateCumulativeRate())/RATE_PRECISION;
+        uint128 liquidationAmountNeeded = depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit;
         
         uint128 returnToTreasury = borrowerDebt /*+ uint128 fees*/;
-        uint128 returnToDirac = (((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit) - returnToTreasury)*10)/100;
+        uint128 returnToDirac = ((liquidationAmountNeeded - returnToTreasury)*10)/100;
+        uint128 cdsProfits = ((liquidationAmountNeeded - returnToTreasury)*90)/100;
+
+        CDSInterface.LiquidationInfo memory liquidationInfo;
+        liquidationInfo = CDSInterface.LiquidationInfo(liquidationAmountNeeded,cdsProfits,depositDetail.depositedAmount,cds.totalAvailableLiquidationAmount());
+
+        cds.updateLiquidationInfo(noOfLiquidations,liquidationInfo);
+        cds.updateTotalAvailableLiquidationAmount(liquidationAmountNeeded);
 
         //Update totalInterestFromLiquidation
-        uint256 totalInterestFromLiquidation = treasury.totalInterestFromLiquidation();
-        totalInterestFromLiquidation += uint256(returnToTreasury - borrowerDebt + returnToDirac);
+        uint256 totalInterestFromLiquidation = uint256(returnToTreasury - borrowerDebt + returnToDirac);
         treasury.updateTotalInterestFromLiquidation(totalInterestFromLiquidation);
         treasury.updateDepositDetails(borrower,index,depositDetail);
 
@@ -389,7 +396,6 @@ contract Borrowing is Ownable {
         }
 
         // Transfer ETH to CDS Pool
-        treasury.transferEthToCds(borrower,index);
     }
 
     function getUSDValue() public view returns(uint256){
