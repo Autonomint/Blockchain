@@ -6,6 +6,7 @@ pragma solidity 0.8.18;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interface/ITrinityToken.sol";
+import "../interface/IBorrowing.sol";
 import "../interface/ITreasury.sol";
 import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
@@ -15,6 +16,7 @@ contract CDS is Ownable{
     // using SafeERC20 for IERC20;
 
     ITrinityToken public immutable Trinity_token;
+    IBorrowing public borrowing;
     ITreasury public treasury;
     AggregatorV3Interface internal dataFeed;
 
@@ -28,6 +30,7 @@ contract CDS is Ownable{
     uint64 public cdsCount;
     uint64 public withdrawTimeLimit;
     uint128 public totalCdsDepositedAmount;
+    uint256 public totalAvailableLiquidationAmount;
 
     struct CdsAccountDetails {
         uint64 depositedTime;
@@ -37,6 +40,9 @@ contract CDS is Ownable{
         bool withdrawed;
         uint128 depositPrice;
         uint128 depositValue;
+        bool optedLiquidation;
+        uint128 liquidationAmount;
+        uint8 liquidationindex;
     }
 
     struct CdsDetails {
@@ -45,12 +51,26 @@ contract CDS is Ownable{
         mapping ( uint64 => CdsAccountDetails) cdsAccountDetails;
     }
 
+    struct LiquidationInfo{
+        uint128 liquidationAmount;
+        uint128 profits;
+        uint128 ethAmount;
+        uint256 availableLiquidationAmount;
+    }
+
     mapping (address => CdsDetails) public cdsDetails;
+    mapping (uint128 liquidationIndex => LiquidationInfo) public liquidationIndexToInfo;
+    mapping (uint128 liquidationIndex => mapping(address depositor => mapping(uint64 index => uint256 amount))) public depositorToLiquidationIndex;
 
     constructor(address _trinity,address priceFeed) {
         Trinity_token = ITrinityToken(_trinity); // _trinity token contract address
         dataFeed = AggregatorV3Interface(priceFeed);
         lastEthPrice = getLatestData();
+    }
+
+    modifier onlyBorrowingContract() {
+        require( msg.sender == borrowingContract, "This function can only called by borrowing contract");
+        _;
     }
 
     function getLatestData() internal view returns (uint128) {
@@ -74,7 +94,7 @@ contract CDS is Ownable{
         return account.code.length > 0;
     }
 
-    function deposit(uint128 _amount) public {
+    function deposit(uint128 _amount,bool _liquidate,uint128 _liquidationAmount) public {
         require(_amount != 0, "Deposit amount should not be zero"); // check _amount not zero
         require(
             Trinity_token.balanceOf(msg.sender) >= _amount,
@@ -130,7 +150,13 @@ contract CDS is Ownable{
         //add deposited time of perticular index and amount in cdsAccountDetails
         cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = uint64(block.timestamp);
         
-        cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(ethPrice); 
+        cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(ethPrice);
+        cdsDetails[msg.sender].cdsAccountDetails[index].optedLiquidation = _liquidate;
+        if(_liquidate){
+            cdsDetails[msg.sender].cdsAccountDetails[index].liquidationAmount = _liquidationAmount;
+            depositorToLiquidationIndex[borrowing.noOfLiquidations()][msg.sender][index] = _liquidationAmount;
+            totalAvailableLiquidationAmount += _liquidationAmount;
+        }  
 
         if(ethPrice != lastEthPrice){
             updateLastEthPrice(ethPrice);
@@ -170,10 +196,34 @@ contract CDS is Ownable{
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedTime =  _withdrawTime;
 
+        if(cdsDetails[msg.sender].cdsAccountDetails[_index].optedLiquidation){
+
+            uint128 currentLiquidations = borrowing.noOfLiquidations();
+            uint128 liquidationIndexAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationindex;
+            uint128 profit;
+            uint128 ethAmount;
+
+            for(uint128 i = liquidationIndexAtDeposit; i<= currentLiquidations; i++){
+                uint128 liquidationAmount = cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
+
+                if(liquidationAmount > 0){
+                    LiquidationInfo memory liquidationData = liquidationIndexToInfo[i];
+                    uint128 share = liquidationAmount/uint128(liquidationData.availableLiquidationAmount);
+                    cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount -= (liquidationData.liquidationAmount*share);
+                    profit = liquidationData.profits * share;
+                    ethAmount += liquidationData.ethAmount * share;
+                    profit += profit;
+                }
+            }
+            bool success = Trinity_token.transferFrom(treasuryAddress,msg.sender, (returnAmount + profit)); // transfer amount to msg.sender
+            require(success == true, "Transsuccessed in cds withdraw");
+            treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
+        }
+
+
         // Trinity_token.approve(msg.sender, returnAmount);
     
-        bool transfer = Trinity_token.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
-        
+        bool transfer = Trinity_token.transferFrom(treasuryAddress,msg.sender, (returnAmount)); // transfer amount to msg.sender
         require(transfer == true, "Transfer failed in cds withdraw");
 
         if(ethPrice != lastEthPrice){
@@ -225,6 +275,7 @@ contract CDS is Ownable{
     function setBorrowingContract(address _address) external onlyOwner {
         require(_address != address(0) && isContract(_address) != false, "Input address is invalid");
         borrowingContract = _address;
+        borrowing = IBorrowing(_address);
     }
 
     function setTreasury(address _treasury) external onlyOwner{
@@ -248,6 +299,18 @@ contract CDS is Ownable{
         }
         uint128 value = (_amount * vaultBal * priceDiff) / treasuryBal;
         return value;
+    }
+
+    function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory){
+        return cdsDetails[depositor].cdsAccountDetails[index];
+    }
+
+    function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external {
+        liquidationIndexToInfo[index] = liquidationData;
+    }
+
+    function updateTotalAvailableLiquidationAmount(uint256 amount) external onlyBorrowingContract{
+        totalAvailableLiquidationAmount -= amount;
     }
 
     receive() external payable{}
