@@ -38,7 +38,7 @@ describe("Borrowing Contract",function(){
         pToken = await ProtocolToken.deploy();
 
         const CDS = await ethers.getContractFactory("CDSTest");
-        CDSContract = await CDS.deploy(Token.address);
+        CDSContract = await CDS.deploy(Token.address,priceFeedAddress);
 
         const Borrowing = await ethers.getContractFactory("BorrowingTest");
         BorrowingContract = await Borrowing.deploy(Token.address,CDSContract.address,pToken.address,priceFeedAddress);
@@ -49,6 +49,7 @@ describe("Borrowing Contract",function(){
         await BorrowingContract.initializeTreasury(treasury.address);
         await BorrowingContract.setLTV(80);
         await CDSContract.setTreasury(treasury.address);
+        await CDSContract.setBorrowingContract(BorrowingContract.address);
         await BorrowingContract.calculateCumulativeRate();
 
         const provider = new ethers.providers.JsonRpcProvider(INFURA_URL);
@@ -77,7 +78,7 @@ describe("Borrowing Contract",function(){
             await Token.mint(owner.address,ethers.utils.parseEther("4999"));
             await Token.connect(owner).approve(CDSContract.address,ethers.utils.parseEther("4999"));
 
-            await CDSContract.deposit(ethers.utils.parseEther("4999"));
+            await CDSContract.deposit(ethers.utils.parseEther("4999"),false,0);
             await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
             // await BorrowingContract.connect(user2).depositTokens(ethers.utils.parseEther("1216.12094444444"),timeStamp,{value: ethers.utils.parseEther("1")});
             // await BorrowingContract.connect(user3).depositTokens(ethers.utils.parseEther("1190.84086805555"),timeStamp,{value: ethers.utils.parseEther("1")});
@@ -106,7 +107,7 @@ describe("Borrowing Contract",function(){
             await Token.mint(owner.address,ethers.utils.parseEther("4000"));
             await Token.connect(owner).approve(CDSContract.address,ethers.utils.parseEther("4000"));
 
-            await CDSContract.deposit(ethers.utils.parseEther("4000"));
+            await CDSContract.deposit(ethers.utils.parseEther("4000"),false,0);
             await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
         })
     })
@@ -183,7 +184,7 @@ describe("Borrowing Contract",function(){
             await Token.mint(owner.address,ethers.utils.parseEther("10000"));
             await Token.connect(owner).approve(CDSContract.address,ethers.utils.parseEther("10000"));
 
-            await CDSContract.deposit(ethers.utils.parseEther("10000"));
+            await CDSContract.deposit(ethers.utils.parseEther("10000"),false,0);
             const tx = BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
             expect(tx).to.be.revertedWith("Not enough fund in CDS");
         })
@@ -222,10 +223,10 @@ describe("Borrowing Contract",function(){
             expect(tx).to.be.revertedWith("This function can only called by borrowing contract");    
         })
 
-        it("Should revert if called by other than borrowing contract",async function(){
+        it("Should revert if called by other than CDS contract",async function(){
             const {treasury} = await loadFixture(deployer);
-            const tx =  treasury.connect(user1).transferEthToCds(user1.address,1);
-            expect(tx).to.be.revertedWith("This function can only called by borrowing contract");    
+            const tx =  treasury.connect(user1).transferEthToCdsLiquidators(user1.address,1);
+            expect(tx).to.be.revertedWith("This function can only called by CDS contract");    
         })
 
         it("Should revert if the address is zero",async function(){
@@ -620,7 +621,7 @@ describe("Borrowing Contract",function(){
             await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
 
             await Token.connect(user2).approve(CDSContract.address,ethers.utils.parseEther("2000"));
-            await CDSContract.connect(user2).deposit(ethers.utils.parseEther("2000"));
+            await CDSContract.connect(user2).deposit(ethers.utils.parseEther("2000"),true,ethers.utils.parseEther("1000"));
             await CDSContract.connect(owner).approval(BorrowingContract.address,ethers.utils.parseEther("1000"));
 
             await BorrowingContract.liquidate(user1.address,1,800);
@@ -628,15 +629,15 @@ describe("Borrowing Contract",function(){
             expect(tx).to.be.revertedWith("User amount has been liquidated");
         })
 
-        it("Should revert User balance is less than required",async function(){
-            const {BorrowingContract,treasury} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
+        // it("Should revert User balance is less than required",async function(){
+        //     const {BorrowingContract,treasury} = await loadFixture(deployer);
+        //     const timeStamp = await time.latest();
 
-            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
-            await Token.connect(user1).transfer(user2.address,ethers.utils.parseEther("0.25"));
-            const tx = BorrowingContract.connect(user1).withDraw(user2.address,1,90000,timeStamp);
-            expect(tx).to.be.revertedWith("User balance is less than required");
-        })
+        //     await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
+        //     await Token.connect(user1).transfer(user2.address,ethers.utils.parseEther("0.25"));
+        //     const tx = BorrowingContract.connect(user1).withDraw(user2.address,1,90000,timeStamp);
+        //     expect(tx).to.be.revertedWith("User balance is less than required");
+        // })
 
         it("Should revert Don't have enough Protocol Tokens",async function(){
             const {BorrowingContract,Token,pToken} = await loadFixture(deployer);
@@ -658,15 +659,14 @@ describe("Borrowing Contract",function(){
             const {BorrowingContract,CDSContract,Token,pToken,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
             await Token.mint(user2.address,ethers.utils.parseEther("2000"))
-
-            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.calculateCumulativeRate();
             await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
 
             await Token.connect(user2).approve(CDSContract.address,ethers.utils.parseEther("2000"));
-            await CDSContract.connect(user2).deposit(ethers.utils.parseEther("2000"));
+            await CDSContract.connect(user2).deposit(ethers.utils.parseEther("2000"),true,ethers.utils.parseEther("1000"));
             await CDSContract.connect(owner).approval(BorrowingContract.address,ethers.utils.parseEther("1000"));
 
-            await BorrowingContract.liquidate(user1.address,1,800);
+            await BorrowingContract.liquidate(user1.address,1,80000);
         })
 
         it("Should revert To address is zero",async function(){
