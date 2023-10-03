@@ -41,8 +41,9 @@ contract CDS is Ownable{
         uint128 depositPrice;
         uint128 depositValue;
         bool optedLiquidation;
+        uint128 InitialLiquidationAmount;
         uint128 liquidationAmount;
-        uint8 liquidationindex;
+        uint128 liquidationindex;
     }
 
     struct CdsDetails {
@@ -60,7 +61,6 @@ contract CDS is Ownable{
 
     mapping (address => CdsDetails) public cdsDetails;
     mapping (uint128 liquidationIndex => LiquidationInfo) public liquidationIndexToInfo;
-    mapping (uint128 liquidationIndex => mapping(address depositor => mapping(uint64 index => uint256 amount))) public depositorToLiquidationIndex;
 
     constructor(address _trinity,address priceFeed) {
         Trinity_token = ITrinityToken(_trinity); // _trinity token contract address
@@ -139,7 +139,7 @@ contract CDS is Ownable{
         }
 
         //add deposited amount of msg.sender of the perticular index in cdsAccountDetails
-        cdsDetails[msg.sender].cdsAccountDetails[index].depositedAmount = _amount;
+        cdsDetails[msg.sender].cdsAccountDetails[index].depositedAmount = (_amount - _liquidationAmount);
 
         //storing current ETH/USD rate
         cdsDetails[msg.sender].cdsAccountDetails[index].depositPrice = ethPrice;
@@ -153,8 +153,13 @@ contract CDS is Ownable{
         cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(ethPrice);
         cdsDetails[msg.sender].cdsAccountDetails[index].optedLiquidation = _liquidate;
         if(_liquidate){
+            if(borrowing.noOfLiquidations() == 0){
+                cdsDetails[msg.sender].cdsAccountDetails[index].liquidationindex = 1;
+            }else{
+                cdsDetails[msg.sender].cdsAccountDetails[index].liquidationindex = borrowing.noOfLiquidations();
+            }
             cdsDetails[msg.sender].cdsAccountDetails[index].liquidationAmount = _liquidationAmount;
-            depositorToLiquidationIndex[borrowing.noOfLiquidations()][msg.sender][index] = _liquidationAmount;
+            cdsDetails[msg.sender].cdsAccountDetails[index].InitialLiquidationAmount = _liquidationAmount;
             totalAvailableLiquidationAmount += _liquidationAmount;
         }  
 
@@ -205,26 +210,27 @@ contract CDS is Ownable{
 
             for(uint128 i = liquidationIndexAtDeposit; i<= currentLiquidations; i++){
                 uint128 liquidationAmount = cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
-
                 if(liquidationAmount > 0){
                     LiquidationInfo memory liquidationData = liquidationIndexToInfo[i];
-                    uint128 share = liquidationAmount/uint128(liquidationData.availableLiquidationAmount);
-                    cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount -= (liquidationData.liquidationAmount*share);
-                    profit = liquidationData.profits * share;
-                    ethAmount += liquidationData.ethAmount * share;
-                    profit += profit;
+                    uint128 share = (liquidationAmount * 1e10)/uint128(liquidationData.availableLiquidationAmount);
+                    profit += (liquidationData.profits * share)/1e10;
+                    cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount += profit;
+                    cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount -= ((liquidationData.liquidationAmount*share)/1e10);
+                    ethAmount += (liquidationData.ethAmount * share)/1e10;
+                    console.log("ETH AMOUNT",ethAmount);
                 }
             }
-            bool success = Trinity_token.transferFrom(treasuryAddress,msg.sender, (returnAmount + profit)); // transfer amount to msg.sender
+            console.log("PROFIT",profit);
+            console.log("RETURN AMOUNT",returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount+ profit);
+            bool success = Trinity_token.transferFrom(treasuryAddress,msg.sender, (returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount+ profit)); // transfer amount to msg.sender
             require(success == true, "Transsuccessed in cds withdraw");
             treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
+        }else{
+            // Trinity_token.approve(msg.sender, returnAmount);
+        
+            bool transfer = Trinity_token.transferFrom(treasuryAddress,msg.sender, (returnAmount)); // transfer amount to msg.sender
+            require(transfer == true, "Transfer failed in cds withdraw");
         }
-
-
-        // Trinity_token.approve(msg.sender, returnAmount);
-    
-        bool transfer = Trinity_token.transferFrom(treasuryAddress,msg.sender, (returnAmount)); // transfer amount to msg.sender
-        require(transfer == true, "Transfer failed in cds withdraw");
 
         if(ethPrice != lastEthPrice){
             updateLastEthPrice(ethPrice);
