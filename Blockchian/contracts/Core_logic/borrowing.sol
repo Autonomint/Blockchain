@@ -43,14 +43,14 @@ contract Borrowing is Ownable {
     address public cdsAddress;
     address public admin;
     uint8 private LTV; // LTV is a percentage eg LTV = 60 is 60%, must be divided by 100 in calculations
-    uint8 private APY;
+    uint8 public APY;
     uint256 public totalNormalizedAmount;
     address public priceFeedAddress;
     uint128 public lastEthprice;
     uint256 public lastEthVaultValue;
     uint256 public lastCDSPoolValue;
     uint256 public lastTotalCDSPool;
-    uint128 public lastCumulativeRate;
+    uint256 public lastCumulativeRate;
     uint128 private lastEventTime;
     uint128 public noOfLiquidations;
 
@@ -165,10 +165,10 @@ contract Borrowing is Ownable {
         treasury.updateTotalBorrowedAmount(msg.sender,borrowAmount);
 
         //Call calculateCumulativeRate() to get currentCumulativeRate
-        uint128 currentCumulativeRate = calculateCumulativeRate();
+        uint256 currentCumulativeRate = calculateCumulativeRate();
 
         // Calculate normalizedAmount
-        uint256 normalizedAmount = (borrowAmount * RATE_PRECISION)/currentCumulativeRate;
+        uint256 normalizedAmount = (borrowAmount * RATE_PRECISION * RATE_PRECISION)/currentCumulativeRate;
 
         depositDetail.normalizedAmount = uint128(normalizedAmount);
         treasury.updateDepositDetails(msg.sender,index,depositDetail);
@@ -226,7 +226,7 @@ contract Borrowing is Ownable {
                     // Check if the borrowingHealth is between 8000(0.8) & 10000(1)
                     if(8000 < borrowingHealth && borrowingHealth < 10000) {
                         // Calculate th borrower's debt
-                        uint128 borrowerDebt = (depositDetail.normalizedAmount * calculateCumulativeRate())/RATE_PRECISION;
+                        uint256 borrowerDebt = ((depositDetail.normalizedAmount * calculateCumulativeRate())/RATE_PRECISION)/RATE_PRECISION;
                         // Check whether the Borrower have enough Trinty
                         require(Trinity.balanceOf(msg.sender) >= borrowerDebt, "User balance is less than required");
                             
@@ -371,10 +371,10 @@ contract Borrowing is Ownable {
         depositDetail.liquidated = true;
 
         // Calculate borrower's debt 
-        uint128 borrowerDebt = (depositDetail.normalizedAmount * calculateCumulativeRate())/RATE_PRECISION;
-        uint128 liquidationAmountNeeded = depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit;
+        uint256 borrowerDebt = ((depositDetail.normalizedAmount * calculateCumulativeRate())/RATE_PRECISION)/RATE_PRECISION;
+        uint128 liquidationAmountNeeded = (depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/1e2;
         
-        uint128 returnToTreasury = borrowerDebt /*+ uint128 fees*/;
+        uint128 returnToTreasury = uint128(borrowerDebt) /*+ uint128 fees*/;
         uint128 returnToDirac = ((liquidationAmountNeeded - returnToTreasury)*10)/100;
         uint128 cdsProfits = ((liquidationAmountNeeded - returnToTreasury)*90)/100;
 
@@ -382,8 +382,7 @@ contract Borrowing is Ownable {
         liquidationInfo = CDSInterface.LiquidationInfo(liquidationAmountNeeded,cdsProfits,depositDetail.depositedAmount,cds.totalAvailableLiquidationAmount());
 
         cds.updateLiquidationInfo(noOfLiquidations,liquidationInfo);
-        cds.updateTotalAvailableLiquidationAmount(liquidationAmountNeeded);
-
+        cds.updateTotalAvailableLiquidationAmount(liquidationAmountNeeded - cdsProfits);
         //Update totalInterestFromLiquidation
         uint256 totalInterestFromLiquidation = uint256(returnToTreasury - borrowerDebt + returnToDirac);
         treasury.updateTotalInterestFromLiquidation(totalInterestFromLiquidation);
@@ -481,12 +480,12 @@ contract Borrowing is Ownable {
         return APY;
     }
 
-    function calculateCumulativeRate() public returns(uint128){
+    function calculateCumulativeRate() public returns(uint256){
         // Get the noOfBorrowers
         uint128 noOfBorrowers = treasury.noOfBorrowers();
 
         uint128 ratePerSec = 1000000001547125957863212449;
-        uint128 currentCumulativeRate;
+        uint256 currentCumulativeRate;
 
         //If first event
         if(noOfBorrowers == 0){
@@ -494,12 +493,11 @@ contract Borrowing is Ownable {
             lastCumulativeRate = currentCumulativeRate;
         }else{
             uint256 timeInterval = uint128(block.timestamp) - lastEventTime;
-            //console.log("TIME INTERVAL",timeInterval);
-            currentCumulativeRate = uint128(lastCumulativeRate * _rpow(ratePerSec,timeInterval,RATE_PRECISION));
+            // console.log("TIME INTERVAL",timeInterval);
+            currentCumulativeRate = uint256(lastCumulativeRate * _rpow(ratePerSec,timeInterval,RATE_PRECISION));
             lastCumulativeRate = currentCumulativeRate/RATE_PRECISION;
         }
-        //console.log("CURRENT CUMULATIVE RATE",currentCumulativeRate/RATE_PRECISION);
-        return (currentCumulativeRate/RATE_PRECISION);
+        return currentCumulativeRate;
     }
 
     function _rpow(uint x, uint n, uint b) internal pure returns (uint z) {
