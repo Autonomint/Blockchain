@@ -7,6 +7,7 @@ import "../interface/CDSInterface.sol";
 import "../interface/ITrinityToken.sol";
 import "../interface/IProtocolToken.sol";
 import "../interface/ITreasury.sol";
+import "../interface/IOptions.sol";
 import "hardhat/console.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
@@ -29,6 +30,8 @@ contract Borrowing is Ownable {
     IProtocolToken public protocolToken;
 
     ITreasury public treasury;
+
+    IOptions public options;
 
     uint256 private _downSideProtectionLimit;
     
@@ -91,6 +94,10 @@ contract Borrowing is Ownable {
         require(_treasury != address(0) && isContract(_treasury) != false, "Treasury must be contract address & can't be zero address");
         treasury = ITreasury(_treasury);
         treasuryAddress = _treasury;
+    }
+    function setOptions(address _options) external onlyOwner{
+        require(_options != address(0) && isContract(_options) != false, "Options must be contract address & can't be zero address");
+        options = IOptions(_options);
     }
 
     /**
@@ -220,58 +227,67 @@ contract Borrowing is Ownable {
             if(depositDetail.withdrawed == false) {                
                 // Check whether it is first withdraw
                 if(depositDetail.withdrawNo == 0) {                    
+                    
                     // Calculate the borrowingHealth
                     uint128 borrowingHealth = (_ethPrice * 10000) / depositDetail.ethPriceAtDeposit;
+                    require(borrowingHealth > 8000,"BorrowingHealth is Low");
+                    // Calculate th borrower's debt
+                    {uint256 borrowerDebt = ((depositDetail.normalizedAmount * calculateCumulativeRate())/RATE_PRECISION)/RATE_PRECISION;
 
-                    // Check if the borrowingHealth is between 8000(0.8) & 10000(1)
-                    if(8000 < borrowingHealth && borrowingHealth < 10000) {
-                        // Calculate th borrower's debt
-                        uint256 borrowerDebt = ((depositDetail.normalizedAmount * calculateCumulativeRate())/RATE_PRECISION)/RATE_PRECISION;
-                        // Check whether the Borrower have enough Trinty
-                        require(Trinity.balanceOf(msg.sender) >= borrowerDebt, "User balance is less than required");
+                    // Check whether the Borrower have enough Trinty
+                    require(Trinity.balanceOf(msg.sender) >= borrowerDebt, "User balance is less than required");
                             
-                        // Update the borrower's data
-                        depositDetail.ethPriceAtWithdraw = _ethPrice;
-                        depositDetail.withdrawTime = _withdrawTime;
-                        depositDetail.withdrawNo = 1;
+                    // Update the borrower's data
+                    depositDetail.ethPriceAtWithdraw = _ethPrice;
+                    depositDetail.withdrawTime = _withdrawTime;
+                    depositDetail.withdrawNo = 1;
+                    // Calculate interest for the borrower's debt
+                    uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
 
-                        // Calculate interest for the borrower's debt
-                        uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
+                    // Calculate the amount of Trinity to burn and sent to the treasury
+                    uint256 halfValue = (50 *(depositDetail.borrowedAmount))/100;
 
-                        // Calculate the amount of Trinity to burn and sent to the treasury
-                        {uint256 halfValue = (50 *(borrowerDebt-interest))/100;
+                    // Burn the Trinity from the Borrower
+                    bool success = Trinity.burnFromUser(msg.sender, halfValue);
+                    if(!success){
+                        revert Borrowing_WithdrawBurnFailed();
+                    }
 
-                        // Burn the Trinity from the Borrower
-                        bool success = Trinity.burnFromUser(msg.sender, halfValue);
-                        if(!success){
-                            revert Borrowing_WithdrawBurnFailed();
-                        }
+                    //Transfer the remaining Trinity to the treasury
+                    bool transfer = Trinity.transferFrom(msg.sender,treasuryAddress,halfValue);
+                    if(!transfer){
+                        revert Borrowing_WithdrawMUSDTransferFailed();
+                    }
+                    totalNormalizedAmount -= borrowerDebt;
 
-                        //Transfer the remaining Trinity to the treasury
-                        bool transfer = Trinity.transferFrom(msg.sender,treasuryAddress,halfValue);
-                        if(!transfer){
-                            revert Borrowing_WithdrawMUSDTransferFailed();
-                        }
-                        totalNormalizedAmount -= borrowerDebt;
+                    treasury.updateTotalInterest(interest);
 
-                        treasury.updateTotalInterest(interest);
+                    // Mint the pTokens
+                    uint128 noOfPTokensminted = _mintPToken(msg.sender,halfValue);
 
-                        // Mint the pTokens
-                        uint128 noOfPTokensminted = _mintPToken(msg.sender,halfValue);
-
-                        // Update PToken data
-                        depositDetail.pTokensAmount = noOfPTokensminted;
-                        treasury.updateTotalPTokensIncrease(msg.sender,noOfPTokensminted);
+                    // Update PToken data
+                    depositDetail.pTokensAmount = noOfPTokensminted;
+                    treasury.updateTotalPTokensIncrease(msg.sender,noOfPTokensminted);
                         
-                        treasury.updateDepositDetails(msg.sender,_index,depositDetail);}
-                        // Sent the ETH(depositedAmount) to the toAddress
-                        bool sent = treasury.withdraw(msg.sender,_toAddress,depositDetail.depositedAmount,_index,_ethPrice);
-                        if(!sent){
-                            revert Borrowing_WithdrawEthTransferFailed();
-                        }
+                    treasury.updateDepositDetails(msg.sender,_index,depositDetail);}             
+                    uint128 ethToReturn;
+                    uint128 depositedAmountvalue = (depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/_ethPrice;
+
+                    if(borrowingHealth > 10000){
+                        ethToReturn = (depositedAmountvalue + (options.withdrawOption(depositDetail.depositedAmount,depositDetail.strikePrice,_ethPrice)));
+                    }else if(borrowingHealth == 10000){
+                        ethToReturn = depositedAmountvalue;
+                    }else if(8000 < borrowingHealth && borrowingHealth < 10000) {
+                        ethToReturn = depositDetail.depositedAmount;
                     }else{
                         revert("BorrowingHealth is Low");
                     }
+                    ethToReturn = (ethToReturn * 50)/100;
+                    console.log("eth to return",ethToReturn);
+                bool sent = treasury.withdraw(msg.sender,_toAddress,ethToReturn,_index,_ethPrice);
+                if(!sent){
+                    revert Borrowing_WithdrawEthTransferFailed();
+                }
                 }// Check whether it is second withdraw
                 else if(depositDetail.withdrawNo == 1){
                     secondWithdraw(
@@ -280,7 +296,7 @@ contract Borrowing is Ownable {
                         _ethPrice,
                         depositDetail.withdrawTime,
                         depositDetail.pTokensAmount,
-                        depositDetail.depositedAmount);
+                        depositDetail.withdrawAmount);
                 }else{
                     // update withdrawed to true
                     revert("User already withdraw entire amount");
@@ -300,10 +316,10 @@ contract Borrowing is Ownable {
      * @param _index Index of the borrow
      * @param pTokensAmount Amount of pTokens transferred.
      * @param withdrawTime time at first withdraw
-     * @param depositedAmount Deposited Amount of the borrower
+     * @param ethToReturn ethToReturn
      */
 
-    function secondWithdraw(address _toAddress,uint64 _index,uint64 _ethPrice,uint64 withdrawTime,uint128 pTokensAmount,uint128 depositedAmount) internal {
+    function secondWithdraw(address _toAddress,uint64 _index,uint64 _ethPrice,uint64 withdrawTime,uint128 pTokensAmount,uint128 ethToReturn) internal {
             // Check whether the first withdraw passed one month
             require(block.timestamp >= (withdrawTime + 30 days),"A month not yet completed since withdraw");
                     
@@ -311,7 +327,7 @@ contract Borrowing is Ownable {
             require(protocolToken.balanceOf(msg.sender) == pTokensAmount,"Don't have enough Protocol Tokens");
             (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,_index);
             // Update Borrower's Data
-            treasury.updateTotalDepositedAmount(msg.sender,uint128(depositedAmount));
+            treasury.updateTotalDepositedAmount(msg.sender,uint128(depositDetail.depositedAmount));
             depositDetail.depositedAmount = 0;
             depositDetail.withdrawed = true;
             depositDetail.withdrawNo = 2;
@@ -319,7 +335,7 @@ contract Borrowing is Ownable {
             depositDetail.pTokensAmount = 0;
             treasury.updateDepositDetails(msg.sender,_index,depositDetail);
 
-            bool transfer = Trinity.burnFromUser(treasuryAddress, (depositDetail.borrowedAmount*50)/100);
+            bool transfer = Trinity.burnFromUser(treasuryAddress, ((depositDetail.borrowedAmount*50)/100));
             if(!transfer){
                 revert Borrowing_WithdrawBurnFailed();
             }
@@ -328,7 +344,7 @@ contract Borrowing is Ownable {
                 revert Borrowing_WithdrawBurnFailed();
             }
             // Call withdraw function in Treasury
-            bool sent = treasury.withdraw(msg.sender,_toAddress,depositedAmount,_index,_ethPrice);
+            bool sent = treasury.withdraw(msg.sender,_toAddress,ethToReturn,_index,_ethPrice);
             if(!sent){
                 revert Borrowing_WithdrawEthTransferFailed();
             }
