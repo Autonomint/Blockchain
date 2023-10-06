@@ -51,6 +51,7 @@ contract Treasury is Ownable{
         uint64 ethPriceAtWithdraw;
         uint64 withdrawTime;
         uint128 pTokensAmount;
+        uint64 strikePrice;
     }
 
     //Borrower Details
@@ -197,7 +198,7 @@ contract Treasury is Ownable{
         // Check the _amount is non zero
         require(_amount > 0, "Cannot withdraw zero Ether");
         require(borrowing[borrower].depositDetails[index].withdrawNo > 0,"");
-        uint256 amount = (_amount *50)/100;
+        uint256 amount = _amount;
         // Send the ETH to Borrower
         (bool sent,) = payable(toAddress).call{value: amount}("");
         require(sent, "Failed to send Ether");

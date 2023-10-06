@@ -18,6 +18,7 @@ interface ITreasury{
             uint64 ethPriceAtWithdraw;
             uint64 withdrawTime;
             uint128 pTokensAmount;
+            uint64 strikePrice;
         }
 
         function deposit(address user,uint128 _ethPrice,uint64 _depositTime) external payable returns(bool,uint64);
