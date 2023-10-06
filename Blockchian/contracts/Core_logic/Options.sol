@@ -15,7 +15,7 @@ contract Options{
         uint128 ethToReturn;
         require(currentEthValue >= strikePrice);
         if(currentEthValue > strikePrice){
-            ethToReturn = (depositedAmount * (currentEthPrice- strikePrice))/currentEthPrice;
+            ethToReturn = (currentEthValue - strikePrice)/currentEthPrice;
         }else{
             ethToReturn = 0;
         }
