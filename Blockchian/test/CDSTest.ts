@@ -176,7 +176,7 @@ describe("Testing contracts ", function(){
     })
 
     describe("To check CDS withdrawl function",function(){
-        it.only("Should withdraw from cds",async () => {
+        it("Should withdraw from cds",async () => {
             const {CDSContract,treasury,Token} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
@@ -214,6 +214,31 @@ describe("Testing contracts ", function(){
             await CDSContract.connect(user1).withdraw(1);
             const tx =  CDSContract.connect(user1).withdraw(1);
             expect(tx).to.be.revertedWith("Already withdrawn");
+        })
+        it("Should calculate cumulative rate correctly",async () =>{
+            const {CDSContract,BorrowingContract,Token} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await Token.mint(user1.address,ethers.utils.parseEther("100000"));
+            await Token.connect(user1).approve(CDSContract.address,ethers.utils.parseEther("100000"));
+            
+            await CDSContract.connect(user1).deposit(ethers.utils.parseEther("11000"),true,ethers.utils.parseEther("500"));
+
+            await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
+            await BorrowingContract.calculateCumulativeRate();
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("100")});
+
+            await CDSContract.connect(user1).deposit(ethers.utils.parseEther("1000"),true,ethers.utils.parseEther("500"));
+            await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
+
+            await CDSContract.connect(user1).deposit(ethers.utils.parseEther("1000"),true,ethers.utils.parseEther("500"));
+            await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
+
+            await CDSContract.connect(user1).deposit(ethers.utils.parseEther("1000"),true,ethers.utils.parseEther("500"));
+            await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
+
+            await CDSContract.connect(user1).deposit(ethers.utils.parseEther("1000"),true,ethers.utils.parseEther("500"));
+            await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
         })
     })
     // describe("To check cdsAmountToReturn function",function(){
