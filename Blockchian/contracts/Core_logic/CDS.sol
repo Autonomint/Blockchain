@@ -218,11 +218,8 @@ contract CDS is Ownable{
                     cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount += profit;
                     cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount -= ((liquidationData.liquidationAmount*share)/1e10);
                     ethAmount += (liquidationData.ethAmount * share)/1e10;
-                    console.log("ETH AMOUNT",ethAmount);
                 }
             }
-            console.log("PROFIT",profit);
-            console.log("RETURN AMOUNT",returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount+ profit);
             totalCdsDepositedAmount -= (returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount+ profit);
             bool success = Trinity_token.transferFrom(treasuryAddress,msg.sender, (returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount+ profit)); // transfer amount to msg.sender
             require(success == true, "Transsuccessed in cds withdraw");
@@ -314,7 +311,6 @@ contract CDS is Ownable{
         uint128 netCDSPoolValue = totalCdsDepositedAmount + fees;
         totalCdsDepositedAmount += fees;
         uint128 percentageChange = (fees * 1e12)/netCDSPoolValue;
-        // console.log(percentageChange);
         uint128 currentCumulativeRate;
         if(treasury.noOfBorrowers() == 0){
             currentCumulativeRate = (1 * 1e12) + percentageChange;
@@ -323,7 +319,6 @@ contract CDS is Ownable{
             currentCumulativeRate = lastCumulativeRate * ((1 * 1e12) + percentageChange);
             lastCumulativeRate = (currentCumulativeRate/1e12);
         }
-        console.log(lastCumulativeRate);
         return currentCumulativeRate;
     }
 
