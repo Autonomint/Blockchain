@@ -176,7 +176,7 @@ describe("Testing contracts ", function(){
     })
 
     describe("To check CDS withdrawl function",function(){
-        it.only("Should withdraw from cds",async () => {
+        it("Should withdraw from cds",async () => {
             const {CDSContract,treasury,Token} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
@@ -185,19 +185,17 @@ describe("Testing contracts ", function(){
             await Token.connect(user2).approve(CDSContract.address,ethers.utils.parseEther("20000"));
             await Token.connect(user1).approve(CDSContract.address,ethers.utils.parseEther("50000"));
 
-            await CDSContract.connect(user2).deposit(ethers.utils.parseEther("3000"),true,ethers.utils.parseEther("3000"));
-            await CDSContract.connect(user1).deposit(ethers.utils.parseEther("3000"),true,ethers.utils.parseEther("3000"));
+            await CDSContract.connect(user2).deposit(ethers.utils.parseEther("2000"),true,ethers.utils.parseEther("2000"));
+            await CDSContract.connect(user1).deposit(ethers.utils.parseEther("2000"),true,ethers.utils.parseEther("2000"));
 
             await BorrowingContract.calculateCumulativeRate();
-            await BorrowingContract.connect(user1).depositTokens(162398,timeStamp,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("3")});
             await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
-            await BorrowingContract.connect(user2).depositTokens(162398,timeStamp,{value: ethers.utils.parseEther("2")});
-            await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
+
 
             await CDSContract.connect(owner).approval(BorrowingContract.address,await Token.balanceOf(treasury.address));
 
-            await BorrowingContract.liquidate(user1.address,1,129900);
-            await BorrowingContract.liquidate(user2.address,1,129900);
+            await BorrowingContract.liquidate(user1.address,1,80000);
 
             await CDSContract.connect(owner).approval(CDSContract.address,await Token.balanceOf(treasury.address));
             await CDSContract.connect(user1).withdraw(1);
