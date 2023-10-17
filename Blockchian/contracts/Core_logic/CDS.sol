@@ -101,6 +101,10 @@ contract CDS is Ownable{
     function deposit(uint128 _amount,bool _liquidate,uint128 _liquidationAmount) public {
         require(_amount != 0, "Deposit amount should not be zero"); // check _amount not zero
         require(
+            _liquidationAmount < _amount,
+            "Liquidation amount can't greater than deposited amount"
+        );
+        require(
             Trinity_token.balanceOf(msg.sender) >= _amount,
             "Insufficient balance with msg.sender"
         ); // check if user has sufficient trinity token
@@ -199,9 +203,10 @@ contract CDS is Ownable{
         uint128 ethPrice = getLatestData();
         require(ethPrice != 0,"Oracle Failed");
 
-        uint128 returnAmount = cdsAmountToReturn(msg.sender,_index, ethPrice)+((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * lastCumulativeRate)/PRECISION)-(2*(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount));
+        uint128 returnAmount = 
+            cdsAmountToReturn(msg.sender,_index, ethPrice)+
+            ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * lastCumulativeRate)/PRECISION)-(2*(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount));
 
-        cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedTime =  _withdrawTime;
 
         if(cdsDetails[msg.sender].cdsAccountDetails[_index].optedLiquidation){
@@ -222,14 +227,16 @@ contract CDS is Ownable{
                     ethAmount += (liquidationData.ethAmount * share)/1e10;
                 }
             }
-            totalCdsDepositedAmount -= (returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
-            bool success = Trinity_token.transferFrom(treasuryAddress,msg.sender, (returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount)); // transfer amount to msg.sender
+            uint128 returnAmountWithGains = returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
+            totalCdsDepositedAmount -= returnAmountWithGains;
+            cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
+            bool success = Trinity_token.transferFrom(treasuryAddress,msg.sender, returnAmountWithGains); // transfer amount to msg.sender
             require(success == true, "Transsuccessed in cds withdraw");
             treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
         }else{
             // Trinity_token.approve(msg.sender, returnAmount);
-        
-            bool transfer = Trinity_token.transferFrom(treasuryAddress,msg.sender, (returnAmount)); // transfer amount to msg.sender
+            cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
+            bool transfer = Trinity_token.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
             require(transfer == true, "Transfer failed in cds withdraw");
         }
 
