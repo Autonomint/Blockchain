@@ -32,6 +32,7 @@ contract CDS is Ownable{
     uint128 public totalCdsDepositedAmount;
     uint256 public totalAvailableLiquidationAmount;
     uint128 public lastCumulativeRate;
+    uint128 public PRECISION = 1e12;
 
     struct CdsAccountDetails {
         uint64 depositedTime;
@@ -68,6 +69,7 @@ contract CDS is Ownable{
         Trinity_token = ITrinityToken(_trinity); // _trinity token contract address
         dataFeed = AggregatorV3Interface(priceFeed);
         lastEthPrice = getLatestData();
+        lastCumulativeRate = PRECISION;
     }
 
     modifier onlyBorrowingContract() {
@@ -141,7 +143,7 @@ contract CDS is Ownable{
         }
 
         //add deposited amount of msg.sender of the perticular index in cdsAccountDetails
-        cdsDetails[msg.sender].cdsAccountDetails[index].depositedAmount = (_amount - _liquidationAmount);
+        cdsDetails[msg.sender].cdsAccountDetails[index].depositedAmount = _amount;
 
         //storing current ETH/USD rate
         cdsDetails[msg.sender].cdsAccountDetails[index].depositPrice = ethPrice;
@@ -151,7 +153,7 @@ contract CDS is Ownable{
         
         //add deposited time of perticular index and amount in cdsAccountDetails
         cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = uint64(block.timestamp);
-        cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount = ((_amount * lastCumulativeRate)/1e12);
+        cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount = ((_amount * PRECISION)/lastCumulativeRate);
        
         cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(ethPrice);
         cdsDetails[msg.sender].cdsAccountDetails[index].optedLiquidation = _liquidate;
@@ -197,7 +199,7 @@ contract CDS is Ownable{
         uint128 ethPrice = getLatestData();
         require(ethPrice != 0,"Oracle Failed");
 
-        uint128 returnAmount = cdsAmountToReturn(msg.sender,_index, ethPrice);
+        uint128 returnAmount = cdsAmountToReturn(msg.sender,_index, ethPrice)+((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * lastCumulativeRate)/PRECISION)-(2*(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount));
 
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedTime =  _withdrawTime;
@@ -206,7 +208,6 @@ contract CDS is Ownable{
 
             uint128 currentLiquidations = borrowing.noOfLiquidations();
             uint128 liquidationIndexAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationindex;
-            uint128 profit;
             uint128 ethAmount;
 
             for(uint128 i = liquidationIndexAtDeposit; i<= currentLiquidations; i++){
@@ -214,14 +215,15 @@ contract CDS is Ownable{
                 if(liquidationAmount > 0){
                     LiquidationInfo memory liquidationData = liquidationIndexToInfo[i];
                     uint128 share = (liquidationAmount * 1e10)/uint128(liquidationData.availableLiquidationAmount);
-                    profit += (liquidationData.profits * share)/1e10;
+                    uint128 profit;
+                    profit = (liquidationData.profits * share)/1e10;
                     cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount += profit;
                     cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount -= ((liquidationData.liquidationAmount*share)/1e10);
                     ethAmount += (liquidationData.ethAmount * share)/1e10;
                 }
             }
-            totalCdsDepositedAmount -= (returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount+ profit);
-            bool success = Trinity_token.transferFrom(treasuryAddress,msg.sender, (returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount+ profit)); // transfer amount to msg.sender
+            totalCdsDepositedAmount -= (returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
+            bool success = Trinity_token.transferFrom(treasuryAddress,msg.sender, (returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount)); // transfer amount to msg.sender
             require(success == true, "Transsuccessed in cds withdraw");
             treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
         }else{
@@ -310,14 +312,14 @@ contract CDS is Ownable{
         require(fees != 0,"Fees should not be zero");
         uint128 netCDSPoolValue = totalCdsDepositedAmount + fees;
         totalCdsDepositedAmount += fees;
-        uint128 percentageChange = (fees * 1e12)/netCDSPoolValue;
+        uint128 percentageChange = (fees * PRECISION)/netCDSPoolValue;
         uint128 currentCumulativeRate;
         if(treasury.noOfBorrowers() == 0){
-            currentCumulativeRate = (1 * 1e12) + percentageChange;
+            currentCumulativeRate = (1 * PRECISION) + percentageChange;
             lastCumulativeRate = currentCumulativeRate;
         }else{
-            currentCumulativeRate = lastCumulativeRate * ((1 * 1e12) + percentageChange);
-            lastCumulativeRate = (currentCumulativeRate/1e12);
+            currentCumulativeRate = lastCumulativeRate * ((1 * PRECISION) + percentageChange);
+            lastCumulativeRate = (currentCumulativeRate/PRECISION);
         }
         return currentCumulativeRate;
     }
