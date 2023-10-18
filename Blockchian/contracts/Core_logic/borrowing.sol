@@ -388,17 +388,18 @@ contract Borrowing is Ownable {
 
         // Calculate borrower's debt 
         uint256 borrowerDebt = ((depositDetail.normalizedAmount * calculateCumulativeRate())/RATE_PRECISION)/RATE_PRECISION;
-        uint128 liquidationAmountNeeded = (depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/1e2;
         
         uint128 returnToTreasury = uint128(borrowerDebt) /*+ uint128 fees*/;
-        uint128 returnToDirac = ((liquidationAmountNeeded - returnToTreasury)*10)/100;
-        uint128 cdsProfits = ((liquidationAmountNeeded - returnToTreasury)*90)/100;
+        uint128 returnToDirac = ((((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/100) - returnToTreasury) * 10)/100;
+        uint128 cdsProfits = ((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/100) - returnToTreasury - returnToDirac;
+        uint128 liquidationAmountNeeded = returnToTreasury + returnToDirac;
 
         CDSInterface.LiquidationInfo memory liquidationInfo;
         liquidationInfo = CDSInterface.LiquidationInfo(liquidationAmountNeeded,cdsProfits,depositDetail.depositedAmount,cds.totalAvailableLiquidationAmount());
 
         cds.updateLiquidationInfo(noOfLiquidations,liquidationInfo);
-        cds.updateTotalAvailableLiquidationAmount(liquidationAmountNeeded - cdsProfits);
+        cds.updateTotalCdsDepositedAmount(liquidationAmountNeeded);
+        cds.updateTotalAvailableLiquidationAmount(liquidationAmountNeeded);
         //Update totalInterestFromLiquidation
         uint256 totalInterestFromLiquidation = uint256(returnToTreasury - borrowerDebt + returnToDirac);
         treasury.updateTotalInterestFromLiquidation(totalInterestFromLiquidation);

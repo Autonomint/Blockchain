@@ -32,7 +32,10 @@ interface CDSInterface {
     function cdsCount() external returns(uint256);
     function totalAvailableLiquidationAmount() external returns(uint256);
 
+    function calculateCumulativeRate(uint128 fees) external returns(uint128);
+
     function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory);
     function updateTotalAvailableLiquidationAmount(uint256 amount) external;
     function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external;
+    function updateTotalCdsDepositedAmount(uint128 _amount) external;
 }
