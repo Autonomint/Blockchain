@@ -80,6 +80,8 @@ contract Treasury is Ownable{
         uint128 ethPriceAtWithdraw;
         uint64 withdrawTime;
         uint256 withdrawedUsdValue;
+
+        uint256 discountedPrice;
     }
 
     //Total Deposit to Aave/Compound
@@ -88,7 +90,9 @@ contract Treasury is Ownable{
         uint64 depositIndex;
         uint256 depositedAmount;
         uint256 totalCreditedTokens;
-        uint256 depositedUsdValue;       
+        uint256 depositedUsdValue;
+
+        uint256 cumulativeRate;       
     }
 
     enum Protocol{Aave,Compound}
@@ -243,6 +247,21 @@ contract Treasury is Ownable{
         uint64 count = protocolDeposit[Protocol.Aave].depositIndex;
         count += 1;
 
+        // Fixed-point arithmetic precision
+        uint256 precision = 1e18;
+
+        // If it's the first deposit, set the cumulative rate to precision (i.e., 1 in fixed-point representation).
+        if (count == 1) {
+            protocolDeposit[Protocol.Aave].cumulativeRate = precision; 
+        } else {
+            // Calculate the change in the credited amount relative to the total credited tokens so far.
+            uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * precision / protocolDeposit[Protocol.Aave].totalCreditedTokens;
+            // Update the cumulative rate using the calculated change.
+            protocolDeposit[Protocol.Aave].cumulativeRate = (precision + change) * protocolDeposit[Protocol.Aave].cumulativeRate / precision;
+        }
+        // Compute the discounted price of the deposit using the cumulative rate.
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].discountedPrice = share * precision / protocolDeposit[Protocol.Aave].cumulativeRate;
+
         //Assign depositIndex(number of times deposited)
         protocolDeposit[Protocol.Aave].depositIndex = count;
 
@@ -266,6 +285,40 @@ contract Treasury is Ownable{
         protocolDeposit[Protocol.Aave].totalCreditedTokens = creditedAmount;
 
         emit DepositToAave(count,share);
+    }
+
+    /**
+    * @dev Calculates the interest for a particular deposit based on its count for Aave.
+    * @param count The deposit index (or count) for which the interest needs to be calculated.
+    * @return interestValue The computed interest amount for the specified deposit.
+    */
+    function calculateInterestForDepositAave(uint64 count) external view returns (uint256) {
+        
+        // Ensure the provided count is within valid range
+        if(count > protocolDeposit[Protocol.Aave].depositIndex || count == 0) {
+            revert("Invalid count provided");
+        }
+
+        // Get the current credited amount from aToken
+        uint256 creditedAmount = aToken.balanceOf(address(this));
+
+        // Precision factor for fixed-point arithmetic
+        uint256 precision = 1e18;
+
+        // Calculate the change rate based on the difference between the current credited amount and the total credited tokens 
+        uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * precision / protocolDeposit[Protocol.Aave].totalCreditedTokens;
+
+        // Compute the current cumulative rate using the change and the stored cumulative rate
+        uint256 currentCumulativeRate = (precision + change) * protocolDeposit[Protocol.Aave].cumulativeRate / precision;
+        
+        // Calculate the present value of the deposit using the current cumulative rate and the stored discounted price for the deposit
+        uint256 presentValue = currentCumulativeRate * protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].discountedPrice / precision;
+
+        // Compute the interest by subtracting the original deposited amount from the present value
+        uint256 interestValue = presentValue - protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].depositedAmount;
+        
+        // Return the computed interest value
+        return interestValue;
     }
 
     /**
