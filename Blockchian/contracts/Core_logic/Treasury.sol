@@ -416,6 +416,34 @@ contract Treasury is Ownable{
         emit WithdrawFromCompound(index,amount);
     }
 
+    /**
+    * @dev Calculates the accrued interest for a specific deposit based on the cTokens credited.
+    *
+    * The function retrieves the deposit details for the given count and determines
+    * the interest accrued by comparing the equivalent ETH value of the cTokens at the
+    * current exchange rate with the original deposited ETH amount.
+    *
+    * Interest = ((cTokens credited * current exchange rate) / scaling factor) - original deposited ETH
+    *
+    * @param count The deposit index/count for which the interest needs to be calculated.
+    * @return The accrued interest for the specified deposit.
+    */
+    function getInterestForCompoundDeposit(uint64 count) external view returns (uint256) {
+        // Retrieve the deposit details for the specified count
+        EachDepositToProtocol storage deposit = protocolDeposit[Protocol.Compound].eachDepositToProtocol[count];
+        
+        // Obtain the current exchange rate from the Compound protocol
+        uint256 currentExchangeRate = cEther.exchangeRateCurrent();
+        
+        // Compute the equivalent ETH value of the cTokens at the current exchange rate
+        // Taking into account the fixed-point arithmetic (scaling factor of 1e18)
+        uint256 currentEquivalentEth = (deposit.tokensCredited * currentExchangeRate) / 1e18;
+
+        // Calculate the accrued interest by subtracting the original deposited ETH 
+        // amount from the current equivalent ETH value
+        return currentEquivalentEth - deposit.depositedAmount;
+    }
+
 
     // function getUserAccountData (address user) external view returns (BorrowerDetails memory){
     //     DepositDetails memory depositorAccountData;
