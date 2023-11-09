@@ -52,6 +52,7 @@ contract Treasury is Ownable{
         uint64 withdrawTime;
         uint128 pTokensAmount;
         uint64 strikePrice;
+        uint256 externalProtocolCount;
     }
 
     //Borrower Details
@@ -104,6 +105,10 @@ contract Treasury is Ownable{
     uint128 public noOfBorrowers;
     uint256 public totalInterest;
     uint256 public totalInterestFromLiquidation;
+
+    uint256 public externalProtocolDepositCount = 1;
+
+    mapping(uint256=>uint256) externalProtocolCountTotalValue;
 
     event Deposit(address indexed user,uint256 amount);
     event Withdraw(address indexed user,uint256 amount);
@@ -194,6 +199,11 @@ contract Treasury is Ownable{
         //Adding ethprice to struct
         borrowing[user].depositDetails[borrowerIndex].ethPriceAtDeposit = _ethPrice;
         
+        //having the count of the deposit done to Aave/Compound in batched
+        borrowing[user].depositDetails[borrowerIndex].externalProtocolCount = externalProtocolDepositCount;
+
+        externalProtocolCountTotalValue[externalProtocolDepositCount]+= (msg.value*1e18)/4;
+
         emit Deposit(user,msg.value);
         return (borrowing[user].hasDeposited,borrowerIndex);
     }
@@ -214,6 +224,13 @@ contract Treasury is Ownable{
         totalVolumeOfBorrowersAmountinWei -= amount;
         emit Withdraw(toAddress,_amount);
         return true;
+    }
+
+    //to increase the global external protocol count.
+    function increaseExternalProtocolCount() external {
+        uint256 aaveDepositIndex = protocolDeposit[Protocol.Aave].depositIndex;
+        uint256 compoundDepositIndex = protocolDeposit[Protocol.Compound].depositIndex;
+        externalProtocolDepositCount = aaveDepositIndex > compoundDepositIndex ? aaveDepositIndex : compoundDepositIndex;
     }
 
     /**
@@ -246,6 +263,8 @@ contract Treasury is Ownable{
 
         uint64 count = protocolDeposit[Protocol.Aave].depositIndex;
         count += 1;
+
+        externalProtocolDepositCount++;
 
         // Fixed-point arithmetic precision
         uint256 precision = 1e18;
@@ -292,7 +311,7 @@ contract Treasury is Ownable{
     * @param count The deposit index (or count) for which the interest needs to be calculated.
     * @return interestValue The computed interest amount for the specified deposit.
     */
-    function calculateInterestForDepositAave(uint64 count) external view returns (uint256) {
+    function calculateInterestForDepositAave(uint64 count) private view returns (uint256) {
         
         // Ensure the provided count is within valid range
         if(count > protocolDeposit[Protocol.Aave].depositIndex || count == 0) {
@@ -481,7 +500,7 @@ contract Treasury is Ownable{
     * @param count The deposit index/count for which the interest needs to be calculated.
     * @return The accrued interest for the specified deposit.
     */
-    function getInterestForCompoundDeposit(uint64 count) external view returns (uint256) {
+    function getInterestForCompoundDeposit(uint64 count) private view returns (uint256) {
         // Retrieve the deposit details for the specified count
         EachDepositToProtocol storage deposit = protocolDeposit[Protocol.Compound].eachDepositToProtocol[count];
         
@@ -495,6 +514,20 @@ contract Treasury is Ownable{
         // Calculate the accrued interest by subtracting the original deposited ETH 
         // amount from the current equivalent ETH value
         return currentEquivalentEth - deposit.depositedAmount;
+    }
+
+    function totalInterest(address depositor, uint index) external returns(uint256){
+        uint256 count = borrowing[depositor].depositDetails[index].externalProtocolCount;
+        // uint256 compoundInterest = getInterestForCompoundDeposit(count);
+        // uint256 aaveInterest = calculateInterestForDepositAave(count);
+
+        uint256 totalInterest = getInterestForCompoundDeposit(count) + calculateInterestForDepositAave(count);
+
+        uint256 totalValue = externalProtocolCountTotalValue[count]*1e18;
+        uint256 currentValue = borrowing[depositor].depositDetails[index].depositedAmount;
+        uint256 ratio = (totalValue/currentValue)/1e18;
+
+        return (ratio*totalInterest);
     }
 
 

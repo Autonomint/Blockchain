@@ -143,10 +143,10 @@ contract Borrowing is Ownable {
     }
 
     /**
-     * @dev This function takes ethPrice, depositTime, percentageOfEth and receivedType parameters to deposit eth into the contract and mint them back the Trinity tokens.
-     * @param _ethPrice get current eth price 
-     * @param _depositTime get unixtime stamp at the time of deposit 
-     */
+    @dev This function takes ethPrice, depositTime, percentageOfEth and receivedType parameters to deposit eth into the contract and mint them back the Trinity tokens.
+    @param _ethPrice get current eth price 
+    @param _depositTime get unixtime stamp at the time of deposit 
+    **/
 
     function depositTokens (uint128 _ethPrice,uint64 _depositTime) external payable {
         require(msg.value > 0, "Cannot deposit zero tokens");
@@ -203,12 +203,12 @@ contract Borrowing is Ownable {
     }
 
     /**
-     * @dev This function withdraw ETH.
-     * @param _toAddress The address to whom to transfer ETH.
-     * @param _index Index of the borrow
-     * @param _ethPrice Current ETH Price.
-     * @param _withdrawTime time right now
-     */
+    @dev This function withdraw ETH.
+    @param _toAddress The address to whom to transfer ETH.
+    @param _index Index of the borrow
+    @param _ethPrice Current ETH Price.
+    @param _withdrawTime time right now
+    **/
 
     function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime) external {
         // check is _toAddress in not a zero address and isContract address
