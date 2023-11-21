@@ -61,6 +61,9 @@ contract Borrowing is Ownable {
     uint128 RATIO_PRECISION = 1e4;
     uint128 RATE_PRECISION = 1e27;
 
+    event Deposit(uint64 index,uint256 depositedAmount,uint256 borrowAmount);
+    event Withdraw(uint256 borrowDebt,uint128 withdrawAmount,uint128 noOfAbond);
+
     constructor(
         address _tokenAddress,
         address _cds,
@@ -184,6 +187,7 @@ contract Borrowing is Ownable {
         totalNormalizedAmount += normalizedAmount;
         lastEthprice = uint128(_ethPrice);
         lastEventTime = uint128(block.timestamp);
+        emit Deposit(index,msg.value,borrowAmount);
     }
 
     function depositToAaveProtocol() external onlyOwner{
@@ -232,13 +236,13 @@ contract Borrowing is Ownable {
                     uint128 borrowingHealth = (_ethPrice * 10000) / depositDetail.ethPriceAtDeposit;
                     require(borrowingHealth > 8000,"BorrowingHealth is Low");
                     // Calculate th borrower's debt
-                    {uint256 borrowerDebt = ((depositDetail.normalizedAmount * calculateCumulativeRate())/RATE_PRECISION)/RATE_PRECISION;
+                    uint256 borrowerDebt = ((depositDetail.normalizedAmount * calculateCumulativeRate())/RATE_PRECISION)/RATE_PRECISION;
 
                     // Check whether the Borrower have enough Trinty
                     require(Trinity.balanceOf(msg.sender) >= borrowerDebt, "User balance is less than required");
                             
                     // Update the borrower's data
-                    depositDetail.ethPriceAtWithdraw = _ethPrice;
+                    {depositDetail.ethPriceAtWithdraw = _ethPrice;
                     depositDetail.withdrawTime = _withdrawTime;
                     depositDetail.withdrawNo = 1;
                     // Calculate interest for the borrower's debt
@@ -288,6 +292,7 @@ contract Borrowing is Ownable {
                 if(!sent){
                     revert Borrowing_WithdrawEthTransferFailed();
                 }
+                emit Withdraw(borrowerDebt,ethToReturn,depositDetail.pTokensAmount);
                 }// Check whether it is second withdraw
                 else if(depositDetail.withdrawNo == 1){
                     secondWithdraw(

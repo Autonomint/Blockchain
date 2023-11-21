@@ -65,6 +65,9 @@ contract CDS is Ownable{
     mapping (address => CdsDetails) public cdsDetails;
     mapping (uint128 liquidationIndex => LiquidationInfo) public liquidationIndexToInfo;
 
+    event Deposit(uint128 depositedAmint,uint64 index,uint128 liquidationAmount);
+    event Withdraw(uint128 withdrewAmint,uint128 withdrawETH);
+
     constructor(address _trinity,address priceFeed) {
         Trinity_token = ITrinityToken(_trinity); // _trinity token contract address
         dataFeed = AggregatorV3Interface(priceFeed);
@@ -175,7 +178,7 @@ contract CDS is Ownable{
         if(ethPrice != lastEthPrice){
             updateLastEthPrice(ethPrice);
         }
-        
+       emit Deposit(_amount,index,_liquidationAmount);
     }
 
     function withdraw(uint64 _index) public {
@@ -233,17 +236,18 @@ contract CDS is Ownable{
             bool success = Trinity_token.transferFrom(treasuryAddress,msg.sender, returnAmountWithGains); // transfer amount to msg.sender
             require(success == true, "Transsuccessed in cds withdraw");
             treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
+            emit Withdraw(returnAmountWithGains,ethAmount);
         }else{
             // Trinity_token.approve(msg.sender, returnAmount);
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
             bool transfer = Trinity_token.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
             require(transfer == true, "Transfer failed in cds withdraw");
+            emit Withdraw(returnAmount,0);
         }
 
         if(ethPrice != lastEthPrice){
             updateLastEthPrice(ethPrice);
         }
-
     }
    
 
