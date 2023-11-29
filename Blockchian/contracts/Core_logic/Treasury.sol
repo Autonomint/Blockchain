@@ -134,8 +134,13 @@ contract Treasury is Ownable{
         require( msg.sender == borrowingContract, "This function can only called by borrowing contract");
         _;
     }
+
     modifier onlyCDSContract() {
         require( msg.sender == cdsContract, "This function can only called by CDS contract");
+        _;
+    }
+    modifier onlyCDSOrBorrowingContract() {
+        require( (msg.sender == cdsContract) || (msg.sender == borrowingContract), "This function can only called by Borrowing or CDS contract");
         _;
     }
 
@@ -205,7 +210,11 @@ contract Treasury is Ownable{
         if(borrowing[borrower].depositDetails[index].withdrawNo == 1){
             borrowing[borrower].totalBorrowedAmount -= borrowing[borrower].depositDetails[index].borrowedAmount;
         }
+        if(borrowing[borrower].depositedAmount == 0){
+            --noOfBorrowers;
+        }
         borrowing[borrower].depositDetails[index].withdrawAmount += uint128(amount);
+        borrow.updateLastEthVaultValue(_ethPrice * amount);
         totalVolumeOfBorrowersAmountinUSD -= (_ethPrice * amount);
         totalVolumeOfBorrowersAmountinWei -= amount;
         emit Withdraw(toAddress,_amount);
@@ -468,7 +477,7 @@ contract Treasury is Ownable{
             borrowing[depositor].depositDetails[index]);
     }
 
-    function approval(address _address, uint _amount) external onlyCDSContract{
+    function approval(address _address, uint _amount) external onlyCDSOrBorrowingContract{
         require(_address != address(0) && _amount != 0, "Input address or amount is invalid");
         bool state = trinity.approve(_address, _amount);
         require(state == true, "Approve failed");

@@ -103,7 +103,7 @@ contract CDS is Ownable{
 
     function deposit(uint128 _amount,bool _liquidate,uint128 _liquidationAmount) public {
         require(_amount != 0, "Deposit amount should not be zero"); // check _amount not zero
-        require(
+require(
             _liquidationAmount < _amount,
             "Liquidation amount can't greater than deposited amount"
         );
@@ -162,7 +162,7 @@ contract CDS is Ownable{
         cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = uint64(block.timestamp);
         cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount = ((_amount * PRECISION)/lastCumulativeRate);
        
-        cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(ethPrice);
+        //cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(ethPrice);
         cdsDetails[msg.sender].cdsAccountDetails[index].optedLiquidation = _liquidate;
         if(_liquidate){
             if(borrowing.noOfLiquidations() == 0){
@@ -178,7 +178,7 @@ contract CDS is Ownable{
         if(ethPrice != lastEthPrice){
             updateLastEthPrice(ethPrice);
         }
-       emit Deposit(_amount,index,_liquidationAmount);
+        emit Deposit(_amount,index,_liquidationAmount);
     }
 
     function withdraw(uint64 _index) public {
@@ -193,9 +193,9 @@ contract CDS is Ownable{
         
         uint64 _withdrawTime = uint64(block.timestamp);
 
-        if (cdsDetails[msg.sender].cdsAccountDetails[_index].depositedTime + withdrawTimeLimit <= _withdrawTime) {
-            revert("cannot withdraw before the withdraw time limit");
-        }
+        // if (cdsDetails[msg.sender].cdsAccountDetails[_index].depositedTime + withdrawTimeLimit <= _withdrawTime) {
+        // revert("cannot withdraw before the withdraw time limit");
+        // }
 
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawed = true;
 
@@ -210,6 +210,7 @@ contract CDS is Ownable{
             cdsAmountToReturn(msg.sender,_index, ethPrice)+
             ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * lastCumulativeRate)/PRECISION)-(2*(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount));
 
+        cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedTime =  _withdrawTime;
 
         if(cdsDetails[msg.sender].cdsAccountDetails[_index].optedLiquidation){
@@ -233,6 +234,7 @@ contract CDS is Ownable{
             uint128 returnAmountWithGains = returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
             totalCdsDepositedAmount -= returnAmountWithGains;
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
+            treasury.approval(address(this),returnAmountWithGains);
             bool success = Trinity_token.transferFrom(treasuryAddress,msg.sender, returnAmountWithGains); // transfer amount to msg.sender
             require(success == true, "Transsuccessed in cds withdraw");
             treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
@@ -240,6 +242,7 @@ contract CDS is Ownable{
         }else{
             // Trinity_token.approve(msg.sender, returnAmount);
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
+            treasury.approval(address(this),returnAmount);
             bool transfer = Trinity_token.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
             require(transfer == true, "Transfer failed in cds withdraw");
             emit Withdraw(returnAmount,0);
@@ -255,9 +258,8 @@ contract CDS is Ownable{
    //The function will deduct some amount of ether if it is borrowed
    //Deduced amount will be calculated using the percentage of CDS a user owns
    function cdsAmountToReturn(address _user, uint64 index, uint128 _ethPrice) internal view returns(uint128){
-        
 
-        uint128 withdrawalVal = calculateValue(_ethPrice);
+        uint128 withdrawalVal; /*= calculateValue(_ethPrice);*/
         uint128 depositVal = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
 
         if(withdrawalVal <= depositVal){
@@ -274,7 +276,7 @@ contract CDS is Ownable{
 
             uint128 safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
             uint128 toReturn = (safeAmountInCDS * valDiff) / 1000;
-
+            
             return (toReturn + safeAmountInCDS);
         }
         
@@ -284,10 +286,6 @@ contract CDS is Ownable{
     function setWithdrawTimeLimit(uint64 _timeLimit) external onlyOwner {
         require(_timeLimit != 0, "Withdraw time limit can't be zero");
         withdrawTimeLimit = _timeLimit;
-    }
-
-    function approval(address _address, uint _amount) external onlyOwner{
-        treasury.approval(_address,_amount);
     }
 
     function setBorrowingContract(address _address) external onlyOwner {
@@ -335,8 +333,8 @@ contract CDS is Ownable{
         return currentCumulativeRate;
     }
 
-    function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory){
-        return cdsDetails[depositor].cdsAccountDetails[index];
+    function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory,uint64){
+        return (cdsDetails[depositor].cdsAccountDetails[index],cdsDetails[depositor].index);
     }
 
     function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external {

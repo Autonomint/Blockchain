@@ -56,12 +56,15 @@ contract Borrowing is Ownable {
     uint256 public lastCumulativeRate;
     uint128 private lastEventTime;
     uint128 public noOfLiquidations;
+    uint256 public totalAmintSupply;
+    uint256 public totalDiracSupply;
 
     uint128 PRECISION = 1e6;
+    uint128 CUMULATIVE_PRECISION = 1e7;
     uint128 RATIO_PRECISION = 1e4;
     uint128 RATE_PRECISION = 1e27;
 
-    event Deposit(uint64 index,uint256 depositedAmount,uint256 borrowAmount);
+    event Deposit(uint64 index,uint256 depositedAmount,uint256 borrowAmount,uint256 normalizedAmount);
     event Withdraw(uint256 borrowDebt,uint128 withdrawAmount,uint128 noOfAbond);
 
     constructor(
@@ -83,6 +86,10 @@ contract Borrowing is Ownable {
         require(msg.sender == admin);
         _;
     }
+    modifier onlyTreasury(){
+        require(msg.sender == treasuryAddress);
+        _;
+    }
 
     // Function to check if an address is a contract
     function isContract(address addr) internal view returns (bool) {
@@ -101,6 +108,10 @@ contract Borrowing is Ownable {
     function setOptions(address _options) external onlyOwner{
         require(_options != address(0) && isContract(_options) != false, "Options must be contract address & can't be zero address");
         options = IOptions(_options);
+    }
+    function setAdmin(address _admin) external onlyOwner{
+        require(_admin != address(0) && isContract(_admin) != true, "Admin can't be contract address & zero address");
+        admin = _admin;    
     }
 
     /**
@@ -126,6 +137,7 @@ contract Borrowing is Ownable {
         if(!minted){
             revert Borrowing_MUSDMintFailed();
         }
+        totalAmintSupply = Trinity.totalSupply();
         return tokensToLend;
     }
 
@@ -142,6 +154,7 @@ contract Borrowing is Ownable {
         if(!minted){
             revert Borrowing_pTokenMintFailed();
         }
+        totalDiracSupply = protocolToken.totalSupply();
         return amount;
     }
 
@@ -151,13 +164,13 @@ contract Borrowing is Ownable {
      * @param _depositTime get unixtime stamp at the time of deposit 
      */
 
-    function depositTokens (uint128 _ethPrice,uint64 _depositTime) external payable {
+    function depositTokens (uint128 _ethPrice,uint64 _depositTime,uint64 _strikePrice) external payable {
         require(msg.value > 0, "Cannot deposit zero tokens");
         require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
 
         //Call calculateInverseOfRatio function to find ratio
         uint64 ratio = _calculateRatio(msg.value,uint128(_ethPrice));
-        require(ratio < (5 * RATIO_PRECISION),"Not enough fund in CDS");
+        require(ratio >= (2 * RATIO_PRECISION),"Not enough fund in CDS");
         
         //Call the deposit function in Treasury contract
         (bool deposited,uint64 index) = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
@@ -181,13 +194,14 @@ contract Borrowing is Ownable {
         uint256 normalizedAmount = (borrowAmount * RATE_PRECISION * RATE_PRECISION)/currentCumulativeRate;
 
         depositDetail.normalizedAmount = uint128(normalizedAmount);
+        depositDetail.strikePrice = _strikePrice;
         treasury.updateDepositDetails(msg.sender,index,depositDetail);
 
         // Calculate normalizedAmount of Protocol
         totalNormalizedAmount += normalizedAmount;
         lastEthprice = uint128(_ethPrice);
         lastEventTime = uint128(block.timestamp);
-        emit Deposit(index,msg.value,borrowAmount);
+        emit Deposit(index,msg.value,borrowAmount,normalizedAmount);
     }
 
     function depositToAaveProtocol() external onlyOwner{
@@ -236,8 +250,8 @@ contract Borrowing is Ownable {
                     uint128 borrowingHealth = (_ethPrice * 10000) / depositDetail.ethPriceAtDeposit;
                     require(borrowingHealth > 8000,"BorrowingHealth is Low");
                     // Calculate th borrower's debt
-                    uint256 borrowerDebt = ((depositDetail.normalizedAmount * calculateCumulativeRate())/RATE_PRECISION)/RATE_PRECISION;
-
+                    uint256 borrowerDebt = ((depositDetail.normalizedAmount * lastCumulativeRate)/RATE_PRECISION);
+                    lastCumulativeRate = calculateCumulativeRate()/RATE_PRECISION;
                     // Check whether the Borrower have enough Trinty
                     require(Trinity.balanceOf(msg.sender) >= borrowerDebt, "User balance is less than required");
                             
@@ -292,6 +306,8 @@ contract Borrowing is Ownable {
                 if(!sent){
                     revert Borrowing_WithdrawEthTransferFailed();
                 }
+                totalAmintSupply = Trinity.totalSupply();
+                totalDiracSupply = protocolToken.totalSupply();
                 emit Withdraw(borrowerDebt,ethToReturn,depositDetail.pTokensAmount);
                 }// Check whether it is second withdraw
                 else if(depositDetail.withdrawNo == 1){
@@ -302,6 +318,8 @@ contract Borrowing is Ownable {
                         depositDetail.withdrawTime,
                         depositDetail.pTokensAmount,
                         depositDetail.withdrawAmount);
+                    totalAmintSupply = Trinity.totalSupply();
+                    totalDiracSupply = protocolToken.totalSupply();
                 }else{
                     // update withdrawed to true
                     revert("User already withdraw entire amount");
@@ -392,13 +410,13 @@ contract Borrowing is Ownable {
         depositDetail.liquidated = true;
 
         // Calculate borrower's debt 
-        uint256 borrowerDebt = ((depositDetail.normalizedAmount * calculateCumulativeRate())/RATE_PRECISION)/RATE_PRECISION;
-        
+        uint256 borrowerDebt = ((depositDetail.normalizedAmount * lastCumulativeRate)/RATE_PRECISION);
+        lastCumulativeRate = calculateCumulativeRate()/RATE_PRECISION;
         uint128 returnToTreasury = uint128(borrowerDebt) /*+ uint128 fees*/;
         uint128 returnToDirac = ((((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/100) - returnToTreasury) * 10)/100;
         uint128 cdsProfits = ((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/100) - returnToTreasury - returnToDirac;
         uint128 liquidationAmountNeeded = returnToTreasury + returnToDirac;
-
+        
         CDSInterface.LiquidationInfo memory liquidationInfo;
         liquidationInfo = CDSInterface.LiquidationInfo(liquidationAmountNeeded,cdsProfits,depositDetail.depositedAmount,cds.totalAvailableLiquidationAmount());
 
@@ -411,11 +429,12 @@ contract Borrowing is Ownable {
         treasury.updateDepositDetails(borrower,index,depositDetail);
 
         // Burn the borrow amount
+        treasury.approval(address(this),depositDetail.borrowedAmount);
         bool success = Trinity.burnFromUser(treasuryAddress, depositDetail.borrowedAmount);
         if(!success){
             revert Borrowing_LiquidateBurnFailed();
         }
-
+        totalAmintSupply = Trinity.totalSupply();
         // Transfer ETH to CDS Pool
     }
 
@@ -427,6 +446,15 @@ contract Borrowing is Ownable {
 
     function setLTV(uint8 _LTV) external onlyOwner {
         LTV = _LTV;
+    }
+
+    function getLTV() public view returns(uint8){
+        return LTV;
+    }
+
+    function updateLastEthVaultValue(uint256 _amount) external onlyTreasury{
+        require(_amount != 0,"Last ETH vault value can't be zero");
+        lastEthVaultValue -= _amount;
     }
 
     function _calculateRatio(uint256 _amount,uint currentEthPrice) internal returns(uint64){
@@ -489,7 +517,7 @@ contract Borrowing is Ownable {
 
         // Calculate ratio by dividing currentEthVaultValue by currentCDSPoolValue,
         // since it may return in decimals we multiply it by 1e6
-        uint64 ratio = uint64((currentCDSPoolValue * PRECISION)/currentEthVaultValue);
+        uint64 ratio = uint64((currentCDSPoolValue * CUMULATIVE_PRECISION)/currentEthVaultValue);
         return ratio;
     }
 
