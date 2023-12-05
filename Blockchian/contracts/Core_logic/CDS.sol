@@ -285,23 +285,23 @@ contract CDS is Ownable{
             uint128 valDiff = depositVal - withdrawalVal;
 
             uint128 safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
-            uint128 loss = (safeAmountInCDS * valDiff) / 1000;
+            uint128 loss = (safeAmountInCDS * valDiff) / 1e5;
 
-            return (safeAmountInCDS - loss)/100;
+            return (safeAmountInCDS - loss);
         }
 
         else{
             uint128 valDiff = withdrawalVal - depositVal;
 
             uint128 safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
-            uint128 toReturn = (safeAmountInCDS * valDiff) / 1000;
+            uint128 toReturn = (safeAmountInCDS * valDiff) / 1e5;
             
-            return (toReturn + safeAmountInCDS)/100;
+            return (toReturn + safeAmountInCDS);
         }
         
    }
 
-    function redeemUSDT(uint128 _amintAmount,uint8 amintPrice,uint8 usdtPrice) public{
+    function redeemUSDT(uint128 _amintAmount,uint64 amintPrice,uint64 usdtPrice) public{
         require(_amintAmount != 0,"Amount should not be zero");
 
         require(Trinity_token.balanceOf(msg.sender) >= _amintAmount,"Insufficient balance");
