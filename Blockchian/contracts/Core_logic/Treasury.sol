@@ -28,6 +28,7 @@ contract Treasury is Ownable{
     ITrinityToken public trinity;
     IWrappedTokenGatewayV3 public wethGateway;
     IPoolAddressesProvider public aavePoolAddressProvider;
+    IERC20 public usdt;
     IATOKEN public aToken;
     ICEther public cEther;
 
@@ -116,7 +117,8 @@ contract Treasury is Ownable{
         address _wethGateway,
         address _cEther,
         address _aavePoolAddressProvider,
-        address _aToken
+        address _aToken,
+        address _usdt
         ) {
             borrowingContract = _borrowing;
             cdsContract = _cdsContract;
@@ -128,6 +130,7 @@ contract Treasury is Ownable{
             aavePoolAddressProvider = IPoolAddressesProvider(_aavePoolAddressProvider);  //0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
             aToken = IATOKEN(_aToken);                                                   //0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
             aaveWETH = _wethGateway;
+            usdt = IERC20(_usdt);
     }
 
     modifier onlyBorrowingContract() {
@@ -477,9 +480,15 @@ contract Treasury is Ownable{
             borrowing[depositor].depositDetails[index]);
     }
 
-    function approval(address _address, uint _amount) external onlyCDSOrBorrowingContract{
+    function approveAmint(address _address, uint _amount) external onlyCDSOrBorrowingContract{
         require(_address != address(0) && _amount != 0, "Input address or amount is invalid");
         bool state = trinity.approve(_address, _amount);
+        require(state == true, "Approve failed");
+    }
+
+    function approveUsdt(address _address, uint _amount) external onlyCDSContract{
+        require(_address != address(0) && _amount != 0, "Input address or amount is invalid");
+        bool state = usdt.approve(_address, _amount);
         require(state == true, "Approve failed");
     }
 

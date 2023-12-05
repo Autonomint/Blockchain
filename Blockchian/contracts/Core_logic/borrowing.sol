@@ -429,7 +429,7 @@ contract Borrowing is Ownable {
         treasury.updateDepositDetails(borrower,index,depositDetail);
 
         // Burn the borrow amount
-        treasury.approval(address(this),depositDetail.borrowedAmount);
+        treasury.approveAmint(address(this),depositDetail.borrowedAmount);
         bool success = Trinity.burnFromUser(treasuryAddress, depositDetail.borrowedAmount);
         if(!success){
             revert Borrowing_LiquidateBurnFailed();

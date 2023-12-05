@@ -5,6 +5,7 @@ pragma solidity 0.8.18;
 // import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interface/ITrinityToken.sol";
 import "../interface/IBorrowing.sol";
 import "../interface/ITreasury.sol";
@@ -19,6 +20,7 @@ contract CDS is Ownable{
     IBorrowing public borrowing;
     ITreasury public treasury;
     AggregatorV3Interface internal dataFeed;
+    IERC20 public usdt;
 
     address public borrowingContract;
 
@@ -32,6 +34,8 @@ contract CDS is Ownable{
     uint128 public totalCdsDepositedAmount;
     uint256 public totalAvailableLiquidationAmount;
     uint128 public lastCumulativeRate;
+    uint8 public amintLimit;
+    uint256 public usdtAmountDepositedTillNow;
     uint128 public PRECISION = 1e12;
 
     struct CdsAccountDetails {
@@ -68,8 +72,9 @@ contract CDS is Ownable{
     event Deposit(uint128 depositedAmint,uint64 index,uint128 liquidationAmount);
     event Withdraw(uint128 withdrewAmint,uint128 withdrawETH);
 
-    constructor(address _trinity,address priceFeed) {
+    constructor(address _trinity,address priceFeed,address _usdt) {
         Trinity_token = ITrinityToken(_trinity); // _trinity token contract address
+        usdt = IERC20(_usdt);
         dataFeed = AggregatorV3Interface(priceFeed);
         lastEthPrice = getLatestData();
         lastCumulativeRate = PRECISION;
@@ -89,7 +94,7 @@ contract CDS is Ownable{
             /*uint80 answeredInRound*/
         ) = dataFeed.latestRoundData();
         uint temp = uint(answer);
-        return uint128(temp);
+        return uint128(temp/1e6);
     }
 
     function updateLastEthPrice(uint128 priceAtEvent) internal {
@@ -101,29 +106,43 @@ contract CDS is Ownable{
         return account.code.length > 0;
     }
 
-    function deposit(uint128 _amount,bool _liquidate,uint128 _liquidationAmount) public {
-        require(_amount != 0, "Deposit amount should not be zero"); // check _amount not zero
-require(
-            _liquidationAmount < _amount,
+    function deposit(uint128 usdtAmount,uint128 amintAmount,bool _liquidate,uint128 _liquidationAmount) public {
+        uint128 totalDepositingAmount = usdtAmount + amintAmount;
+        require(totalDepositingAmount != 0, "Deposit amount should not be zero"); // check _amount not zero
+        require(
+            _liquidationAmount < (usdtAmount + amintAmount),
             "Liquidation amount can't greater than deposited amount"
         );
-        require(
-            Trinity_token.balanceOf(msg.sender) >= _amount,
-            "Insufficient balance with msg.sender"
-        ); // check if user has sufficient trinity token
 
-        require(
-            Trinity_token.allowance(msg.sender,address(this)) >= _amount,
-            "Insufficient allowance"
-        ); // check if user has sufficient trinity token allowance
+        if(usdtAmountDepositedTillNow < 20000 ether){
+            require(usdtAmount == totalDepositingAmount,'100% of amount must be USDT');
+        }else{
+            require(amintAmount >= (amintLimit * totalDepositingAmount)/100,"Insufficient AMINT amount");
+            require(Trinity_token.balanceOf(msg.sender) >= amintAmount,"Insufficient balance with msg.sender"); // check if user has sufficient trinity token
+        }
+        if(usdtAmount != 0 && amintAmount != 0){
+            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient balance with msg.sender"); // check if user has sufficient trinity token
+            bool usdtTransfer = usdt.transferFrom(msg.sender, treasuryAddress, usdtAmount); // transfer amount to this contract
+            require(usdtTransfer == true, "Transfer failed in CDS deposit");
+            //Transfer trinity tokens from msg.sender to this contract
+            bool amintTransfer = Trinity_token.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract       
+            require(amintTransfer == true, "Transfer failed in CDS deposit");
+        }else if(usdtAmount == 0){
+            bool transfer = Trinity_token.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract
+            //check it token have successfully transfer or not
+            require(transfer == true, "Transfer failed in CDS deposit");
+        }else{
+            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient balance with msg.sender"); // check if user has sufficient trinity token
+            bool transfer = usdt.transferFrom(msg.sender, treasuryAddress, usdtAmount); // transfer amount to this contract
+            //check it token have successfully transfer or not
+            require(transfer == true, "Transfer failed in CDS deposit");
+        }
 
-
-
-        //Transfer trinity tokens from msg.sender to this contract
-        bool transfer = Trinity_token.transferFrom(msg.sender, treasuryAddress, _amount); // transfer amount to this contract
-
-        //check it token have successfully transfer or not
-        require(transfer == true, "Transfer failed in CDS deposit");
+        usdtAmountDepositedTillNow += usdtAmount;
+        if(usdtAmount != 0 ){
+            bool success = Trinity_token.mint(treasuryAddress,usdtAmount);
+            require(success == true, "Transfer failed in CDS deposit");
+        }
 
         uint128 ethPrice = getLatestData();
 
@@ -150,19 +169,19 @@ require(
         }
 
         //add deposited amount of msg.sender of the perticular index in cdsAccountDetails
-        cdsDetails[msg.sender].cdsAccountDetails[index].depositedAmount = _amount;
+        cdsDetails[msg.sender].cdsAccountDetails[index].depositedAmount = totalDepositingAmount;
 
         //storing current ETH/USD rate
         cdsDetails[msg.sender].cdsAccountDetails[index].depositPrice = ethPrice;
 
         //add deposited amount to totalCdsDepositedAmount
-        totalCdsDepositedAmount += _amount;
+        totalCdsDepositedAmount += totalDepositingAmount;
         
         //add deposited time of perticular index and amount in cdsAccountDetails
         cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = uint64(block.timestamp);
-        cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount = ((_amount * PRECISION)/lastCumulativeRate);
+        cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount = ((totalDepositingAmount * PRECISION)/lastCumulativeRate);
        
-        //cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(ethPrice);
+        cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(ethPrice);
         cdsDetails[msg.sender].cdsAccountDetails[index].optedLiquidation = _liquidate;
         if(_liquidate){
             if(borrowing.noOfLiquidations() == 0){
@@ -178,7 +197,7 @@ require(
         if(ethPrice != lastEthPrice){
             updateLastEthPrice(ethPrice);
         }
-        emit Deposit(_amount,index,_liquidationAmount);
+        emit Deposit(totalDepositingAmount,index,_liquidationAmount);
     }
 
     function withdraw(uint64 _index) public {
@@ -209,7 +228,7 @@ require(
         uint128 returnAmount = 
             cdsAmountToReturn(msg.sender,_index, ethPrice)+
             ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * lastCumulativeRate)/PRECISION)-(2*(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount));
-
+        
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedTime =  _withdrawTime;
 
@@ -234,7 +253,7 @@ require(
             uint128 returnAmountWithGains = returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
             totalCdsDepositedAmount -= returnAmountWithGains;
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
-            treasury.approval(address(this),returnAmountWithGains);
+            treasury.approveAmint(address(this),returnAmountWithGains);
             bool success = Trinity_token.transferFrom(treasuryAddress,msg.sender, returnAmountWithGains); // transfer amount to msg.sender
             require(success == true, "Transsuccessed in cds withdraw");
             treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
@@ -242,7 +261,7 @@ require(
         }else{
             // Trinity_token.approve(msg.sender, returnAmount);
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
-            treasury.approval(address(this),returnAmount);
+            treasury.approveAmint(address(this),returnAmount);
             bool transfer = Trinity_token.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
             require(transfer == true, "Transfer failed in cds withdraw");
             emit Withdraw(returnAmount,0);
@@ -259,7 +278,7 @@ require(
    //Deduced amount will be calculated using the percentage of CDS a user owns
    function cdsAmountToReturn(address _user, uint64 index, uint128 _ethPrice) internal view returns(uint128){
 
-        uint128 withdrawalVal; /*= calculateValue(_ethPrice);*/
+        uint128 withdrawalVal = calculateValue(_ethPrice);
         uint128 depositVal = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
 
         if(withdrawalVal <= depositVal){
@@ -268,7 +287,7 @@ require(
             uint128 safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
             uint128 loss = (safeAmountInCDS * valDiff) / 1000;
 
-            return (safeAmountInCDS - loss);
+            return (safeAmountInCDS - loss)/100;
         }
 
         else{
@@ -277,11 +296,24 @@ require(
             uint128 safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
             uint128 toReturn = (safeAmountInCDS * valDiff) / 1000;
             
-            return (toReturn + safeAmountInCDS);
+            return (toReturn + safeAmountInCDS)/100;
         }
         
    }
 
+    function redeemUSDT(uint128 _amintAmount,uint8 amintPrice,uint8 usdtPrice) public{
+        require(_amintAmount != 0,"Amount should not be zero");
+
+        require(Trinity_token.balanceOf(msg.sender) >= _amintAmount,"Insufficient balance");
+        bool transfer = Trinity_token.transferFrom(msg.sender,treasuryAddress,_amintAmount);
+        require(transfer == true, "Trinity Transfer failed in redeemUSDT");
+
+        uint128 _usdtAmount = (amintPrice * _amintAmount/usdtPrice);  
+          
+        treasury.approveUsdt(address(this),_usdtAmount);
+        bool success = usdt.transferFrom(treasuryAddress,msg.sender,_usdtAmount);
+        require(success == true, "USDT Transfer failed in redeemUSDT");
+    }
 
     function setWithdrawTimeLimit(uint64 _timeLimit) external onlyOwner {
         require(_timeLimit != 0, "Withdraw time limit can't be zero");
@@ -300,10 +332,15 @@ require(
         treasury = ITreasury(_treasury);
     }
 
+    function setAmintLimit(uint8 percent) external onlyOwner{
+        require(percent != 0, "Amint limit can't be zero");
+        amintLimit = percent;  
+    }
+
     function calculateValue(uint128 _price) internal view returns(uint128) {
         uint128 _amount = 1000;
         uint128 treasuryBal = uint128(Trinity_token.balanceOf(treasuryAddress));
-        uint128 vaultBal = uint128(address(this).balance);
+        uint128 vaultBal = uint128(treasury.getBalanceInTreasury());
         uint128 priceDiff;
 
         if(_price != lastEthPrice){
@@ -322,6 +359,7 @@ require(
         uint128 netCDSPoolValue = totalCdsDepositedAmount + fees;
         totalCdsDepositedAmount += fees;
         uint128 percentageChange = (fees * PRECISION)/netCDSPoolValue;
+        // console.log(percentageChange);
         uint128 currentCumulativeRate;
         if(treasury.noOfBorrowers() == 0){
             currentCumulativeRate = (1 * PRECISION) + percentageChange;
@@ -346,7 +384,7 @@ require(
     }
 
     function updateTotalCdsDepositedAmount(uint128 _amount) external{
-        totalCdsDepositedAmount += _amount;
+        totalCdsDepositedAmount -= _amount;
     }
 
     receive() external payable{}
