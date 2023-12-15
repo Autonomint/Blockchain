@@ -141,12 +141,12 @@ contract BorrowingTest is Ownable {
         return tokensToLend;
     }
 
-    function _mintPToken(address _toAddress,uint256 _amount) internal returns(uint128){
+    function _mintPToken(address _toAddress,uint256 _amount, uint64 _bondRatio) internal returns(uint128){
         require(_toAddress != address(0), "Borrower cannot be zero address");
         require(_amount != 0,"Amount can't be zero");
 
         // PToken:Trinity = 4:1
-        uint128 amount = (uint128(_amount) * 25)/100;
+        uint128 amount = (uint128(_amount) * 100)/(_bondRatio*100);
 
         //Call the mint function in ProtocolToken
         bool minted = protocolToken.mint(_toAddress,amount);
@@ -159,10 +159,10 @@ contract BorrowingTest is Ownable {
     }
 
     /**
-     * @dev This function takes ethPrice, depositTime, percentageOfEth and receivedType parameters to deposit eth into the contract and mint them back the Trinity tokens.
-     * @param _ethPrice get current eth price 
-     * @param _depositTime get unixtime stamp at the time of deposit 
-     */
+    @dev This function takes ethPrice, depositTime, percentageOfEth and receivedType parameters to deposit eth into the contract and mint them back the Trinity tokens.
+    @param _ethPrice get current eth price 
+    @param _depositTime get unixtime stamp at the time of deposit 
+    **/
 
     function depositTokens (uint128 _ethPrice,uint64 _depositTime,uint64 _strikePrice) external payable {
         require(msg.value > 0, "Cannot deposit zero tokens");
@@ -221,14 +221,14 @@ contract BorrowingTest is Ownable {
     }
 
     /**
-     * @dev This function withdraw ETH.
-     * @param _toAddress The address to whom to transfer ETH.
-     * @param _index Index of the borrow
-     * @param _ethPrice Current ETH Price.
-     * @param _withdrawTime time right now
-     */
+    @dev This function withdraw ETH.
+    @param _toAddress The address to whom to transfer ETH.
+    @param _index Index of the borrow
+    @param _ethPrice Current ETH Price.
+    @param _withdrawTime time right now
+    **/
 
-    function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime) external {
+    function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime, uint64 _bondRatio) external {
         // check is _toAddress in not a zero address and isContract address
         require(_toAddress != address(0) && isContract(_toAddress) != true, "To address cannot be a zero and contract address");
 
@@ -262,17 +262,20 @@ contract BorrowingTest is Ownable {
                     // Calculate interest for the borrower's debt
                     uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
 
+                    uint256 discountedETH = ((10*(depositDetail.depositedAmount))/100)*_ethPrice;
+
                     // Calculate the amount of Trinity to burn and sent to the treasury
-                    uint256 halfValue = (50 *(depositDetail.borrowedAmount))/100;
+                    // uint256 halfValue = (50 *(depositDetail.borrowedAmount))/100;
+                    uint256 burnValue = depositDetail.borrowedAmount - discountedETH;
 
                     // Burn the Trinity from the Borrower
-                    bool success = Trinity.burnFromUser(msg.sender, halfValue);
+                    bool success = Trinity.burnFromUser(msg.sender, burnValue);
                     if(!success){
                         revert Borrowing_WithdrawBurnFailed();
                     }
 
                     //Transfer the remaining Trinity to the treasury
-                    bool transfer = Trinity.transferFrom(msg.sender,treasuryAddress,halfValue);
+                    bool transfer = Trinity.transferFrom(msg.sender,treasuryAddress,discountedETH);
                     if(!transfer){
                         revert Borrowing_WithdrawMUSDTransferFailed();
                     }
@@ -281,7 +284,7 @@ contract BorrowingTest is Ownable {
                     treasury.updateTotalInterest(interest);
 
                     // Mint the pTokens
-                    uint128 noOfPTokensminted = _mintPToken(msg.sender,halfValue);
+                    uint128 noOfPTokensminted = _mintPToken(msg.sender,discountedETH, _bondRatio);
 
                     // Update PToken data
                     depositDetail.pTokensAmount = noOfPTokensminted;
@@ -421,7 +424,6 @@ contract BorrowingTest is Ownable {
         liquidationInfo = CDSInterface.LiquidationInfo(liquidationAmountNeeded,cdsProfits,depositDetail.depositedAmount,cds.totalAvailableLiquidationAmount());
 
         cds.updateLiquidationInfo(noOfLiquidations,liquidationInfo);
-        console.log('Liquidation amount needed',liquidationAmountNeeded);
         cds.updateTotalCdsDepositedAmount(liquidationAmountNeeded);
         cds.updateTotalAvailableLiquidationAmount(liquidationAmountNeeded);
         //Update totalInterestFromLiquidation
@@ -430,7 +432,7 @@ contract BorrowingTest is Ownable {
         treasury.updateDepositDetails(borrower,index,depositDetail);
 
         // Burn the borrow amount
-        treasury.approval(address(this),depositDetail.borrowedAmount);
+        treasury.approveAmint(address(this),depositDetail.borrowedAmount);
         bool success = Trinity.burnFromUser(treasuryAddress, depositDetail.borrowedAmount);
         if(!success){
             revert Borrowing_LiquidateBurnFailed();
