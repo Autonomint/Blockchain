@@ -3,6 +3,7 @@ export const cEther = "0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5";
 export const priceFeedAddress = "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419";
 export const aavePoolAddress = "0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e";
 export const aTokenAddress = "0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8";
+export const usdtTokenAddress = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
 
 export const INFURA_URL = "https://mainnet.infura.io/v3/e9cf275f1ddc4b81aa62c5aa0b11ac0f";
 

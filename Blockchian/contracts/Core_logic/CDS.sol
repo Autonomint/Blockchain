@@ -35,8 +35,10 @@ contract CDS is Ownable{
     uint256 public totalAvailableLiquidationAmount;
     uint128 public lastCumulativeRate;
     uint8 public amintLimit;
+    uint8 public usdtLimit;
     uint256 public usdtAmountDepositedTillNow;
     uint128 public PRECISION = 1e12;
+    uint64 public USDT_PRECISION = 1e6;
 
     struct CdsAccountDetails {
         uint64 depositedTime;
@@ -69,7 +71,7 @@ contract CDS is Ownable{
     mapping (address => CdsDetails) public cdsDetails;
     mapping (uint128 liquidationIndex => LiquidationInfo) public liquidationIndexToInfo;
 
-    event Deposit(uint128 depositedAmint,uint64 index,uint128 liquidationAmount);
+    event Deposit(uint128 depositedAmint,uint64 index,uint128 liquidationAmount,uint128 normalizedAmount,uint128 depositVal);
     event Withdraw(uint128 withdrewAmint,uint128 withdrawETH);
 
     constructor(address _trinity,address priceFeed,address _usdt) {
@@ -114,7 +116,7 @@ contract CDS is Ownable{
             "Liquidation amount can't greater than deposited amount"
         );
 
-        if(usdtAmountDepositedTillNow < 20000 ether){
+        if(usdtAmountDepositedTillNow < (usdtLimit*USDT_PRECISION)){
             require(usdtAmount == totalDepositingAmount,'100% of amount must be USDT');
         }else{
             require(amintAmount >= (amintLimit * totalDepositingAmount)/100,"Insufficient AMINT amount");
@@ -197,7 +199,7 @@ contract CDS is Ownable{
         if(ethPrice != lastEthPrice){
             updateLastEthPrice(ethPrice);
         }
-        emit Deposit(totalDepositingAmount,index,_liquidationAmount);
+        emit Deposit(totalDepositingAmount,index,_liquidationAmount,cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount,cdsDetails[msg.sender].cdsAccountDetails[index].depositValue);
     }
 
     function withdraw(uint64 _index) public {
@@ -335,6 +337,11 @@ contract CDS is Ownable{
     function setAmintLimit(uint8 percent) external onlyOwner{
         require(percent != 0, "Amint limit can't be zero");
         amintLimit = percent;  
+    }
+
+    function setUsdtLimit(uint8 amount) external onlyOwner{
+        require(amount != 0, "USDT limit can't be zero");
+        usdtLimit = amount;  
     }
 
     function calculateValue(uint128 _price) internal view returns(uint128) {

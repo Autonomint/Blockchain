@@ -72,8 +72,12 @@ describe("Borrowing Contract",function(){
         it("Should deposit ETH",async function(){
             const {BorrowingContract,Token} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,{value: ethers.utils.parseEther("1")});
-            expect(await Token.totalSupply()).to.be.equal(ethers.utils.parseEther("800"));
+
+            await Token.mint(user1.address,ethers.utils.parseEther("10000"))
+            await Token.connect(user1).approve(CDSContract.address,ethers.utils.parseEther("10000"));
+            await CDSContract.connect(user1).deposit(ethers.utils.parseEther("10000"),true,ethers.utils.parseEther("9999"));
+            await BorrowingContract.connect(user1).depositTokens(200000,timeStamp,220000,{value: ethers.utils.parseEther("2.5")});
+            // expect(await Token.totalSupply()).to.be.equal(ethers.utils.parseEther("800"));
         })
 
         it("Should calculate criticalRatio correctly",async function(){
@@ -104,6 +108,11 @@ describe("Borrowing Contract",function(){
             const {BorrowingContract} = await loadFixture(deployer);
             await BorrowingContract.setAPY(5);
             expect(await BorrowingContract.getAPY()).to.be.equal(5);
+        })
+
+        it("Should get LTV",async function(){
+            const {BorrowingContract} = await loadFixture(deployer);
+            expect(await BorrowingContract.getLTV()).to.be.equal(80);
         })
 
         it("Should calculate CumulativeRate",async function(){

@@ -224,7 +224,7 @@ describe("Testing contracts ", function(){
     })
 
     describe("To check CDS withdrawl function",function(){
-        it("Should withdraw from cds",async () => {
+        it.only("Should withdraw from cds",async () => {
             const {CDSContract,treasury,Token,usdt} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 

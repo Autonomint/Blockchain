@@ -2,11 +2,20 @@ import { ethers } from "hardhat";
 import hre = require("hardhat");
 
 import {
-  wethGateway,
-  cEther,
-  aTokenAddress,
-  priceFeedAddress,
-  aavePoolAddress} from"./index"
+  wethGatewayMumbai,
+  wethGatewaySepolia,
+  cEtherMumbai,
+  cEtherSepolia,
+  aTokenAddressMumbai,
+  aTokenAddressSepolia,
+  priceFeedAddressMumbai,
+  priceFeedAddressSepolia,
+  aavePoolAddressMumbai,
+  aavePoolAddressSepolia,
+  usdtTokenAddress
+  // deployedTrinityStablecoin.address,
+  // deployedProtocolToken.address
+} from"./index"
 
 async function main() {
   const TrinityStablecoin = await ethers.getContractFactory("TrinityStablecoin");
@@ -20,25 +29,32 @@ async function main() {
   console.log("DIRAC ADDRESS",deployedProtocolToken.address);
 
   const CDS = await ethers.getContractFactory("CDSTest");
-  const deployedCDS = await CDS.deploy(deployedTrinityStablecoin.address,priceFeedAddress);
+  const deployedCDS = await CDS.deploy(deployedTrinityStablecoin.address,priceFeedAddressMumbai);
   await deployedCDS.deployed();
   console.log("CDS ADDRESS",deployedCDS.address);
 
   const Borrowing = await ethers.getContractFactory("BorrowingTest");
-  const deployedBorrowing = await Borrowing.deploy(deployedTrinityStablecoin.address,deployedCDS.address,deployedProtocolToken.address,priceFeedAddress);
+  const deployedBorrowing = await Borrowing.deploy(deployedTrinityStablecoin.address,deployedCDS.address,deployedProtocolToken.address,priceFeedAddressMumbai);
   await deployedBorrowing.deployed();
   console.log("BORROWING ADDRESS",deployedBorrowing.address);
 
   const Treasury = await ethers.getContractFactory("Treasury");
-  const deployedTreasury = await Treasury.deploy(deployedBorrowing.address,deployedTrinityStablecoin.address,deployedCDS.address,wethGateway,cEther,aavePoolAddress,aTokenAddress);
+  const deployedTreasury = await Treasury.deploy(deployedBorrowing.address,deployedTrinityStablecoin.address,deployedCDS.address,wethGatewayMumbai,cEtherMumbai,aavePoolAddressMumbai,aTokenAddressMumbai);
   await deployedTreasury.deployed();
   console.log("TREASURY ADDRESS",deployedTreasury.address);
+
+  const options = await ethers.getContractFactory("Options");
+  const deployedOptions = await options.deploy();
+  await deployedOptions.deployed();
+  console.log("OPTIONS ADDRESS",deployedOptions.address);
+
+
 
   async function sleep(ms:number) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  await sleep(80 * 1000);
+  await sleep(30 * 1000);
 
   await hre.run("verify:verify", {
     address: deployedTrinityStablecoin.address,
@@ -53,19 +69,34 @@ async function main() {
   await hre.run("verify:verify", {
     address: deployedCDS.address,
     contract: "contracts/TestContracts/CopyCDS.sol:CDSTest",
-    constructorArguments: [deployedTrinityStablecoin.address,priceFeedAddress],
+    constructorArguments: [deployedTrinityStablecoin.address,priceFeedAddressMumbai],
   });
 
   await hre.run("verify:verify", {
     address: deployedBorrowing.address,
     contract: "contracts/TestContracts/CopyBorrowing.sol:BorrowingTest",
-    constructorArguments: [deployedTrinityStablecoin.address,deployedCDS.address,deployedProtocolToken.address,priceFeedAddress],
+    constructorArguments: [deployedTrinityStablecoin.address,deployedCDS.address,deployedProtocolToken.address,priceFeedAddressMumbai],
   });
 
   await hre.run("verify:verify", {
     address: deployedTreasury.address,
-    constructorArguments: [deployedBorrowing.address,deployedTrinityStablecoin.address,deployedCDS.address,wethGateway,cEther,aavePoolAddress,aTokenAddress],
+    constructorArguments: [deployedBorrowing.address,deployedTrinityStablecoin.address,deployedCDS.address,wethGatewayMumbai,cEtherMumbai,aavePoolAddressMumbai,aTokenAddressMumbai],
   });
+
+  await hre.run("verify:verify", {
+    address: deployedOptions.address,
+    constructorArguments: [],
+  });
+
+  //await deployedTreasury.setBorrowingContract(deployedBorrowing.address);
+  await deployedCDS.setBorrowingContract(deployedBorrowing.address);
+  await deployedCDS.setTreasury(deployedTreasury.address);
+  await deployedBorrowing.initializeTreasury(deployedTreasury.address);
+  await deployedBorrowing.setOptions(deployedOptions.address);
+
+  await deployedBorrowing.setAPY(5);
+  await deployedBorrowing.setLTV(80);
+  await deployedBorrowing.calculateCumulativeRate();
 }
 
 // We recommend this pattern to be able to use async/await everywhere
