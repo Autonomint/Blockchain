@@ -53,7 +53,7 @@ contract Treasury is Ownable{
         uint64 withdrawTime;
         uint128 pTokensAmount;
         uint64 strikePrice;
-        uint256 externalProtocolCount;
+        uint64 externalProtocolCount;
     }
 
     //Borrower Details
@@ -107,7 +107,7 @@ contract Treasury is Ownable{
     uint256 public totalInterest;
     uint256 public totalInterestFromLiquidation;
 
-    uint256 public externalProtocolDepositCount = 1;
+    uint64 public externalProtocolDepositCount = 1;
 
     mapping(uint256=>uint256) externalProtocolCountTotalValue;
 
@@ -240,8 +240,8 @@ contract Treasury is Ownable{
 
     //to increase the global external protocol count.
     function increaseExternalProtocolCount() external {
-        uint256 aaveDepositIndex = protocolDeposit[Protocol.Aave].depositIndex;
-        uint256 compoundDepositIndex = protocolDeposit[Protocol.Compound].depositIndex;
+        uint64 aaveDepositIndex = protocolDeposit[Protocol.Aave].depositIndex;
+        uint64 compoundDepositIndex = protocolDeposit[Protocol.Compound].depositIndex;
         externalProtocolDepositCount = aaveDepositIndex > compoundDepositIndex ? aaveDepositIndex : compoundDepositIndex;
     }
 
@@ -512,7 +512,7 @@ contract Treasury is Ownable{
     * @param count The deposit index/count for which the interest needs to be calculated.
     * @return The accrued interest for the specified deposit.
     */
-    function getInterestForCompoundDeposit(uint64 count) private view returns (uint256) {
+    function getInterestForCompoundDeposit(uint64 count) private returns (uint256) {
         // Retrieve the deposit details for the specified count
         EachDepositToProtocol storage deposit = protocolDeposit[Protocol.Compound].eachDepositToProtocol[count];
         
@@ -528,8 +528,8 @@ contract Treasury is Ownable{
         return currentEquivalentEth - deposit.depositedAmount;
     }
 
-    function totalInterest(address depositor, uint index) external returns(uint256){
-        uint256 count = borrowing[depositor].depositDetails[index].externalProtocolCount;
+    function totalInterestFromExternalProtocol(address depositor, uint64 index) external returns(uint256){
+        uint64 count = borrowing[depositor].depositDetails[index].externalProtocolCount;
         // uint256 compoundInterest = getInterestForCompoundDeposit(count);
         // uint256 aaveInterest = calculateInterestForDepositAave(count);
 
