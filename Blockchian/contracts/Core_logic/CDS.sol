@@ -183,7 +183,7 @@ contract CDS is Ownable{
         cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = uint64(block.timestamp);
         cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount = ((totalDepositingAmount * PRECISION)/lastCumulativeRate);
        
-        cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(ethPrice);
+        //cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(ethPrice);
         cdsDetails[msg.sender].cdsAccountDetails[index].optedLiquidation = _liquidate;
         if(_liquidate){
             if(borrowing.noOfLiquidations() == 0){
@@ -280,7 +280,7 @@ contract CDS is Ownable{
    //Deduced amount will be calculated using the percentage of CDS a user owns
    function cdsAmountToReturn(address _user, uint64 index, uint128 _ethPrice) internal view returns(uint128){
 
-        uint128 withdrawalVal = calculateValue(_ethPrice);
+        uint128 withdrawalVal; /*= calculateValue(_ethPrice);*/
         uint128 depositVal = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
 
         if(withdrawalVal <= depositVal){
