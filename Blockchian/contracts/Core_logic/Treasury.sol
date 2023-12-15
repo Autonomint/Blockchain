@@ -53,6 +53,7 @@ contract Treasury is Ownable{
         uint64 withdrawTime;
         uint128 pTokensAmount;
         uint64 strikePrice;
+        uint256 externalProtocolCount;
     }
 
     //Borrower Details
@@ -81,6 +82,8 @@ contract Treasury is Ownable{
         uint128 ethPriceAtWithdraw;
         uint64 withdrawTime;
         uint256 withdrawedUsdValue;
+
+        uint256 discountedPrice;
     }
 
     //Total Deposit to Aave/Compound
@@ -89,7 +92,9 @@ contract Treasury is Ownable{
         uint64 depositIndex;
         uint256 depositedAmount;
         uint256 totalCreditedTokens;
-        uint256 depositedUsdValue;       
+        uint256 depositedUsdValue;
+
+        uint256 cumulativeRate;       
     }
 
     enum Protocol{Aave,Compound}
@@ -101,6 +106,10 @@ contract Treasury is Ownable{
     uint128 public noOfBorrowers;
     uint256 public totalInterest;
     uint256 public totalInterestFromLiquidation;
+
+    uint256 public externalProtocolDepositCount = 1;
+
+    mapping(uint256=>uint256) externalProtocolCountTotalValue;
 
     event Deposit(address indexed user,uint256 amount);
     event Withdraw(address indexed user,uint256 amount);
@@ -198,6 +207,11 @@ contract Treasury is Ownable{
         //Adding ethprice to struct
         borrowing[user].depositDetails[borrowerIndex].ethPriceAtDeposit = _ethPrice;
         
+        //having the count of the deposit done to Aave/Compound in batched
+        borrowing[user].depositDetails[borrowerIndex].externalProtocolCount = externalProtocolDepositCount;
+
+        externalProtocolCountTotalValue[externalProtocolDepositCount]+= (msg.value*1e18)/4;
+
         emit Deposit(user,msg.value);
         return (borrowing[user].hasDeposited,borrowerIndex);
     }
@@ -222,6 +236,13 @@ contract Treasury is Ownable{
         totalVolumeOfBorrowersAmountinWei -= amount;
         emit Withdraw(toAddress,_amount);
         return true;
+    }
+
+    //to increase the global external protocol count.
+    function increaseExternalProtocolCount() external {
+        uint256 aaveDepositIndex = protocolDeposit[Protocol.Aave].depositIndex;
+        uint256 compoundDepositIndex = protocolDeposit[Protocol.Compound].depositIndex;
+        externalProtocolDepositCount = aaveDepositIndex > compoundDepositIndex ? aaveDepositIndex : compoundDepositIndex;
     }
 
     /**
@@ -255,6 +276,23 @@ contract Treasury is Ownable{
         uint64 count = protocolDeposit[Protocol.Aave].depositIndex;
         count += 1;
 
+        externalProtocolDepositCount++;
+
+        // Fixed-point arithmetic precision
+        uint256 precision = 1e18;
+
+        // If it's the first deposit, set the cumulative rate to precision (i.e., 1 in fixed-point representation).
+        if (count == 1) {
+            protocolDeposit[Protocol.Aave].cumulativeRate = precision; 
+        } else {
+            // Calculate the change in the credited amount relative to the total credited tokens so far.
+            uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * precision / protocolDeposit[Protocol.Aave].totalCreditedTokens;
+            // Update the cumulative rate using the calculated change.
+            protocolDeposit[Protocol.Aave].cumulativeRate = (precision + change) * protocolDeposit[Protocol.Aave].cumulativeRate / precision;
+        }
+        // Compute the discounted price of the deposit using the cumulative rate.
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].discountedPrice = share * precision / protocolDeposit[Protocol.Aave].cumulativeRate;
+
         //Assign depositIndex(number of times deposited)
         protocolDeposit[Protocol.Aave].depositIndex = count;
 
@@ -278,6 +316,40 @@ contract Treasury is Ownable{
         protocolDeposit[Protocol.Aave].totalCreditedTokens = creditedAmount;
 
         emit DepositToAave(count,share);
+    }
+
+    /**
+    * @dev Calculates the interest for a particular deposit based on its count for Aave.
+    * @param count The deposit index (or count) for which the interest needs to be calculated.
+    * @return interestValue The computed interest amount for the specified deposit.
+    */
+    function calculateInterestForDepositAave(uint64 count) private view returns (uint256) {
+        
+        // Ensure the provided count is within valid range
+        if(count > protocolDeposit[Protocol.Aave].depositIndex || count == 0) {
+            revert("Invalid count provided");
+        }
+
+        // Get the current credited amount from aToken
+        uint256 creditedAmount = aToken.balanceOf(address(this));
+
+        // Precision factor for fixed-point arithmetic
+        uint256 precision = 1e18;
+
+        // Calculate the change rate based on the difference between the current credited amount and the total credited tokens 
+        uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * precision / protocolDeposit[Protocol.Aave].totalCreditedTokens;
+
+        // Compute the current cumulative rate using the change and the stored cumulative rate
+        uint256 currentCumulativeRate = (precision + change) * protocolDeposit[Protocol.Aave].cumulativeRate / precision;
+        
+        // Calculate the present value of the deposit using the current cumulative rate and the stored discounted price for the deposit
+        uint256 presentValue = currentCumulativeRate * protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].discountedPrice / precision;
+
+        // Compute the interest by subtracting the original deposited amount from the present value
+        uint256 interestValue = presentValue - protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].depositedAmount;
+        
+        // Return the computed interest value
+        return interestValue;
     }
 
     /**
@@ -426,6 +498,48 @@ contract Treasury is Ownable{
         protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].tokensCredited = 0;
 
         emit WithdrawFromCompound(index,amount);
+    }
+
+    /**
+    * @dev Calculates the accrued interest for a specific deposit based on the cTokens credited.
+    *
+    * The function retrieves the deposit details for the given count and determines
+    * the interest accrued by comparing the equivalent ETH value of the cTokens at the
+    * current exchange rate with the original deposited ETH amount.
+    *
+    * Interest = ((cTokens credited * current exchange rate) / scaling factor) - original deposited ETH
+    *
+    * @param count The deposit index/count for which the interest needs to be calculated.
+    * @return The accrued interest for the specified deposit.
+    */
+    function getInterestForCompoundDeposit(uint64 count) private view returns (uint256) {
+        // Retrieve the deposit details for the specified count
+        EachDepositToProtocol storage deposit = protocolDeposit[Protocol.Compound].eachDepositToProtocol[count];
+        
+        // Obtain the current exchange rate from the Compound protocol
+        uint256 currentExchangeRate = cEther.exchangeRateCurrent();
+        
+        // Compute the equivalent ETH value of the cTokens at the current exchange rate
+        // Taking into account the fixed-point arithmetic (scaling factor of 1e18)
+        uint256 currentEquivalentEth = (deposit.tokensCredited * currentExchangeRate) / 1e18;
+
+        // Calculate the accrued interest by subtracting the original deposited ETH 
+        // amount from the current equivalent ETH value
+        return currentEquivalentEth - deposit.depositedAmount;
+    }
+
+    function totalInterest(address depositor, uint index) external returns(uint256){
+        uint256 count = borrowing[depositor].depositDetails[index].externalProtocolCount;
+        // uint256 compoundInterest = getInterestForCompoundDeposit(count);
+        // uint256 aaveInterest = calculateInterestForDepositAave(count);
+
+        uint256 totalInterest = getInterestForCompoundDeposit(count) + calculateInterestForDepositAave(count);
+
+        uint256 totalValue = externalProtocolCountTotalValue[count]*1e18;
+        uint256 currentValue = borrowing[depositor].depositDetails[index].depositedAmount;
+        uint256 ratio = (totalValue/currentValue)/1e18;
+
+        return (ratio*totalInterest);
     }
 
 
