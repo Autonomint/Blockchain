@@ -35,10 +35,10 @@ contract CDS is Ownable{
     uint256 public totalAvailableLiquidationAmount;
     uint128 public lastCumulativeRate;
     uint8 public amintLimit;
-    uint8 public usdtLimit;
+    uint64 public usdtLimit;
     uint256 public usdtAmountDepositedTillNow;
     uint128 public PRECISION = 1e12;
-    uint64 public USDT_PRECISION = 1e6;
+    //uint64 public USDT_PRECISION = 1e6;
 
     struct CdsAccountDetails {
         uint64 depositedTime;
@@ -109,15 +109,15 @@ contract CDS is Ownable{
     }
 
     function deposit(uint128 usdtAmount,uint128 amintAmount,bool _liquidate,uint128 _liquidationAmount) public {
-        uint128 totalDepositingAmount = usdtAmount + amintAmount;
+        uint128 totalDepositingAmount = (usdtAmount * PRECISION) + amintAmount;
         require(totalDepositingAmount != 0, "Deposit amount should not be zero"); // check _amount not zero
         require(
             _liquidationAmount < (usdtAmount + amintAmount),
             "Liquidation amount can't greater than deposited amount"
         );
 
-        if(usdtAmountDepositedTillNow < (usdtLimit*USDT_PRECISION)){
-            require(usdtAmount == totalDepositingAmount,'100% of amount must be USDT');
+        if(usdtAmountDepositedTillNow < usdtLimit){
+            require((usdtAmount * PRECISION) == totalDepositingAmount,'100% of amount must be USDT');
         }else{
             require(amintAmount >= (amintLimit * totalDepositingAmount)/100,"Insufficient AMINT amount");
             require(Trinity_token.balanceOf(msg.sender) >= amintAmount,"Insufficient balance with msg.sender"); // check if user has sufficient trinity token
@@ -142,7 +142,7 @@ contract CDS is Ownable{
 
         usdtAmountDepositedTillNow += usdtAmount;
         if(usdtAmount != 0 ){
-            bool success = Trinity_token.mint(treasuryAddress,usdtAmount);
+            bool success = Trinity_token.mint(treasuryAddress,(usdtAmount * PRECISION));
             require(success == true, "Transfer failed in CDS deposit");
         }
 
@@ -310,7 +310,7 @@ contract CDS is Ownable{
         bool transfer = Trinity_token.transferFrom(msg.sender,treasuryAddress,_amintAmount);
         require(transfer == true, "Trinity Transfer failed in redeemUSDT");
 
-        uint128 _usdtAmount = (amintPrice * _amintAmount/usdtPrice);  
+        uint128 _usdtAmount = (amintPrice * _amintAmount/(PRECISION * usdtPrice));  
           
         treasury.approveUsdt(address(this),_usdtAmount);
         bool success = usdt.transferFrom(treasuryAddress,msg.sender,_usdtAmount);
@@ -339,7 +339,7 @@ contract CDS is Ownable{
         amintLimit = percent;  
     }
 
-    function setUsdtLimit(uint8 amount) external onlyOwner{
+    function setUsdtLimit(uint64 amount) external onlyOwner{
         require(amount != 0, "USDT limit can't be zero");
         usdtLimit = amount;  
     }
