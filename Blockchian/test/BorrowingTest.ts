@@ -5,7 +5,7 @@ import { ethers } from "hardhat";
 import { Contract,utils,providers,Wallet, Signer } from "ethers";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { describe } from "node:test";
-import { BorrowingTest, CDSTest, TrinityStablecoin, ProtocolToken, Treasury,Options} from "../typechain-types";
+import { BorrowingTest, CDSTest, TrinityStablecoin, ProtocolToken, Treasury,Options,USDT} from "../typechain-types";
 import {
     wethGateway,
     priceFeedAddress,
@@ -23,6 +23,7 @@ describe("Borrowing Contract",function(){
     let BorrowingContract : BorrowingTest;
     let Token : TrinityStablecoin;
     let pToken : ProtocolToken;
+    let usdt : USDT
     let treasury : Treasury;
     let options: Options;
     let owner: any;
@@ -38,17 +39,20 @@ describe("Borrowing Contract",function(){
         const ProtocolToken = await ethers.getContractFactory("ProtocolToken");
         pToken = await ProtocolToken.deploy();
 
+        const USDTToken = await ethers.getContractFactory("USDT");
+        usdt = await USDTToken.deploy();
+
         const option = await ethers.getContractFactory("Options");
         options = await option.deploy();
 
         const CDS = await ethers.getContractFactory("CDSTest");
-        CDSContract = await CDS.deploy(Token.address,priceFeedAddress);
+        CDSContract = await CDS.deploy(Token.address,priceFeedAddress,usdt.address);
 
         const Borrowing = await ethers.getContractFactory("BorrowingTest");
         BorrowingContract = await Borrowing.deploy(Token.address,CDSContract.address,pToken.address,priceFeedAddress);
 
         const Treasury = await ethers.getContractFactory("Treasury");
-        treasury = await Treasury.deploy(BorrowingContract.address,Token.address,CDSContract.address,wethGateway,cEther,aavePoolAddress,aTokenAddress);
+        treasury = await Treasury.deploy(BorrowingContract.address,Token.address,CDSContract.address,wethGateway,cEther,aavePoolAddress,aTokenAddress,usdt.address);
 
         await BorrowingContract.initializeTreasury(treasury.address);
         await BorrowingContract.setOptions(options.address);

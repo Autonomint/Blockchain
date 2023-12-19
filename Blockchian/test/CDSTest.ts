@@ -53,6 +53,7 @@ describe("Testing contracts ", function(){
         await CDSContract.setBorrowingContract(BorrowingContract.address);
         await CDSContract.setWithdrawTimeLimit(1000);
         await CDSContract.setAmintLimit(80);
+        await CDSContract.setUsdtLimit(20000);
 
         [owner, user1, user2] = await ethers.getSigners();
         await BorrowingContract.setAdmin(owner.address);
@@ -106,6 +107,19 @@ describe("Testing contracts ", function(){
             let tx = await CDSContract.cdsDetails(owner.address);
             expect(tx.hasDeposited).to.be.equal(true);
             expect(tx.index).to.be.equal(2);
+        })
+
+        it("should redeem USDT from CDS", async function(){
+            const {CDSContract,Token,usdt} = await loadFixture(deployer);
+            await usdt.mint(owner.address,10000000000);
+            await usdt.connect(owner).approve(CDSContract.address,10000000000);
+
+            await Token.mint(user1.address,ethers.utils.parseEther("10000"));
+            await Token.connect(user1).approve(CDSContract.address,ethers.utils.parseEther("10000"));
+
+            await CDSContract.connect(owner).deposit(10000000000,0,true,5000000000);
+            await CDSContract.connect(user1).redeemUSDT(ethers.utils.parseEther("5000"),1000,1500);
+            console.log(await usdt.balanceOf(user1.address));
         })
 
     })
@@ -224,7 +238,7 @@ describe("Testing contracts ", function(){
     })
 
     describe("To check CDS withdrawl function",function(){
-        it.only("Should withdraw from cds",async () => {
+        it("Should withdraw from cds",async () => {
             const {CDSContract,treasury,Token,usdt} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
