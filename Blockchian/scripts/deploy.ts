@@ -28,18 +28,23 @@ async function main() {
   await deployedProtocolToken.deployed();
   console.log("DIRAC ADDRESS",deployedProtocolToken.address);
 
+  // const USDT = await ethers.getContractFactory("USDT");
+  // const deployedUSDT = await USDT.deploy();
+  // await deployedUSDT.deployed();
+  // console.log("USDT ADDRESS",deployedUSDT.address);
+
   const CDS = await ethers.getContractFactory("CDSTest");
-  const deployedCDS = await CDS.deploy(deployedTrinityStablecoin.address,priceFeedAddressMumbai);
+  const deployedCDS = await CDS.deploy(deployedTrinityStablecoin.address,priceFeedAddressSepolia,usdtTokenAddress);
   await deployedCDS.deployed();
   console.log("CDS ADDRESS",deployedCDS.address);
 
   const Borrowing = await ethers.getContractFactory("BorrowingTest");
-  const deployedBorrowing = await Borrowing.deploy(deployedTrinityStablecoin.address,deployedCDS.address,deployedProtocolToken.address,priceFeedAddressMumbai);
+  const deployedBorrowing = await Borrowing.deploy(deployedTrinityStablecoin.address,deployedCDS.address,deployedProtocolToken.address,priceFeedAddressSepolia);
   await deployedBorrowing.deployed();
   console.log("BORROWING ADDRESS",deployedBorrowing.address);
 
   const Treasury = await ethers.getContractFactory("Treasury");
-  const deployedTreasury = await Treasury.deploy(deployedBorrowing.address,deployedTrinityStablecoin.address,deployedCDS.address,wethGatewayMumbai,cEtherMumbai,aavePoolAddressMumbai,aTokenAddressMumbai);
+  const deployedTreasury = await Treasury.deploy(deployedBorrowing.address,deployedTrinityStablecoin.address,deployedCDS.address,wethGatewaySepolia,cEtherSepolia,aavePoolAddressSepolia,aTokenAddressSepolia,usdtTokenAddress);
   await deployedTreasury.deployed();
   console.log("TREASURY ADDRESS",deployedTreasury.address);
 
@@ -69,18 +74,18 @@ async function main() {
   await hre.run("verify:verify", {
     address: deployedCDS.address,
     contract: "contracts/TestContracts/CopyCDS.sol:CDSTest",
-    constructorArguments: [deployedTrinityStablecoin.address,priceFeedAddressMumbai],
+    constructorArguments: [deployedTrinityStablecoin.address,priceFeedAddressSepolia,usdtTokenAddress],
   });
 
   await hre.run("verify:verify", {
     address: deployedBorrowing.address,
     contract: "contracts/TestContracts/CopyBorrowing.sol:BorrowingTest",
-    constructorArguments: [deployedTrinityStablecoin.address,deployedCDS.address,deployedProtocolToken.address,priceFeedAddressMumbai],
+    constructorArguments: [deployedTrinityStablecoin.address,deployedCDS.address,deployedProtocolToken.address,priceFeedAddressSepolia],
   });
 
   await hre.run("verify:verify", {
     address: deployedTreasury.address,
-    constructorArguments: [deployedBorrowing.address,deployedTrinityStablecoin.address,deployedCDS.address,wethGatewayMumbai,cEtherMumbai,aavePoolAddressMumbai,aTokenAddressMumbai],
+    constructorArguments: [deployedBorrowing.address,deployedTrinityStablecoin.address,deployedCDS.address,wethGatewaySepolia,cEtherSepolia,aavePoolAddressSepolia,aTokenAddressSepolia,usdtTokenAddress],
   });
 
   await hre.run("verify:verify", {
@@ -91,6 +96,8 @@ async function main() {
   //await deployedTreasury.setBorrowingContract(deployedBorrowing.address);
   await deployedCDS.setBorrowingContract(deployedBorrowing.address);
   await deployedCDS.setTreasury(deployedTreasury.address);
+  await deployedCDS.setAmintLimit(80);
+  await deployedCDS.setUsdtLimit(20000);
   await deployedBorrowing.initializeTreasury(deployedTreasury.address);
   await deployedBorrowing.setOptions(deployedOptions.address);
 

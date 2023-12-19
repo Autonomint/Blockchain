@@ -58,6 +58,7 @@ contract Borrowing is Ownable {
     uint128 public noOfLiquidations;
     uint256 public totalAmintSupply;
     uint256 public totalDiracSupply;
+    uint64 public withdrawTimeLimit;
 
     uint128 PRECISION = 1e6;
     uint128 CUMULATIVE_PRECISION = 1e7;
@@ -66,6 +67,7 @@ contract Borrowing is Ownable {
 
     event Deposit(uint64 index,uint256 depositedAmount,uint256 borrowAmount,uint256 normalizedAmount);
     event Withdraw(uint256 borrowDebt,uint128 withdrawAmount,uint128 noOfAbond);
+    event Liquidate(uint128 liquidationIndex,uint128 liquidationAmount,uint128 cdsProfits,uint128 ethAmount,uint256 availableLiquidationAmount);
 
     constructor(
         address _tokenAddress,
@@ -344,7 +346,7 @@ contract Borrowing is Ownable {
 
     function secondWithdraw(address _toAddress,uint64 _index,uint64 _ethPrice,uint64 withdrawTime,uint128 pTokensAmount,uint128 ethToReturn) internal {
             // Check whether the first withdraw passed one month
-            require(block.timestamp >= (withdrawTime + 30 days),"A month not yet completed since withdraw");
+            require(block.timestamp >= (withdrawTime + withdrawTimeLimit),"A month not yet completed since withdraw");
                     
             // Check the user has required pToken
             require(protocolToken.balanceOf(msg.sender) == pTokensAmount,"Don't have enough Protocol Tokens");
@@ -418,8 +420,9 @@ contract Borrowing is Ownable {
         uint128 liquidationAmountNeeded = returnToTreasury + returnToDirac;
         
         CDSInterface.LiquidationInfo memory liquidationInfo;
-        liquidationInfo = CDSInterface.LiquidationInfo(liquidationAmountNeeded,cdsProfits,depositDetail.depositedAmount,cds.totalAvailableLiquidationAmount());
-
+        uint256 availableLiquidationAmount = cds.totalAvailableLiquidationAmount();
+        liquidationInfo = CDSInterface.LiquidationInfo(liquidationAmountNeeded,cdsProfits,depositDetail.depositedAmount,availableLiquidationAmount);
+        
         cds.updateLiquidationInfo(noOfLiquidations,liquidationInfo);
         cds.updateTotalCdsDepositedAmount(liquidationAmountNeeded);
         cds.updateTotalAvailableLiquidationAmount(liquidationAmountNeeded);
@@ -436,6 +439,7 @@ contract Borrowing is Ownable {
         }
         totalAmintSupply = Trinity.totalSupply();
         // Transfer ETH to CDS Pool
+        emit Liquidate(noOfLiquidations,liquidationAmountNeeded,cdsProfits,depositDetail.depositedAmount,availableLiquidationAmount);
     }
 
     function getUSDValue() public view returns(uint256){
@@ -450,6 +454,11 @@ contract Borrowing is Ownable {
 
     function getLTV() public view returns(uint8){
         return LTV;
+    }
+
+    function setWithdrawTimeLimit(uint64 _timeLimit) external onlyOwner {
+        require(_timeLimit != 0, "Withdraw time limit can't be zero");
+        withdrawTimeLimit = _timeLimit;
     }
 
     function updateLastEthVaultValue(uint256 _amount) external onlyTreasury{
