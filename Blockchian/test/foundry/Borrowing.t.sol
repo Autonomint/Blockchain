@@ -8,6 +8,7 @@ import {Treasury} from "../../contracts/Core_logic/Treasury.sol";
 import {CDSTest} from "../../contracts/TestContracts/CopyCDS.sol";
 import {TrinityStablecoin} from "../../contracts/Token/Trinity_ERC20.sol";
 import {ProtocolToken} from "../../contracts/Token/Protocol_Token.sol";
+import {USDT} from "../../contracts/TestContracts/CopyUsdt.sol";
 import {HelperConfig} from "../../scripts/script/HelperConfig.s.sol";
 import {DeployBorrowing} from "../../scripts/script/DeployBorrowing.s.sol";
 
@@ -19,6 +20,7 @@ contract BorrowTest is Test {
     DeployBorrowing deployer;
     TrinityStablecoin tsc;
     ProtocolToken pToken;
+    USDT usdt;
     CDSTest cds;
     BorrowingTest borrow;
     Treasury treasury;
@@ -34,13 +36,14 @@ contract BorrowTest is Test {
     // IPool public aave;
     address public USER = makeAddr("user");
     address public owner = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+    address public aTokenAddress = 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8;
 
     uint256 public ETH_AMOUNT = 1 ether;
     uint256 public STARTING_ETH_BALANCE = 100 ether;
 
     function setUp() public {
         deployer = new DeployBorrowing();
-        (tsc,pToken,borrow,treasury,cds,config) = deployer.run();
+        (tsc,pToken,usdt,borrow,treasury,cds,config) = deployer.run();
         (ethUsdPriceFeed,) = config.activeNetworkConfig();
 
         wethGateway = IWrappedTokenGatewayV3(wethAddress);
@@ -53,19 +56,113 @@ contract BorrowTest is Test {
         vm.deal(USER,STARTING_ETH_BALANCE);
     }
 
+    modifier depositInCds {
+        vm.startPrank(USER);
+        usdt.mint(address(USER),30000000000);
+        uint256 usdtBalance = usdt.balanceOf(address(USER));
+        usdt.approve(address(cds),usdtBalance);
+        cds.deposit(uint128(usdtBalance),0,true,uint128(usdtBalance/2));
+        vm.stopPrank();
+        _;
+    }
+
+    modifier depositETH {
+        vm.startPrank(USER);
+        usdt.mint(address(USER),20000000000);
+        uint256 usdtBalance = usdt.balanceOf(address(USER));
+        usdt.approve(address(cds),usdtBalance);
+        cds.deposit(uint128(usdtBalance),0,true,uint128(usdtBalance/2));
+        borrow.depositTokens{value: ETH_AMOUNT}(100000,uint64(block.timestamp),110000);
+        vm.stopPrank();
+        _;
+    }
+
     function testGetUsdValue() public {
         uint256 expectedUsd = 1000e2;
         uint256 actualUsd = borrow.getUSDValue();
         assertEq(expectedUsd, actualUsd);
     }
 
-    function testCanDepositETH(uint128 data) public{
-        
+    function testCanDepositEth() public depositInCds{
         vm.startPrank(USER);
-        borrow.depositTokens{value: ETH_AMOUNT}(data,uint64(block.timestamp));
+        borrow.depositTokens{value: ETH_AMOUNT}(100000,uint64(block.timestamp),110000);
         uint256 expectedAmount = 800 ether;
         uint256 actualAmount = tsc.balanceOf(USER); 
         assertEq(expectedAmount,actualAmount);
         vm.stopPrank();
+    }
+
+    function testCanDepositEthToAave() public depositETH{
+        vm.startPrank(owner);
+        borrow.depositToAaveProtocol();
+        console.log("ATOKEN BALANCE",IERC20(aTokenAddress).balanceOf(address(treasury)));
+        vm.warp(block.timestamp + 360000000);
+        console.log("ATOKEN BALANCE",IERC20(aTokenAddress).balanceOf(address(treasury)));
+        vm.stopPrank();
+    }
+
+    function testCanWithdrawEthFromAave() public depositETH{
+        vm.startPrank(owner);
+        borrow.depositToAaveProtocol();
+        uint256 aTokenBalance = IERC20(aTokenAddress).balanceOf(address(treasury));
+        console.log("ATOKEN BALANCE AFTER DEPSOIT",aTokenBalance);
+        console.log("TREASURY BALANCE",treasury.getBalanceInTreasury());
+        vm.warp(block.timestamp + 360000000);
+
+        borrow.withdrawFromAaveProtocol(1,aTokenBalance);
+        console.log("ATOKEN BALANCE AFTER WITHDRAW",IERC20(aTokenAddress).balanceOf(address(treasury)));
+        console.log("TREASURY BALANCE",treasury.getBalanceInTreasury());
+        vm.stopPrank();
+    }
+
+    function testCanDepositEthToCompound() public depositETH{
+        vm.startPrank(owner);
+        borrow.depositToCompoundProtocol();
+        console.log("ETH SUPPLIED TO COMPOUND",cEther.balanceOfUnderlying(address(treasury)));
+        console.log("CTOKEN BALANCE",cEther.balanceOf(address(treasury)));
+        vm.stopPrank();
+    }
+
+    function testCanWithdrawEthFromCompound() public depositETH{
+        vm.startPrank(owner);
+        borrow.depositToCompoundProtocol();
+        console.log("ETH SUPPLIED TO COMPOUND",cEther.balanceOfUnderlying(address(treasury)));
+        console.log("CTOKEN BALANCE AFTER DEPOSIT",cEther.balanceOf(address(treasury)));
+        console.log("TREASURY BALANCE",treasury.getBalanceInTreasury());
+        borrow.withdrawFromCompoundProtocol(1);
+        console.log("ETH SUPPLIED TO COMPOUND AFTER WITHDRAW",cEther.balanceOfUnderlying(address(treasury)));
+        console.log("CTOKEN BALANCE AFTER WITHDRAW",cEther.balanceOf(address(treasury)));
+        console.log("TREASURY BALANCE",treasury.getBalanceInTreasury());
+        vm.stopPrank();
+    }
+
+    function testCanCalculateInterestInCompoundCorrectly() public depositETH{
+        vm.startPrank(owner);
+        borrow.depositToCompoundProtocol();
+        uint256 ethSuppliedToCompound = cEther.balanceOfUnderlying(address(treasury));
+        console.log("ETH SUPPLIED TO COMPOUND",ethSuppliedToCompound);
+        uint256 cTokenBalance = cEther.balanceOf(address(treasury));
+        console.log("CTOKEN BALANCE",cTokenBalance);
+        console.log(block.timestamp);
+        vm.warp(block.timestamp + 360000000);
+        console.log(block.timestamp);
+        uint256 exchangeRate = cEther.exchangeRateCurrent();
+        uint256 expectedInterestFromCompound = ((exchangeRate * cTokenBalance)/1e18 - ethSuppliedToCompound);
+        uint256 interestFromCompound = treasury.getInterestForCompoundDeposit(1);
+        assertEq(expectedInterestFromCompound,interestFromCompound);
+        vm.stopPrank();
+    }
+
+    function testCanCalculateInterestInAaveCorrectly() public depositETH{
+        vm.startPrank(owner);
+        uint256 treasuryBalance = treasury.getBalanceInTreasury();
+        borrow.depositToAaveProtocol();
+        vm.warp(block.timestamp + 360000000);
+        uint256 aTokenBalance = IERC20(aTokenAddress).balanceOf(address(treasury));
+        uint256 interest = treasury.calculateInterestForDepositAave(1);
+        borrow.withdrawFromAaveProtocol(1,aTokenBalance);
+        uint256 expectedInterest = treasury.getBalanceInTreasury() - treasuryBalance;
+        assertEq(expectedInterest,interest);
+        vm.stopPrank();    
     }
 }

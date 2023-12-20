@@ -323,7 +323,7 @@ contract Treasury is Ownable{
     * @param count The deposit index (or count) for which the interest needs to be calculated.
     * @return interestValue The computed interest amount for the specified deposit.
     */
-    function calculateInterestForDepositAave(uint64 count) private view returns (uint256) {
+    function calculateInterestForDepositAave(uint64 count) public view returns (uint256) {
         
         // Ensure the provided count is within valid range
         if(count > protocolDeposit[Protocol.Aave].depositIndex || count == 0) {
@@ -384,7 +384,7 @@ contract Treasury is Ownable{
         }
 
         //Update the total amount deposited in Aave
-        protocolDeposit[Protocol.Aave].depositedAmount -= amount;
+        //protocolDeposit[Protocol.Aave].depositedAmount -= amount;
 
         //Set withdrawed to true
         protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawed = true;
@@ -399,7 +399,7 @@ contract Treasury is Ownable{
         //Update the total deposited amount in USD
         protocolDeposit[Protocol.Aave].depositedUsdValue = protocolDeposit[Protocol.Aave].depositedAmount * ethPrice;
 
-        protocolDeposit[Protocol.Aave].totalCreditedTokens -= amount; 
+        //protocolDeposit[Protocol.Aave].totalCreditedTokens -= amount; 
 
         emit WithdrawFromAave(index,amount);
     }
@@ -512,7 +512,7 @@ contract Treasury is Ownable{
     * @param count The deposit index/count for which the interest needs to be calculated.
     * @return The accrued interest for the specified deposit.
     */
-    function getInterestForCompoundDeposit(uint64 count) private returns (uint256) {
+    function getInterestForCompoundDeposit(uint64 count) public returns (uint256) {
         // Retrieve the deposit details for the specified count
         EachDepositToProtocol storage deposit = protocolDeposit[Protocol.Compound].eachDepositToProtocol[count];
         

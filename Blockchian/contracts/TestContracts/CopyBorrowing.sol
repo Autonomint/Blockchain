@@ -60,7 +60,7 @@ contract BorrowingTest is Ownable {
     uint256 public totalDiracSupply;
 
     uint128 PRECISION = 1e6;
-    //uint128 CUMULATIVE_PRECISION = 1e7;
+    uint128 CUMULATIVE_PRECISION = 1e7;
     uint128 RATIO_PRECISION = 1e4;
     uint128 RATE_PRECISION = 1e27;
 
@@ -170,7 +170,6 @@ contract BorrowingTest is Ownable {
 
         //Call calculateInverseOfRatio function to find ratio
         uint64 ratio = _calculateRatio(msg.value,uint128(_ethPrice));
-        console.log(ratio);
         require(ratio >= (2 * RATIO_PRECISION),"Not enough fund in CDS");
         
         //Call the deposit function in Treasury contract
@@ -521,7 +520,7 @@ contract BorrowingTest is Ownable {
 
         // Calculate ratio by dividing currentEthVaultValue by currentCDSPoolValue,
         // since it may return in decimals we multiply it by 1e6
-        uint64 ratio = uint64((currentCDSPoolValue * PRECISION)/currentEthVaultValue);
+        uint64 ratio = uint64((currentCDSPoolValue * CUMULATIVE_PRECISION)/currentEthVaultValue);
         return ratio;
     }
 

@@ -8,6 +8,7 @@ import {CDSTest} from "../../contracts/TestContracts/CopyCDS.sol";
 import {TrinityStablecoin} from "../../contracts/Token/Trinity_ERC20.sol";
 import {ProtocolToken} from "../../contracts/Token/Protocol_Token.sol";
 import {Options} from "../../contracts/Core_logic/Options.sol";
+import {USDT} from "../../contracts/TestContracts/CopyUsdt.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
 
 contract DeployBorrowing is Script {
@@ -17,7 +18,7 @@ contract DeployBorrowing is Script {
     address aavePoolAddress = 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e;
     address aTokenAddress = 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8;
 
-    function run() external returns (TrinityStablecoin,ProtocolToken,BorrowingTest,Treasury,CDSTest,HelperConfig){
+    function run() external returns (TrinityStablecoin,ProtocolToken,USDT,BorrowingTest,Treasury,CDSTest,HelperConfig){
         HelperConfig config = new HelperConfig();
         (address ethUsdPriceFeed,uint256 deployerKey) = config.activeNetworkConfig();
 
@@ -25,19 +26,22 @@ contract DeployBorrowing is Script {
         vm.startBroadcast(deployerKey);
         TrinityStablecoin tsc = new TrinityStablecoin();
         ProtocolToken pToken = new ProtocolToken();
+        USDT usdt = new USDT();
         Options option = new Options();
-        CDSTest cds = new CDSTest(address(tsc),priceFeedAddress);
+        CDSTest cds = new CDSTest(address(tsc),priceFeedAddress,address(usdt));
         BorrowingTest borrow = new BorrowingTest(address(tsc),address(cds),address(pToken),priceFeedAddress);
-        Treasury treasury = new Treasury(address(borrow),address(tsc),address(cds),wethAddress,cEthAddress,aavePoolAddress,aTokenAddress);
+        Treasury treasury = new Treasury(address(borrow),address(tsc),address(cds),wethAddress,cEthAddress,aavePoolAddress,aTokenAddress,address(usdt));
 
         borrow.initializeTreasury(address(treasury));
         borrow.setOptions(address(option));
         borrow.setLTV(80);
         cds.setTreasury(address(treasury));
         cds.setBorrowingContract(address(borrow));
+        cds.setAmintLimit(80);
+        cds.setUsdtLimit(20000);
         borrow.calculateCumulativeRate();
 
         vm.stopBroadcast();
-        return(tsc,pToken,borrow,treasury,cds,config);
+        return(tsc,pToken,usdt,borrow,treasury,cds,config);
     }
 }
