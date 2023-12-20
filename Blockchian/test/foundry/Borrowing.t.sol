@@ -129,6 +129,9 @@ contract BorrowTest is Test {
         console.log("ETH SUPPLIED TO COMPOUND",cEther.balanceOfUnderlying(address(treasury)));
         console.log("CTOKEN BALANCE AFTER DEPOSIT",cEther.balanceOf(address(treasury)));
         console.log("TREASURY BALANCE",treasury.getBalanceInTreasury());
+        vm.roll(block.number + 100);
+        console.log("ETH SUPPLIED TO COMPOUND SKIP",cEther.balanceOfUnderlying(address(treasury)));
+
         borrow.withdrawFromCompoundProtocol(1);
         console.log("ETH SUPPLIED TO COMPOUND AFTER WITHDRAW",cEther.balanceOfUnderlying(address(treasury)));
         console.log("CTOKEN BALANCE AFTER WITHDRAW",cEther.balanceOf(address(treasury)));
@@ -138,17 +141,15 @@ contract BorrowTest is Test {
 
     function testCanCalculateInterestInCompoundCorrectly() public depositETH{
         vm.startPrank(owner);
+        uint256 treasuryBalance = treasury.getBalanceInTreasury();
         borrow.depositToCompoundProtocol();
-        uint256 ethSuppliedToCompound = cEther.balanceOfUnderlying(address(treasury));
-        console.log("ETH SUPPLIED TO COMPOUND",ethSuppliedToCompound);
+        // uint256 ethSuppliedToCompound = cEther.balanceOfUnderlying(address(treasury));
         uint256 cTokenBalance = cEther.balanceOf(address(treasury));
-        console.log("CTOKEN BALANCE",cTokenBalance);
-        console.log(block.timestamp);
-        vm.warp(block.timestamp + 360000000);
-        console.log(block.timestamp);
-        uint256 exchangeRate = cEther.exchangeRateCurrent();
-        uint256 expectedInterestFromCompound = ((exchangeRate * cTokenBalance)/1e18 - ethSuppliedToCompound);
+        vm.roll(block.number + 100);
+
         uint256 interestFromCompound = treasury.getInterestForCompoundDeposit(1);
+        borrow.withdrawFromCompoundProtocol(1);
+        uint256 expectedInterestFromCompound = treasury.getBalanceInTreasury() - treasuryBalance;
         assertEq(expectedInterestFromCompound,interestFromCompound);
         vm.stopPrank();
     }

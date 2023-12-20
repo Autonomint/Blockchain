@@ -378,7 +378,7 @@ contract Treasury is Ownable{
         // Call the withdraw function in aave to withdraw eth.
         wethGateway.withdrawETH(poolAddress,amount,address(this));
 
-        uint256 aaveToken = cEther.balanceOf(address(this));
+        uint256 aaveToken = aToken.balanceOf(address(this));
         if(aaveToken == protocolDeposit[Protocol.Aave].totalCreditedTokens){
             revert Treasury_AaveWithdrawFailed();
         }
