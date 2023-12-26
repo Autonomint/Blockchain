@@ -323,6 +323,8 @@ contract Treasury is Ownable{
     * @param count The deposit index (or count) for which the interest needs to be calculated.
     * @return interestValue The computed interest amount for the specified deposit.
     */
+
+   //! have valid names for input parameters
     function calculateInterestForDepositAave(uint64 count) public view returns (uint256) {
         
         // Ensure the provided count is within valid range
@@ -332,8 +334,6 @@ contract Treasury is Ownable{
 
         // Get the current credited amount from aToken
         uint256 creditedAmount = aToken.balanceOf(address(this));
-
-
 
         // Calculate the change rate based on the difference between the current credited amount and the total credited tokens 
         uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
@@ -358,6 +358,8 @@ contract Treasury is Ownable{
 
     function withdrawFromAave(uint64 index) external onlyBorrowingContract{
 
+        //! need to check if the index is there or not
+
         EachDepositToProtocol memory aaveDeposit = protocolDeposit[Protocol.Aave].eachDepositToProtocol[index];
 
         //Check the deposited amount in the given index is already withdrawed
@@ -377,6 +379,8 @@ contract Treasury is Ownable{
         }
 
         aToken.approve(aaveWETH,amount);
+        //! check if above call is successfully or not 
+
         aaveDeposit.interestGained = uint128(calculateInterestForDepositAave(index));
 
         // Call the withdraw function in aave to withdraw eth.
@@ -402,6 +406,7 @@ contract Treasury is Ownable{
 
         //Update the total deposited amount in USD
         protocolDeposit[Protocol.Aave].depositedUsdValue = protocolDeposit[Protocol.Aave].depositedAmount * ethPrice;
+        //! why we are updating deposited value
 
         protocolDeposit[Protocol.Aave].totalCreditedTokens = aaveToken; 
 
