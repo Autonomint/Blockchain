@@ -54,6 +54,7 @@ contract BorrowTest is Test {
         vm.stopPrank();
 
         vm.deal(USER,STARTING_ETH_BALANCE);
+        vm.deal(owner,STARTING_ETH_BALANCE);
     }
 
     modifier depositInCds {
@@ -143,8 +144,6 @@ contract BorrowTest is Test {
         vm.startPrank(owner);
         uint256 treasuryBalance = treasury.getBalanceInTreasury();
         borrow.depositToCompoundProtocol();
-        // uint256 ethSuppliedToCompound = cEther.balanceOfUnderlying(address(treasury));
-        uint256 cTokenBalance = cEther.balanceOf(address(treasury));
         vm.roll(block.number + 100);
 
         uint256 interestFromCompound = treasury.getInterestForCompoundDeposit(1);
@@ -165,5 +164,43 @@ contract BorrowTest is Test {
         uint256 expectedInterest = treasury.getBalanceInTreasury() - treasuryBalance;
         assertEq(expectedInterest,interest);
         vm.stopPrank();    
+    }
+
+    function testTotalInterestFromExternalProtocol() public depositETH{
+        vm.startPrank(owner);
+        borrow.depositTokens{value: 2 ether}(100000,uint64(block.timestamp),110000);
+
+        borrow.depositToAaveProtocol();
+        borrow.depositToCompoundProtocol();
+        vm.warp(block.timestamp + 360000000);
+        vm.roll(block.number + 100);
+
+        uint256 aTokenBalance = IERC20(aTokenAddress).balanceOf(address(treasury));
+
+        borrow.depositTokens{value: 2 ether}(100000,uint64(block.timestamp),110000);
+
+        borrow.depositToAaveProtocol();
+        borrow.depositToCompoundProtocol();
+        vm.warp(block.timestamp + 360000000);
+        vm.roll(block.number + 100);
+
+        borrow.withdrawFromAaveProtocol(1,aTokenBalance);
+        borrow.withdrawFromCompoundProtocol(1);
+        vm.warp(block.timestamp + 360000000);
+        vm.roll(block.number + 100);
+        
+        uint256 interestOwner = treasury.totalInterestFromExternalProtocol(owner,1);
+        console.log("INTEREST OWNER1",interestOwner);
+        uint256 interestOwner1 = treasury.totalInterestFromExternalProtocol(owner,2);
+        console.log("INTEREST OWNER2",interestOwner1);
+        vm.stopPrank();
+        vm.startPrank(USER);
+        uint256 interestUser = treasury.totalInterestFromExternalProtocol(address(USER),1);
+        console.log("INTEREST USER",interestUser);
+        vm.stopPrank();
+        // uint256 aTokenBalance = IERC20(aTokenAddress).balanceOf(address(treasury));
+        // borrow.withdrawFromAaveProtocol(1,aTokenBalance);
+        // borrow.withdrawFromCompoundProtocol(1);
+        vm.stopPrank();
     }
 }

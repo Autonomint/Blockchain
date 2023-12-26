@@ -260,7 +260,7 @@ contract BorrowingTest is Ownable {
                     depositDetail.withdrawTime = _withdrawTime;
                     depositDetail.withdrawNo = 1;
                     // Calculate interest for the borrower's debt
-                    uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
+                    //uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
 
                     uint256 discountedETH = ((10*(depositDetail.depositedAmount))/100)*_ethPrice;
 
@@ -281,7 +281,7 @@ contract BorrowingTest is Ownable {
                     }
                     totalNormalizedAmount -= borrowerDebt;
 
-                    treasury.updateTotalInterest(interest);
+                    treasury.updateTotalInterest(borrowerDebt - depositDetail.borrowedAmount);
 
                     // Mint the pTokens
                     uint128 noOfPTokensminted = _mintPToken(msg.sender,discountedETH, _bondRatio);

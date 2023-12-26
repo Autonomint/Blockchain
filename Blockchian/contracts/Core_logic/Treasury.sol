@@ -82,6 +82,7 @@ contract Treasury is Ownable{
         uint128 ethPriceAtWithdraw;
         uint64 withdrawTime;
         uint256 withdrawedUsdValue;
+        uint128 interestGained;
 
         uint256 discountedPrice;
     }
@@ -108,6 +109,7 @@ contract Treasury is Ownable{
     uint256 public totalInterestFromLiquidation;
 
     uint64 public externalProtocolDepositCount = 1;
+    uint256 PRECISION = 1e18;
 
     mapping(uint256=>uint256) externalProtocolCountTotalValue;
 
@@ -210,7 +212,7 @@ contract Treasury is Ownable{
         //having the count of the deposit done to Aave/Compound in batched
         borrowing[user].depositDetails[borrowerIndex].externalProtocolCount = externalProtocolDepositCount;
 
-        externalProtocolCountTotalValue[externalProtocolDepositCount]+= (msg.value*1e18)/4;
+        externalProtocolCountTotalValue[externalProtocolDepositCount] += ((msg.value * 50)/100);
 
         emit Deposit(user,msg.value);
         return (borrowing[user].hasDeposited,borrowerIndex);
@@ -252,7 +254,7 @@ contract Treasury is Ownable{
     function depositToAave() external onlyBorrowingContract{
 
         //Divide the Total ETH in the contract to 1/4
-        uint256 share = ((address(this).balance)*25)/100;
+        uint256 share = (externalProtocolCountTotalValue[externalProtocolDepositCount]*50)/100;
 
         //Check the amount to be deposited is greater than zero
         if(share == 0){
@@ -278,20 +280,17 @@ contract Treasury is Ownable{
 
         externalProtocolDepositCount++;
 
-        // Fixed-point arithmetic precision
-        uint256 precision = 1e18;
-
         // If it's the first deposit, set the cumulative rate to precision (i.e., 1 in fixed-point representation).
-        if (count == 1) {
-            protocolDeposit[Protocol.Aave].cumulativeRate = precision; 
+        if (count == 1 || protocolDeposit[Protocol.Aave].totalCreditedTokens == 0) {
+            protocolDeposit[Protocol.Aave].cumulativeRate = PRECISION; 
         } else {
             // Calculate the change in the credited amount relative to the total credited tokens so far.
-            uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * precision / protocolDeposit[Protocol.Aave].totalCreditedTokens;
+            uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
             // Update the cumulative rate using the calculated change.
-            protocolDeposit[Protocol.Aave].cumulativeRate = (precision + change) * protocolDeposit[Protocol.Aave].cumulativeRate / precision;
+            protocolDeposit[Protocol.Aave].cumulativeRate = (PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate / PRECISION;
         }
         // Compute the discounted price of the deposit using the cumulative rate.
-        protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].discountedPrice = share * precision / protocolDeposit[Protocol.Aave].cumulativeRate;
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].discountedPrice = share * PRECISION / protocolDeposit[Protocol.Aave].cumulativeRate;
 
         //Assign depositIndex(number of times deposited)
         protocolDeposit[Protocol.Aave].depositIndex = count;
@@ -333,17 +332,16 @@ contract Treasury is Ownable{
         // Get the current credited amount from aToken
         uint256 creditedAmount = aToken.balanceOf(address(this));
 
-        // Precision factor for fixed-point arithmetic
-        uint256 precision = 1e18;
+
 
         // Calculate the change rate based on the difference between the current credited amount and the total credited tokens 
-        uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * precision / protocolDeposit[Protocol.Aave].totalCreditedTokens;
+        uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
 
         // Compute the current cumulative rate using the change and the stored cumulative rate
-        uint256 currentCumulativeRate = (precision + change) * protocolDeposit[Protocol.Aave].cumulativeRate / precision;
+        uint256 currentCumulativeRate = (PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate / PRECISION;
         
         // Calculate the present value of the deposit using the current cumulative rate and the stored discounted price for the deposit
-        uint256 presentValue = currentCumulativeRate * protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].discountedPrice / precision;
+        uint256 presentValue = currentCumulativeRate * protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].discountedPrice / PRECISION;
 
         // Compute the interest by subtracting the original deposited amount from the present value
         uint256 interestValue = presentValue - protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].depositedAmount;
@@ -374,6 +372,7 @@ contract Treasury is Ownable{
         }
 
         aToken.approve(aaveWETH,amount);
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].interestGained = uint128(calculateInterestForDepositAave(index));
 
         // Call the withdraw function in aave to withdraw eth.
         wethGateway.withdrawETH(poolAddress,amount,address(this));
@@ -399,7 +398,7 @@ contract Treasury is Ownable{
         //Update the total deposited amount in USD
         protocolDeposit[Protocol.Aave].depositedUsdValue = protocolDeposit[Protocol.Aave].depositedAmount * ethPrice;
 
-        //protocolDeposit[Protocol.Aave].totalCreditedTokens -= amount; 
+        protocolDeposit[Protocol.Aave].totalCreditedTokens = aaveToken; 
 
         emit WithdrawFromAave(index,amount);
     }
@@ -411,7 +410,7 @@ contract Treasury is Ownable{
     function depositToCompound() external onlyBorrowingContract{
 
         //Divide the Total ETH in the contract to 1/4
-        uint256 share = ((address(this).balance)*25)/100;
+        uint256 share = (externalProtocolCountTotalValue[externalProtocolDepositCount - 1]*50)/100;
 
         //Check the amount to be deposited is greater than zero       
         if(share == 0){
@@ -495,6 +494,7 @@ contract Treasury is Ownable{
         protocolDeposit[Protocol.Compound].depositedUsdValue = protocolDeposit[Protocol.Compound].depositedAmount * ethPrice;
 
         protocolDeposit[Protocol.Compound].totalCreditedTokens -= amount;
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].interestGained = uint128(getInterestForCompoundDeposit(index));
         protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].tokensCredited = 0;
 
         emit WithdrawFromCompound(index,amount);
@@ -521,7 +521,7 @@ contract Treasury is Ownable{
         
         // Compute the equivalent ETH value of the cTokens at the current exchange rate
         // Taking into account the fixed-point arithmetic (scaling factor of 1e18)
-        uint256 currentEquivalentEth = (deposit.tokensCredited * currentExchangeRate) / 1e18;
+        uint256 currentEquivalentEth = (deposit.tokensCredited * currentExchangeRate) / PRECISION;
 
         // Calculate the accrued interest by subtracting the original deposited ETH 
         // amount from the current equivalent ETH value
@@ -529,17 +529,33 @@ contract Treasury is Ownable{
     }
 
     function totalInterestFromExternalProtocol(address depositor, uint64 index) external returns(uint256){
+        uint256 totalInterestFromExtPro;
         uint64 count = borrowing[depositor].depositDetails[index].externalProtocolCount;
+
+        for(uint64 i = count;i < externalProtocolDepositCount;i++){
+            EachDepositToProtocol memory aaveDeposit = protocolDeposit[Protocol.Aave].eachDepositToProtocol[i];
+            EachDepositToProtocol memory compoundDeposit = protocolDeposit[Protocol.Compound].eachDepositToProtocol[i];
+            if(aaveDeposit.withdrawed && compoundDeposit.withdrawed){
+                totalInterestFromExtPro += (aaveDeposit.interestGained + compoundDeposit.interestGained);
+            }else if(!aaveDeposit.withdrawed && compoundDeposit.withdrawed){
+                totalInterestFromExtPro += (calculateInterestForDepositAave(i) + compoundDeposit.interestGained);
+            }else if(aaveDeposit.withdrawed && !compoundDeposit.withdrawed){
+                totalInterestFromExtPro += (aaveDeposit.interestGained + getInterestForCompoundDeposit(i));
+            }else{
+                totalInterestFromExtPro += getInterestForCompoundDeposit(i) + calculateInterestForDepositAave(i);
+            }
+        }
         // uint256 compoundInterest = getInterestForCompoundDeposit(count);
         // uint256 aaveInterest = calculateInterestForDepositAave(count);
 
-        uint256 totalInterest = getInterestForCompoundDeposit(count) + calculateInterestForDepositAave(count);
+        //uint256 totalInterest = getInterestForCompoundDeposit(count) + calculateInterestForDepositAave(count);
+        console.log("TOTAL INTEREST",totalInterestFromExtPro);
 
-        uint256 totalValue = externalProtocolCountTotalValue[count]*1e18;
-        uint256 currentValue = borrowing[depositor].depositDetails[index].depositedAmount;
-        uint256 ratio = (totalValue/currentValue)/1e18;
+        uint256 totalValue = externalProtocolCountTotalValue[count];
+        uint256 currentValue = (borrowing[depositor].depositDetails[index].depositedAmount * 50)/100;
+        uint256 ratio = ((currentValue * PRECISION)/totalValue);
 
-        return (ratio*totalInterest);
+        return ((ratio*totalInterestFromExtPro)/PRECISION);
     }
 
 

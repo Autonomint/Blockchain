@@ -12,6 +12,14 @@ import {USDT} from "../../contracts/TestContracts/CopyUsdt.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
 
 contract DeployBorrowing is Script {
+
+    TrinityStablecoin tsc;
+    ProtocolToken pToken;
+    USDT usdt;
+    Options option;
+    CDSTest cds;
+    BorrowingTest borrow;
+    Treasury treasury;
     address public priceFeedAddress;
     address wethAddress = 0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C;
     address cEthAddress = 0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5;
@@ -24,13 +32,13 @@ contract DeployBorrowing is Script {
 
         priceFeedAddress = ethUsdPriceFeed;
         vm.startBroadcast(deployerKey);
-        TrinityStablecoin tsc = new TrinityStablecoin();
-        ProtocolToken pToken = new ProtocolToken();
-        USDT usdt = new USDT();
-        Options option = new Options();
-        CDSTest cds = new CDSTest(address(tsc),priceFeedAddress,address(usdt));
-        BorrowingTest borrow = new BorrowingTest(address(tsc),address(cds),address(pToken),priceFeedAddress);
-        Treasury treasury = new Treasury(address(borrow),address(tsc),address(cds),wethAddress,cEthAddress,aavePoolAddress,aTokenAddress,address(usdt));
+        tsc = new TrinityStablecoin();
+        pToken = new ProtocolToken();
+        usdt = new USDT();
+        option = new Options();
+        cds = new CDSTest(address(tsc),priceFeedAddress,address(usdt));
+        borrow = new BorrowingTest(address(tsc),address(cds),address(pToken),priceFeedAddress);
+        treasury = new Treasury(address(borrow),address(tsc),address(cds),wethAddress,cEthAddress,aavePoolAddress,aTokenAddress,address(usdt));
 
         borrow.initializeTreasury(address(treasury));
         borrow.setOptions(address(option));
