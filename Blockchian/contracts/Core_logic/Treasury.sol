@@ -8,6 +8,7 @@ import "../interface/ITrinityToken.sol";
 import "../interface/IBorrowing.sol";
 import "../interface/AaveInterfaces/IWETHGateway.sol";
 import "../interface/AaveInterfaces/IPoolAddressesProvider.sol";
+import "../interface/AaveInterfaces/IPool.sol";
 import "../interface/ICEther.sol";
 import "hardhat/console.sol";
 
@@ -287,7 +288,7 @@ contract Treasury is Ownable{
             // Calculate the change in the credited amount relative to the total credited tokens so far.
             uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
             // Update the cumulative rate using the calculated change.
-            protocolDeposit[Protocol.Aave].cumulativeRate = (PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate / PRECISION;
+            protocolDeposit[Protocol.Aave].cumulativeRate = ((PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate) / PRECISION;
         }
         // Compute the discounted price of the deposit using the cumulative rate.
         protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].discountedPrice = share * PRECISION / protocolDeposit[Protocol.Aave].cumulativeRate;
@@ -352,18 +353,22 @@ contract Treasury is Ownable{
 
     /**
      * @dev This function withdraw ETH from AAVE.
-     * @param amount amount of ETH to withdraw 
+     * @param index index of aave deposit 
      */
 
-    function withdrawFromAave(uint64 index,uint256 amount) external onlyBorrowingContract{
+    function withdrawFromAave(uint64 index) external onlyBorrowingContract{
 
-        //Check the amount to be withdraw is greater than zero
-        if(amount == 0){
-            revert Treasury_ZeroWithdraw();
-        }
+        EachDepositToProtocol memory aaveDeposit = protocolDeposit[Protocol.Aave].eachDepositToProtocol[index];
 
         //Check the deposited amount in the given index is already withdrawed
-        require(!protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawed,"Already withdrawed in this index");
+        require(!aaveDeposit.withdrawed,"Already withdrawed in this index");
+        uint256 creditedAmount = aToken.balanceOf(address(this));
+        // Calculate the change rate based on the difference between the current credited amount and the total credited tokens 
+        uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
+
+        // Compute the current cumulative rate using the change and the stored cumulative rate
+        uint256 currentCumulativeRate = (PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate / PRECISION;
+        uint256 amount = (currentCumulativeRate * aaveDeposit.discountedPrice)/PRECISION;
 
         address poolAddress = aavePoolAddressProvider.getPool();
 
@@ -372,7 +377,7 @@ contract Treasury is Ownable{
         }
 
         aToken.approve(aaveWETH,amount);
-        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].interestGained = uint128(calculateInterestForDepositAave(index));
+        aaveDeposit.interestGained = uint128(calculateInterestForDepositAave(index));
 
         // Call the withdraw function in aave to withdraw eth.
         wethGateway.withdrawETH(poolAddress,amount,address(this));
@@ -386,14 +391,14 @@ contract Treasury is Ownable{
         //protocolDeposit[Protocol.Aave].depositedAmount -= amount;
 
         //Set withdrawed to true
-        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawed = true;
+        aaveDeposit.withdrawed = true;
 
         //Update the withdraw time
-        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawTime = uint64(block.timestamp);
+        aaveDeposit.withdrawTime = uint64(block.timestamp);
 
         //Update the withdrawed amount in USD
-        uint128 ethPrice = protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].ethPriceAtWithdraw = uint64(borrow.getUSDValue());
-        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawedUsdValue = amount * ethPrice;
+        uint128 ethPrice = aaveDeposit.ethPriceAtWithdraw = uint64(borrow.getUSDValue());
+        aaveDeposit.withdrawedUsdValue = amount * ethPrice;
 
         //Update the total deposited amount in USD
         protocolDeposit[Protocol.Aave].depositedUsdValue = protocolDeposit[Protocol.Aave].depositedAmount * ethPrice;
@@ -494,7 +499,7 @@ contract Treasury is Ownable{
         protocolDeposit[Protocol.Compound].depositedUsdValue = protocolDeposit[Protocol.Compound].depositedAmount * ethPrice;
 
         protocolDeposit[Protocol.Compound].totalCreditedTokens -= amount;
-        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].interestGained = uint128(getInterestForCompoundDeposit(index));
+        protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].interestGained = uint128(getInterestForCompoundDeposit(index));
         protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].tokensCredited = 0;
 
         emit WithdrawFromCompound(index,amount);

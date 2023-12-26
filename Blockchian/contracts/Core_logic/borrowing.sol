@@ -208,8 +208,8 @@ contract Borrowing is Ownable {
         treasury.depositToAave();
     }
 
-    function withdrawFromAaveProtocol(uint64 index,uint256 amount) external onlyOwner{
-        treasury.withdrawFromAave(index,amount);
+    function withdrawFromAaveProtocol(uint64 index) external onlyOwner{
+        treasury.withdrawFromAave(index);
     }
 
     function depositToCompoundProtocol() external onlyOwner{

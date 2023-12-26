@@ -110,7 +110,7 @@ contract BorrowTest is Test {
         console.log("TREASURY BALANCE",treasury.getBalanceInTreasury());
         vm.warp(block.timestamp + 360000000);
 
-        borrow.withdrawFromAaveProtocol(1,aTokenBalance);
+        borrow.withdrawFromAaveProtocol(1);
         console.log("ATOKEN BALANCE AFTER WITHDRAW",IERC20(aTokenAddress).balanceOf(address(treasury)));
         console.log("TREASURY BALANCE",treasury.getBalanceInTreasury());
         vm.stopPrank();
@@ -160,7 +160,7 @@ contract BorrowTest is Test {
         vm.warp(block.timestamp + 360000000);
         uint256 aTokenBalance = IERC20(aTokenAddress).balanceOf(address(treasury));
         uint256 interest = treasury.calculateInterestForDepositAave(1);
-        borrow.withdrawFromAaveProtocol(1,aTokenBalance);
+        borrow.withdrawFromAaveProtocol(1);
         uint256 expectedInterest = treasury.getBalanceInTreasury() - treasuryBalance;
         assertEq(expectedInterest,interest);
         vm.stopPrank();    
@@ -177,17 +177,22 @@ contract BorrowTest is Test {
 
         uint256 aTokenBalance = IERC20(aTokenAddress).balanceOf(address(treasury));
 
-        borrow.depositTokens{value: 2 ether}(100000,uint64(block.timestamp),110000);
+        borrow.depositTokens{value: 3 ether}(100000,uint64(block.timestamp),110000);
 
         borrow.depositToAaveProtocol();
         borrow.depositToCompoundProtocol();
         vm.warp(block.timestamp + 360000000);
         vm.roll(block.number + 100);
 
-        borrow.withdrawFromAaveProtocol(1,aTokenBalance);
+        borrow.withdrawFromAaveProtocol(1);
         borrow.withdrawFromCompoundProtocol(1);
-        vm.warp(block.timestamp + 360000000);
-        vm.roll(block.number + 100);
+
+        vm.warp(block.timestamp + 100);
+
+        uint256 aTokenBalance1 = IERC20(aTokenAddress).balanceOf(address(treasury));
+
+        borrow.withdrawFromAaveProtocol(2);
+        borrow.withdrawFromCompoundProtocol(2);
         
         uint256 interestOwner = treasury.totalInterestFromExternalProtocol(owner,1);
         console.log("INTEREST OWNER1",interestOwner);
