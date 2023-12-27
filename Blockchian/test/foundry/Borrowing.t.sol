@@ -158,7 +158,7 @@ contract BorrowTest is Test {
         uint256 treasuryBalance = treasury.getBalanceInTreasury();
         borrow.depositToAaveProtocol();
         vm.warp(block.timestamp + 360000000);
-        uint256 aTokenBalance = IERC20(aTokenAddress).balanceOf(address(treasury));
+        
         uint256 interest = treasury.calculateInterestForDepositAave(1);
         borrow.withdrawFromAaveProtocol(1);
         uint256 expectedInterest = treasury.getBalanceInTreasury() - treasuryBalance;
@@ -172,24 +172,20 @@ contract BorrowTest is Test {
 
         borrow.depositToAaveProtocol();
         borrow.depositToCompoundProtocol();
-        vm.warp(block.timestamp + 360000000);
+        vm.warp(block.timestamp + 2592000);
         vm.roll(block.number + 100);
-
-        uint256 aTokenBalance = IERC20(aTokenAddress).balanceOf(address(treasury));
 
         borrow.depositTokens{value: 3 ether}(100000,uint64(block.timestamp),110000);
 
         borrow.depositToAaveProtocol();
         borrow.depositToCompoundProtocol();
-        vm.warp(block.timestamp + 360000000);
+        vm.warp(block.timestamp + 2592000);
         vm.roll(block.number + 100);
 
         borrow.withdrawFromAaveProtocol(1);
         borrow.withdrawFromCompoundProtocol(1);
 
-        vm.warp(block.timestamp + 100);
-
-        uint256 aTokenBalance1 = IERC20(aTokenAddress).balanceOf(address(treasury));
+        vm.warp(block.timestamp + 1);
 
         borrow.withdrawFromAaveProtocol(2);
         borrow.withdrawFromCompoundProtocol(2);
@@ -202,10 +198,6 @@ contract BorrowTest is Test {
         vm.startPrank(USER);
         uint256 interestUser = treasury.totalInterestFromExternalProtocol(address(USER),1);
         console.log("INTEREST USER",interestUser);
-        vm.stopPrank();
-        // uint256 aTokenBalance = IERC20(aTokenAddress).balanceOf(address(treasury));
-        // borrow.withdrawFromAaveProtocol(1,aTokenBalance);
-        // borrow.withdrawFromCompoundProtocol(1);
         vm.stopPrank();
     }
 }

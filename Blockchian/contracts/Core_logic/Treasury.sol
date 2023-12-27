@@ -268,6 +268,8 @@ contract Treasury is Ownable{
             revert Treasury_AavePoolAddressZero();
         }
 
+        uint256 aTokenBeforeDeposit = aToken.balanceOf(address(this));
+
         // Call the deposit function in aave to deposit eth.
         wethGateway.depositETH{value: share}(poolAddress,address(this),0);
 
@@ -286,7 +288,7 @@ contract Treasury is Ownable{
             protocolDeposit[Protocol.Aave].cumulativeRate = PRECISION; 
         } else {
             // Calculate the change in the credited amount relative to the total credited tokens so far.
-            uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
+            uint256 change = (aTokenBeforeDeposit - protocolDeposit[Protocol.Aave].totalCreditedTokens) * PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
             // Update the cumulative rate using the calculated change.
             protocolDeposit[Protocol.Aave].cumulativeRate = ((PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate) / PRECISION;
         }
@@ -358,18 +360,15 @@ contract Treasury is Ownable{
 
     function withdrawFromAave(uint64 index) external onlyBorrowingContract{
 
-        EachDepositToProtocol memory aaveDeposit = protocolDeposit[Protocol.Aave].eachDepositToProtocol[index];
-
         //Check the deposited amount in the given index is already withdrawed
-        require(!aaveDeposit.withdrawed,"Already withdrawed in this index");
+        require(!protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawed,"Already withdrawed in this index");
         uint256 creditedAmount = aToken.balanceOf(address(this));
         // Calculate the change rate based on the difference between the current credited amount and the total credited tokens 
         uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
 
         // Compute the current cumulative rate using the change and the stored cumulative rate
         uint256 currentCumulativeRate = (PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate / PRECISION;
-        uint256 amount = (currentCumulativeRate * aaveDeposit.discountedPrice)/PRECISION;
-
+        uint256 amount = (currentCumulativeRate * protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].discountedPrice)/PRECISION;
         address poolAddress = aavePoolAddressProvider.getPool();
 
         if(poolAddress == address(0)){
@@ -377,7 +376,7 @@ contract Treasury is Ownable{
         }
 
         aToken.approve(aaveWETH,amount);
-        aaveDeposit.interestGained = uint128(calculateInterestForDepositAave(index));
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].interestGained = uint128(calculateInterestForDepositAave(index));
 
         // Call the withdraw function in aave to withdraw eth.
         wethGateway.withdrawETH(poolAddress,amount,address(this));
@@ -391,14 +390,14 @@ contract Treasury is Ownable{
         //protocolDeposit[Protocol.Aave].depositedAmount -= amount;
 
         //Set withdrawed to true
-        aaveDeposit.withdrawed = true;
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawed = true;
 
         //Update the withdraw time
-        aaveDeposit.withdrawTime = uint64(block.timestamp);
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawTime = uint64(block.timestamp);
 
         //Update the withdrawed amount in USD
-        uint128 ethPrice = aaveDeposit.ethPriceAtWithdraw = uint64(borrow.getUSDValue());
-        aaveDeposit.withdrawedUsdValue = amount * ethPrice;
+        uint128 ethPrice = protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].ethPriceAtWithdraw = uint64(borrow.getUSDValue());
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawedUsdValue = amount * ethPrice;
 
         //Update the total deposited amount in USD
         protocolDeposit[Protocol.Aave].depositedUsdValue = protocolDeposit[Protocol.Aave].depositedAmount * ethPrice;
