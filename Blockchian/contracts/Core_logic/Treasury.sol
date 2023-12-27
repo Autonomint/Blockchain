@@ -111,6 +111,7 @@ contract Treasury is Ownable{
 
     uint64 public externalProtocolDepositCount = 1;
     uint256 PRECISION = 1e18;
+    uint256 CUMULATIVE_PRECISION = 1e27;
 
     mapping(uint256=>uint256) externalProtocolCountTotalValue;
 
@@ -285,15 +286,15 @@ contract Treasury is Ownable{
 
         // If it's the first deposit, set the cumulative rate to precision (i.e., 1 in fixed-point representation).
         if (count == 1 || protocolDeposit[Protocol.Aave].totalCreditedTokens == 0) {
-            protocolDeposit[Protocol.Aave].cumulativeRate = PRECISION; 
+            protocolDeposit[Protocol.Aave].cumulativeRate = CUMULATIVE_PRECISION; 
         } else {
             // Calculate the change in the credited amount relative to the total credited tokens so far.
-            uint256 change = (aTokenBeforeDeposit - protocolDeposit[Protocol.Aave].totalCreditedTokens) * PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
+            uint256 change = (aTokenBeforeDeposit - protocolDeposit[Protocol.Aave].totalCreditedTokens) * CUMULATIVE_PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
             // Update the cumulative rate using the calculated change.
-            protocolDeposit[Protocol.Aave].cumulativeRate = ((PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate) / PRECISION;
+            protocolDeposit[Protocol.Aave].cumulativeRate = ((CUMULATIVE_PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate) / CUMULATIVE_PRECISION;
         }
         // Compute the discounted price of the deposit using the cumulative rate.
-        protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].discountedPrice = share * PRECISION / protocolDeposit[Protocol.Aave].cumulativeRate;
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].discountedPrice = share * CUMULATIVE_PRECISION / protocolDeposit[Protocol.Aave].cumulativeRate;
 
         //Assign depositIndex(number of times deposited)
         protocolDeposit[Protocol.Aave].depositIndex = count;
@@ -338,13 +339,13 @@ contract Treasury is Ownable{
         uint256 creditedAmount = aToken.balanceOf(address(this));
 
         // Calculate the change rate based on the difference between the current credited amount and the total credited tokens 
-        uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
+        uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * CUMULATIVE_PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
 
         // Compute the current cumulative rate using the change and the stored cumulative rate
-        uint256 currentCumulativeRate = (PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate / PRECISION;
+        uint256 currentCumulativeRate = (CUMULATIVE_PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate / CUMULATIVE_PRECISION;
         
         // Calculate the present value of the deposit using the current cumulative rate and the stored discounted price for the deposit
-        uint256 presentValue = currentCumulativeRate * protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].discountedPrice / PRECISION;
+        uint256 presentValue = currentCumulativeRate * protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].discountedPrice / CUMULATIVE_PRECISION;
 
         // Compute the interest by subtracting the original deposited amount from the present value
         uint256 interestValue = presentValue - protocolDeposit[Protocol.Aave].eachDepositToProtocol[count].depositedAmount;
@@ -364,11 +365,11 @@ contract Treasury is Ownable{
         require(!protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawed,"Already withdrawed in this index");
         uint256 creditedAmount = aToken.balanceOf(address(this));
         // Calculate the change rate based on the difference between the current credited amount and the total credited tokens 
-        uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
+        uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * CUMULATIVE_PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
 
         // Compute the current cumulative rate using the change and the stored cumulative rate
-        uint256 currentCumulativeRate = (PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate / PRECISION;
-        uint256 amount = (currentCumulativeRate * protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].discountedPrice)/PRECISION;
+        uint256 currentCumulativeRate = (CUMULATIVE_PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate / CUMULATIVE_PRECISION;
+        uint256 amount = (currentCumulativeRate * protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].discountedPrice)/CUMULATIVE_PRECISION;
         address poolAddress = aavePoolAddressProvider.getPool();
 
         if(poolAddress == address(0)){
