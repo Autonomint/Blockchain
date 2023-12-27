@@ -15,6 +15,10 @@ contract USDT is ERC20, ERC20Burnable, Pausable, Ownable {
         _pause();
     }
 
+    function decimals() public pure override returns (uint8) {
+        return 6;
+    }
+
     function unpause() public onlyOwner {
         _unpause();
     }
