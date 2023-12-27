@@ -360,8 +360,6 @@ contract Treasury is Ownable{
 
     function withdrawFromAave(uint64 index) external onlyBorrowingContract{
 
-        EachDepositToProtocol memory aaveDeposit = protocolDeposit[Protocol.Aave].eachDepositToProtocol[index];
-
         //Check the deposited amount in the given index is already withdrawed
         require(!protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawed,"Already withdrawed in this index");
         uint256 creditedAmount = aToken.balanceOf(address(this));
@@ -378,7 +376,7 @@ contract Treasury is Ownable{
         }
 
         aToken.approve(aaveWETH,amount);
-        aaveDeposit.interestGained = uint128(calculateInterestForDepositAave(index));
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].interestGained = uint128(calculateInterestForDepositAave(index));
 
         // Call the withdraw function in aave to withdraw eth.
         wethGateway.withdrawETH(poolAddress,amount,address(this));
