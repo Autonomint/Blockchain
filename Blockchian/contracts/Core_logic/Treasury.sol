@@ -369,6 +369,7 @@ contract Treasury is Ownable{
 
         // Compute the current cumulative rate using the change and the stored cumulative rate
         uint256 currentCumulativeRate = (CUMULATIVE_PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate / CUMULATIVE_PRECISION;
+        protocolDeposit[Protocol.Aave].cumulativeRate = currentCumulativeRate;
         uint256 amount = (currentCumulativeRate * protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].discountedPrice)/CUMULATIVE_PRECISION;
         address poolAddress = aavePoolAddressProvider.getPool();
 
@@ -377,7 +378,7 @@ contract Treasury is Ownable{
         }
 
         aToken.approve(aaveWETH,amount);
-        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].interestGained = uint128(calculateInterestForDepositAave(index));
+        protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].interestGained = uint128(amount) - protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].depositedAmount;
 
         // Call the withdraw function in aave to withdraw eth.
         wethGateway.withdrawETH(poolAddress,amount,address(this));
@@ -535,33 +536,49 @@ contract Treasury is Ownable{
     }
 
     function totalInterestFromExternalProtocol(address depositor, uint64 index) external returns(uint256){
-        uint256 totalInterestFromExtPro;
         uint64 count = borrowing[depositor].depositDetails[index].externalProtocolCount;
+        uint256 interestGainedByUser;
 
         for(uint64 i = count;i < externalProtocolDepositCount;i++){
+
             EachDepositToProtocol memory aaveDeposit = protocolDeposit[Protocol.Aave].eachDepositToProtocol[i];
             EachDepositToProtocol memory compoundDeposit = protocolDeposit[Protocol.Compound].eachDepositToProtocol[i];
-            if(aaveDeposit.withdrawed && compoundDeposit.withdrawed){
-                totalInterestFromExtPro += (aaveDeposit.interestGained + compoundDeposit.interestGained);
-            }else if(!aaveDeposit.withdrawed && compoundDeposit.withdrawed){
-                totalInterestFromExtPro += (calculateInterestForDepositAave(i) + compoundDeposit.interestGained);
-            }else if(aaveDeposit.withdrawed && !compoundDeposit.withdrawed){
-                totalInterestFromExtPro += (aaveDeposit.interestGained + getInterestForCompoundDeposit(i));
-            }else{
-                totalInterestFromExtPro += getInterestForCompoundDeposit(i) + calculateInterestForDepositAave(i);
+
+            if(i==1 || protocolDeposit[Protocol.Aave].eachDepositToProtocol[i-1].withdrawed){
+
+                uint256 totalValue = (externalProtocolCountTotalValue[i] * 50)/100;
+                uint256 currentValue = (borrowing[depositor].depositDetails[index].depositedAmount * 25)/100;
+                uint256 totalInterestFromExtPro;
+
+                if(aaveDeposit.withdrawed){
+                    totalInterestFromExtPro += aaveDeposit.interestGained;
+                }else{
+                    totalInterestFromExtPro += calculateInterestForDepositAave(i);
+                }
+
+                uint256 ratio = ((currentValue * PRECISION)/totalValue);
+                interestGainedByUser += ((ratio*totalInterestFromExtPro)/PRECISION);
+
             }
+            if(i==1 || protocolDeposit[Protocol.Compound].eachDepositToProtocol[i-1].withdrawed){
+
+                uint256 totalValue = (externalProtocolCountTotalValue[i] * 50)/100;
+                uint256 currentValue = (borrowing[depositor].depositDetails[index].depositedAmount * 25)/100;
+                uint256 totalInterestFromExtPro;
+
+                if(compoundDeposit.withdrawed){
+                    totalInterestFromExtPro += compoundDeposit.interestGained;
+                }else{
+                    totalInterestFromExtPro += getInterestForCompoundDeposit(i);
+                }
+
+                uint256 ratio = ((currentValue * PRECISION)/totalValue);
+                interestGainedByUser += ((ratio*totalInterestFromExtPro)/PRECISION);
+            }
+
         }
-        // uint256 compoundInterest = getInterestForCompoundDeposit(count);
-        // uint256 aaveInterest = calculateInterestForDepositAave(count);
 
-        //uint256 totalInterest = getInterestForCompoundDeposit(count) + calculateInterestForDepositAave(count);
-        console.log("TOTAL INTEREST",totalInterestFromExtPro);
-
-        uint256 totalValue = externalProtocolCountTotalValue[count];
-        uint256 currentValue = (borrowing[depositor].depositDetails[index].depositedAmount * 50)/100;
-        uint256 ratio = ((currentValue * PRECISION)/totalValue);
-
-        return ((ratio*totalInterestFromExtPro)/PRECISION);
+        return interestGainedByUser;
     }
 
 

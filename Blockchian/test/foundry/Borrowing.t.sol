@@ -155,65 +155,172 @@ contract BorrowTest is Test {
 
     function testCanCalculateInterestInAaveCorrectly() public depositETH{
         vm.startPrank(owner);
-        uint256 treasuryBalance = treasury.getBalanceInTreasury();
+        uint256 interest;
+        uint256 treasuryBalance = 7 ether;
+        borrow.depositTokens{value: 2 ether}(100000,uint64(block.timestamp),110000);
         borrow.depositToAaveProtocol();
-        vm.warp(block.timestamp + 360000000);
-        
-        uint256 interest = treasury.calculateInterestForDepositAave(1);
+
+        vm.warp(block.timestamp + 2592000);
+        borrow.depositTokens{value: 4 ether}(100000,uint64(block.timestamp),110000);
+        borrow.depositToAaveProtocol();
+
+        vm.warp(block.timestamp + 2592000);
+        interest += treasury.calculateInterestForDepositAave(2);
+        borrow.withdrawFromAaveProtocol(2);
+
+        vm.warp(block.timestamp + 2591999);
+        interest += treasury.calculateInterestForDepositAave(1);
         borrow.withdrawFromAaveProtocol(1);
+
         uint256 expectedInterest = treasury.getBalanceInTreasury() - treasuryBalance;
+        console.log(expectedInterest);
+        console.log(interest);
         assertEq(expectedInterest,interest);
         vm.stopPrank();    
     }
 
     function testTotalInterestFromExternalProtocol() public depositETH{
         vm.startPrank(owner);
+        uint256 interest;
+        uint256 treasuryBalance = 52 ether;
         borrow.depositTokens{value: 2 ether}(100000,uint64(block.timestamp),110000);
-
         borrow.depositToAaveProtocol();
         borrow.depositToCompoundProtocol();
+
         vm.warp(block.timestamp + 2592000);
         vm.roll(block.number + 100);
 
         borrow.depositTokens{value: 4 ether}(100000,uint64(block.timestamp),110000);
-
         borrow.depositToAaveProtocol();
         borrow.depositToCompoundProtocol();
+
+
         vm.warp(block.timestamp + 2592000);
         vm.roll(block.number + 100);
+
 
         borrow.depositTokens{value: 6 ether}(100000,uint64(block.timestamp),110000);
-
         borrow.depositToAaveProtocol();
         borrow.depositToCompoundProtocol();
+
         vm.warp(block.timestamp + 2592000);
         vm.roll(block.number + 100);
+
+        interest += treasury.calculateInterestForDepositAave(1);
+        interest += treasury.getInterestForCompoundDeposit(1);
+
+        borrow.withdrawFromAaveProtocol(1);
+        borrow.withdrawFromCompoundProtocol(1);
+
+
+        vm.warp(block.timestamp + 2592000);
+        vm.roll(block.number + 100);
+        borrow.depositTokens{value: 6 ether}(100000,uint64(block.timestamp),110000);
+        borrow.depositToAaveProtocol();
+        borrow.depositToCompoundProtocol();
+
+
+        vm.warp(block.timestamp + 2592000);
+        vm.roll(block.number + 100);
+        borrow.depositTokens{value: 8 ether}(100000,uint64(block.timestamp),110000);
+        borrow.depositToAaveProtocol();
+        borrow.depositToCompoundProtocol();
+
+        vm.warp(block.timestamp + 2592000);
+        vm.roll(block.number + 100);
+
+        interest += treasury.calculateInterestForDepositAave(3);
+        interest += treasury.getInterestForCompoundDeposit(3);
+
+        borrow.withdrawFromAaveProtocol(3);
+        borrow.withdrawFromCompoundProtocol(3);
+
+        vm.warp(block.timestamp + 2592000);
+        vm.roll(block.number + 100);
+
+        interest += treasury.calculateInterestForDepositAave(2);
+        interest += treasury.getInterestForCompoundDeposit(2);
 
         borrow.withdrawFromAaveProtocol(2);
         borrow.withdrawFromCompoundProtocol(2);
 
         vm.warp(block.timestamp + 2592000);
-                console.log(usdt.decimals());
-
-
-        borrow.withdrawFromAaveProtocol(1);
-        borrow.withdrawFromCompoundProtocol(1);
+        vm.roll(block.number + 100);
+        borrow.depositTokens{value: 3 ether}(100000,uint64(block.timestamp),110000);
+        borrow.depositToAaveProtocol();
+        borrow.depositToCompoundProtocol();
 
         vm.warp(block.timestamp + 2592000);
+        vm.roll(block.number + 100);
+        borrow.depositTokens{value: 7 ether}(100000,uint64(block.timestamp),110000);
 
-        borrow.withdrawFromAaveProtocol(3);
-        borrow.withdrawFromCompoundProtocol(3);
-        
-        uint256 interestOwner = treasury.totalInterestFromExternalProtocol(owner,1);
-        console.log("INTEREST OWNER1",interestOwner);
-        uint256 interestOwner1 = treasury.totalInterestFromExternalProtocol(owner,2);
-        console.log("INTEREST OWNER2",interestOwner1);
-        vm.stopPrank();
-        vm.startPrank(USER);
+        interest += treasury.calculateInterestForDepositAave(4);
+        interest += treasury.getInterestForCompoundDeposit(4);
+
+        borrow.withdrawFromAaveProtocol(4);
+        borrow.withdrawFromCompoundProtocol(4);
+
+        vm.warp(block.timestamp + 2592000);
+        vm.roll(block.number + 100);
+        borrow.depositToAaveProtocol();
+        borrow.depositToCompoundProtocol();
+
+        vm.warp(block.timestamp + 2592000);
+        vm.roll(block.number + 100);
+
+        interest += treasury.calculateInterestForDepositAave(5);
+        interest += treasury.getInterestForCompoundDeposit(5);
+
+        borrow.withdrawFromAaveProtocol(5);
+        borrow.withdrawFromCompoundProtocol(5);
+
+        vm.warp(block.timestamp + 2592000);
+        vm.roll(block.number + 100);
+        borrow.depositTokens{value: 15 ether}(100000,uint64(block.timestamp),110000);
+        borrow.depositToAaveProtocol();
+        borrow.depositToCompoundProtocol();
+
+        vm.warp(block.timestamp + 1);
+        vm.roll(block.number + 1);
+
+        interest += treasury.calculateInterestForDepositAave(8);
+        interest += treasury.getInterestForCompoundDeposit(8);
+
+        borrow.withdrawFromAaveProtocol(8);
+        borrow.withdrawFromCompoundProtocol(8);
+
+
+        vm.warp(block.timestamp + 1);
+        vm.roll(block.number + 1);
+
+        interest += treasury.calculateInterestForDepositAave(7);
+        interest += treasury.getInterestForCompoundDeposit(7);
+
+        borrow.withdrawFromAaveProtocol(7);
+        borrow.withdrawFromCompoundProtocol(7);
+
+        vm.warp(block.timestamp + 2);
+        vm.roll(block.number + 1);
+
+        interest += treasury.calculateInterestForDepositAave(6);
+        interest += treasury.getInterestForCompoundDeposit(6);
+
+        borrow.withdrawFromAaveProtocol(6);
+        borrow.withdrawFromCompoundProtocol(6);
+
+        // uint256 interestOwner;
+        // for(uint64 i=1; i<=8; i++){
+        //     interestOwner += treasury.totalInterestFromExternalProtocol(owner,i);
+        // }
+
         uint256 interestUser = treasury.totalInterestFromExternalProtocol(address(USER),1);
-        console.log("INTEREST USER",interestUser);
 
-        console.log(IERC20(aTokenAddress).balanceOf(address(treasury)));
+
+        uint256 expectedInterest = treasury.getBalanceInTreasury() - treasuryBalance;
+        //uint256 interestByUser = interestOwner + interestUser;
+
+        assertEq(expectedInterest,interest);
+        //assertEq(expectedInterest,interestByUser);
         vm.stopPrank();
     }
 }
