@@ -323,4 +323,52 @@ contract BorrowTest is Test {
         //assertEq(expectedInterest,interestByUser);
         vm.stopPrank();
     }
+
+    function testTotalInterestFromExternalProtocolSimple() public depositETH{
+        vm.startPrank(owner);
+        uint256 interest;
+        uint256 treasuryBalance = 6 ether;
+        borrow.depositTokens{value: 3 ether}(100000,uint64(block.timestamp),110000);
+        borrow.depositTokens{value: 3 ether}(100000,uint64(block.timestamp),110000);
+
+        borrow.depositToAaveProtocol();
+        borrow.depositToCompoundProtocol();
+
+        vm.warp(block.timestamp + 2592000);
+        vm.roll(block.number + 100);
+
+        interest += treasury.calculateInterestForDepositAave(1);
+        interest += treasury.getInterestForCompoundDeposit(1);
+
+        borrow.withdrawFromAaveProtocol(1);
+        borrow.withdrawFromCompoundProtocol(1);
+
+        borrow.depositTokens{value: 3 ether}(100000,uint64(block.timestamp),110000);
+        borrow.depositToAaveProtocol();
+        borrow.depositToCompoundProtocol();
+
+        vm.warp(block.timestamp + 2592000);
+        vm.roll(block.number + 100);
+
+        interest += treasury.calculateInterestForDepositAave(2);
+        interest += treasury.getInterestForCompoundDeposit(2);
+
+        borrow.withdrawFromAaveProtocol(2);
+        borrow.withdrawFromCompoundProtocol(2);
+        uint256 interestUser = treasury.totalInterestFromExternalProtocol(address(USER),1);
+        uint256 interestOwner;
+        for(uint64 i=1; i < 3; i++){
+            interestOwner += treasury.totalInterestFromExternalProtocol(owner,i);
+        }
+
+
+
+
+        uint256 expectedInterest = treasury.getBalanceInTreasury() - treasuryBalance;
+        uint256 interestByUser = interestOwner + interestUser;
+
+        //assertEq(expectedInterest,interest);
+        assertEq(expectedInterest,interestByUser);
+        vm.stopPrank();
+    }
 }
