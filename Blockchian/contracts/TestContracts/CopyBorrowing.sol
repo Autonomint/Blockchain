@@ -180,7 +180,6 @@ contract BorrowingTest is Ownable {
         //Call the deposit function in Treasury contract
         (bool deposited,uint64 index) = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
         uint256 optionFees = options.calculateOptionPrice(_volatility,msg.value);
-        cds.calculateCumulativeRate(uint128(optionFees));
 
         //Check whether the deposit is successfull
         if(!deposited){
@@ -189,6 +188,7 @@ contract BorrowingTest is Ownable {
 
         // Call the transfer function to mint Trinity and Get the borrowedAmount
         uint256 borrowAmount = _transferToken(msg.sender,msg.value,_ethPrice,optionFees);
+        cds.calculateCumulativeRate(uint128(optionFees));
         (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,index);
         depositDetail.borrowedAmount = uint128(borrowAmount);
         treasury.updateHasBorrowed(msg.sender,true);

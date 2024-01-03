@@ -25,7 +25,7 @@ interface CDSInterface {
     function deposit(uint256 _amount, uint128 _timeStamp) external;
     function withdraw(address _to, uint96 _index, uint64 _withdrawTime) external;
     function withdraw_fee(address _to, uint96 _amount) external;
-    function totalCdsDepositedAmount() external returns(uint128);
+    function totalCdsDepositedAmount() external view returns(uint128);
     function amountAvailableToBorrow() external returns(uint128);
     function updateAmountAvailabletoBorrow(uint128 _updatedCdsPercentage) external;
     function approval(address _address, uint _amount) external;

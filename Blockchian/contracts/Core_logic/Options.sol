@@ -86,7 +86,7 @@ contract Options{
     }
 
     // Function to calculate option price
-    function calculateOptionPrice(uint256 _ethVolatility,uint256 _amount) public returns (uint256) {
+    function calculateOptionPrice(uint256 _ethVolatility,uint256 _amount) public view returns (uint256) {
         //uint256 a = calculateStandardDeviation(); 
         uint256 a = _ethVolatility;
         uint256 ethPrice = getLatestPrice();
