@@ -35,6 +35,7 @@ interface ITreasury{
 
 
         function noOfBorrowers() external returns(uint128);
+        function totalVolumeOfBorrowersAmountinUSD() external returns(uint256);
 
         function updateHasBorrowed(address borrower,bool _bool) external;
         function updateTotalDepositedAmount(address borrower,uint128 amount) external;

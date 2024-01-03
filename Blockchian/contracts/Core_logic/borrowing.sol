@@ -120,7 +120,7 @@ contract Borrowing is Ownable {
      * @param amount deposited amount of the borrower
      * @param _ethPrice current eth price
      */
-    function _transferToken(address _borrower,uint256 amount,uint128 _ethPrice) internal returns(uint256){
+    function _transferToken(address _borrower,uint256 amount,uint128 _ethPrice,uint256 optionFees) internal returns(uint256){
         require(_borrower != address(0), "Borrower cannot be zero address");
         require(LTV != 0, "LTV must be set to non-zero value before providing loans");
         
@@ -132,9 +132,14 @@ contract Borrowing is Ownable {
         uint256 tokensToLend = (tokenValueConversion * LTV) / RATIO_PRECISION;
 
         //Call the mint function in Trinity
-        bool minted = Trinity.mint(_borrower, tokensToLend);
-        
+        bool minted = Trinity.mint(_borrower, (tokensToLend - optionFees));
+        bool treasuryMint = Trinity.mint(treasuryAddress,optionFees);
+
         if(!minted){
+            revert Borrowing_MUSDMintFailed();
+        }
+
+        if(!treasuryMint){
             revert Borrowing_MUSDMintFailed();
         }
         totalAmintSupply = Trinity.totalSupply();
@@ -164,7 +169,7 @@ contract Borrowing is Ownable {
     @param _depositTime get unixtime stamp at the time of deposit 
     **/
 
-    function depositTokens (uint128 _ethPrice,uint64 _depositTime,uint64 _strikePrice) external payable {
+    function depositTokens (uint128 _ethPrice,uint64 _depositTime,uint64 _strikePrice,uint256 _volatility) external payable {
         require(msg.value > 0, "Cannot deposit zero tokens");
         require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
 
@@ -174,6 +179,8 @@ contract Borrowing is Ownable {
         
         //Call the deposit function in Treasury contract
         (bool deposited,uint64 index) = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
+        uint256 optionFees = options.calculateOptionPrice(_volatility,msg.value);
+        cds.calculateCumulativeRate(uint128(optionFees));
 
         //Check whether the deposit is successfull
         if(!deposited){
@@ -181,7 +188,7 @@ contract Borrowing is Ownable {
         }
 
         // Call the transfer function to mint Trinity and Get the borrowedAmount
-        uint256 borrowAmount = _transferToken(msg.sender,msg.value,_ethPrice);
+        uint256 borrowAmount = _transferToken(msg.sender,msg.value,_ethPrice,optionFees);
         (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,index);
         depositDetail.borrowedAmount = uint128(borrowAmount);
         treasury.updateHasBorrowed(msg.sender,true);
@@ -260,7 +267,7 @@ contract Borrowing is Ownable {
                     depositDetail.withdrawTime = _withdrawTime;
                     depositDetail.withdrawNo = 1;
                     // Calculate interest for the borrower's debt
-                    uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
+                    //uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
 
                     uint256 discountedETH = ((10*(depositDetail.depositedAmount))/100)*_ethPrice;
 
@@ -281,7 +288,7 @@ contract Borrowing is Ownable {
                     }
                     totalNormalizedAmount -= borrowerDebt;
 
-                    treasury.updateTotalInterest(interest);
+                    treasury.updateTotalInterest(borrowerDebt - depositDetail.borrowedAmount);
 
                     // Mint the pTokens
                     uint128 noOfPTokensminted = _mintPToken(msg.sender,discountedETH, _bondRatio);

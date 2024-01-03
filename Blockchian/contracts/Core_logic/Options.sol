@@ -2,6 +2,9 @@
 
 pragma solidity 0.8.18;
 
+import "../interface/ITreasury.sol";
+import "../interface/CDSInterface.sol";
+
 import "hardhat/console.sol";
 
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
@@ -13,6 +16,8 @@ contract Options{
     uint256 private constant smoothingFactor = 2;
     uint256 private index = 0; // To track the oldest variance
     uint256[30] private variances;
+    uint256 PRECISION = 1e18;
+    uint256 ETH_PRICE_PRECISION = 1e6;
 
     ITreasury treasury;
     CDSInterface cds;
@@ -40,16 +45,16 @@ contract Options{
     }
 
     // Chainlink function to get the latest Ethereum price
-    function getLatestPrice() public view returns (int) {
+    function getLatestPrice() public view returns (uint) {
         (
             ,int price,,,
         ) = priceFeed.latestRoundData();
-        return price;
+        return (uint(price)/ETH_PRICE_PRECISION);
     }
 
     // Function to update EMA daily
     function updateDailyEMA() external {
-        int latestPrice = getLatestPrice();
+        uint latestPrice = getLatestPrice();
         uint256 latestPriceUint = uint256(latestPrice);
 
         // Update EMA
@@ -81,17 +86,19 @@ contract Options{
     }
 
     // Function to calculate option price
-    function calculateOptionPrice() public returns (uint256) {
-        uint256 a = calculateStandardDeviation(); 
-        uint256 E = treasury.getBalanceInTreasury();
+    function calculateOptionPrice(uint256 _ethVolatility,uint256 _amount) public returns (uint256) {
+        //uint256 a = calculateStandardDeviation(); 
+        uint256 a = _ethVolatility;
+        uint256 ethPrice = getLatestPrice();
+        uint256 E = (treasury.totalVolumeOfBorrowersAmountinUSD() + (_amount * ethPrice));
         uint256 cdsVault = cds.totalCdsDepositedAmount();
 
         require(E != 0, "Treasury balance is zero");
         require(cdsVault != 0, "CDS Vault is zero");
 
-        uint256 b = cdsVault / E;
-        uint256 optionPrice = sqrt(10 * a * E) + (3 * 1e18 / b); // 1e18 is used to handle division precision
-        return optionPrice;
+        uint256 b = (cdsVault * 1e2)/ E;
+        uint256 optionPrice = (sqrt(10 * a * ethPrice))*1e13 + (3 * PRECISION / b); // 1e18 is used to handle division precision
+        return (optionPrice * _amount)/PRECISION;
     }
 
     // Provided square root function
