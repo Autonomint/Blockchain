@@ -54,6 +54,7 @@ contract Treasury is Ownable{
         uint64 withdrawTime;
         uint128 pTokensAmount;
         uint64 strikePrice;
+        uint128 optionFees;
         uint64 externalProtocolCount;
     }
 

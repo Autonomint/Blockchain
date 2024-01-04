@@ -191,6 +191,7 @@ contract BorrowingTest is Ownable {
         cds.calculateCumulativeRate(uint128(optionFees));
         (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,index);
         depositDetail.borrowedAmount = uint128(borrowAmount);
+        depositDetail.optionFees = uint128(optionFees);
         treasury.updateHasBorrowed(msg.sender,true);
         treasury.updateTotalBorrowedAmount(msg.sender,borrowAmount);
 
