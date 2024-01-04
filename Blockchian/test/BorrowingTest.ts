@@ -42,9 +42,6 @@ describe("Borrowing Contract",function(){
         const USDTToken = await ethers.getContractFactory("USDT");
         usdt = await USDTToken.deploy();
 
-        const option = await ethers.getContractFactory("Options");
-        options = await option.deploy();
-
         const CDS = await ethers.getContractFactory("CDSTest");
         CDSContract = await CDS.deploy(Token.address,priceFeedAddress,usdt.address);
 
@@ -53,6 +50,9 @@ describe("Borrowing Contract",function(){
 
         const Treasury = await ethers.getContractFactory("Treasury");
         treasury = await Treasury.deploy(BorrowingContract.address,Token.address,CDSContract.address,wethGateway,cEther,aavePoolAddress,aTokenAddress,usdt.address);
+        
+        const Option = await ethers.getContractFactory("Options");
+        options = await Option.deploy(priceFeedAddress,treasury.address,CDSContract.address);
 
         await BorrowingContract.initializeTreasury(treasury.address);
         await BorrowingContract.setOptions(options.address);
@@ -72,7 +72,7 @@ describe("Borrowing Contract",function(){
 
         [owner,user1,user2,user3] = await ethers.getSigners();
         await BorrowingContract.setAdmin(owner.address);
-        return {Token,pToken,usdt,CDSContract,BorrowingContract,treasury,aToken,cETH,owner,user1,user2,user3,provider}
+        return {Token,pToken,usdt,CDSContract,BorrowingContract,treasury,options,aToken,cETH,owner,user1,user2,user3,provider}
     }
 
     describe("Should deposit ETH and mint Trinity",function(){
@@ -196,7 +196,7 @@ describe("Borrowing Contract",function(){
             expect(tx).to.be.revertedWith("Ownable: caller is not the owner");
         })
 
-        it.only("Should revert if ratio is not eligible",async function(){
+        it("Should revert if ratio is not eligible",async function(){
             const {BorrowingContract,CDSContract,Token} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
@@ -744,6 +744,22 @@ describe("Borrowing Contract",function(){
 
             const tx = BorrowingContract.connect(user1).liquidate(user2.address,1,100000);
             expect(tx).to.be.revertedWith("You cannot liquidate");
+        })
+
+        it.only("Should calculate Option Price",async function(){
+            const {options,usdt,Token,CDSContract,BorrowingContract} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            const ethPrice = await BorrowingContract.getUSDValue();
+            console.log(ethPrice);
+
+            await usdt.connect(user1).mint(user1.address,10000000000)
+            await usdt.connect(user1).approve(CDSContract.address,10000000000);
+            await CDSContract.connect(user1).deposit(10000000000,0,true,5000000000);
+            await BorrowingContract.connect(user1).depositTokens(ethPrice,timeStamp,1,(ethPrice * 1.1),50622665,{value: ethers.utils.parseEther("1")});
+            console.log("USER's AMINT BALANCE",await Token.balanceOf(user1.address));
+            // console.log("TREASURY's AMINT BALANCE",await Token.balanceOf(treasury.address));
+
+            // await options.calculateOptionPrice(50622665,ethers.utils.parseEther("1"));
         })
     })
 })

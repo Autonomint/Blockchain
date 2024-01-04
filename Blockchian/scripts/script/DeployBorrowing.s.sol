@@ -35,10 +35,10 @@ contract DeployBorrowing is Script {
         tsc = new TrinityStablecoin();
         pToken = new ProtocolToken();
         usdt = new USDT();
-        option = new Options();
         cds = new CDSTest(address(tsc),priceFeedAddress,address(usdt));
         borrow = new BorrowingTest(address(tsc),address(cds),address(pToken),priceFeedAddress);
         treasury = new Treasury(address(borrow),address(tsc),address(cds),wethAddress,cEthAddress,aavePoolAddress,aTokenAddress,address(usdt));
+        option = new Options(priceFeedAddress,address(treasury),address(cds));
 
         borrow.initializeTreasury(address(treasury));
         borrow.setOptions(address(option));

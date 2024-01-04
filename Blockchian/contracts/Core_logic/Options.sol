@@ -18,6 +18,9 @@ contract Options{
     uint256[30] private variances;
     uint256 PRECISION = 1e18;
     uint256 ETH_PRICE_PRECISION = 1e6;
+    uint256 OPTION_PRICE_PRECISION = 1e5;
+
+    enum StrikePrice{FIVE,TEN,FIFTEEN,TWENTY,TWENTY_FIVE}
 
     ITreasury treasury;
     CDSInterface cds;
@@ -86,7 +89,7 @@ contract Options{
     }
 
     // Function to calculate option price
-    function calculateOptionPrice(uint256 _ethVolatility,uint256 _amount) public view returns (uint256) {
+    function calculateOptionPrice(uint256 _ethVolatility,uint256 _amount,StrikePrice _strikePrice) public view returns (uint256) {
         //uint256 a = calculateStandardDeviation(); 
         uint256 a = _ethVolatility;
         uint256 ethPrice = getLatestPrice();
@@ -97,7 +100,24 @@ contract Options{
         require(cdsVault != 0, "CDS Vault is zero");
 
         uint256 b = (cdsVault * 1e2)/ E;
-        uint256 optionPrice = (sqrt(10 * a * ethPrice))*1e13 + (3 * PRECISION / b); // 1e18 is used to handle division precision
+        uint256 baseOptionPrice = ((sqrt(10 * a * ethPrice))*PRECISION)/OPTION_PRICE_PRECISION + (3 * PRECISION / b); // 1e18 is used to handle division precision
+
+        uint256 optionPrice;
+        if(_strikePrice == StrikePrice.FIVE){
+            // constant has extra 1e3 and volatility have 8
+            optionPrice = baseOptionPrice + (400 * OPTION_PRICE_PRECISION * baseOptionPrice)/(3*a);
+        }else if(_strikePrice == StrikePrice.TEN){
+            optionPrice = baseOptionPrice + (100 * OPTION_PRICE_PRECISION * baseOptionPrice)/(3*a);
+        }else if(_strikePrice == StrikePrice.FIFTEEN){
+            optionPrice = baseOptionPrice + (50 * OPTION_PRICE_PRECISION * baseOptionPrice)/(3*a);
+        }else if(_strikePrice == StrikePrice.TWENTY){
+            optionPrice = baseOptionPrice + (10 * OPTION_PRICE_PRECISION * baseOptionPrice)/(3*a);
+        }else if(_strikePrice == StrikePrice.TWENTY_FIVE){
+            optionPrice = baseOptionPrice + (5 * OPTION_PRICE_PRECISION * baseOptionPrice)/(3*a);
+        }else{
+            revert("Incorrect Strike Price");
+        }
+        // console.log((optionPrice * _amount)/PRECISION);
         return (optionPrice * _amount)/PRECISION;
     }
 

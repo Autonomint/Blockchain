@@ -143,7 +143,7 @@ contract BorrowingTest is Ownable {
             revert Borrowing_MUSDMintFailed();
         }
         totalAmintSupply = Trinity.totalSupply();
-        return tokensToLend;
+        return tokensToLend - optionFees;
     }
 
     function _mintPToken(address _toAddress,uint256 _amount, uint64 _bondRatio) internal returns(uint128){
@@ -169,7 +169,7 @@ contract BorrowingTest is Ownable {
     @param _depositTime get unixtime stamp at the time of deposit 
     **/
 
-    function depositTokens (uint128 _ethPrice,uint64 _depositTime,uint64 _strikePrice,uint256 _volatility) external payable {
+    function depositTokens (uint128 _ethPrice,uint64 _depositTime,IOptions.StrikePrice _strikePercent,uint64 _strikePrice,uint256 _volatility) external payable {
         require(msg.value > 0, "Cannot deposit zero tokens");
         require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
 
@@ -179,7 +179,7 @@ contract BorrowingTest is Ownable {
         
         //Call the deposit function in Treasury contract
         (bool deposited,uint64 index) = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
-        uint256 optionFees = options.calculateOptionPrice(_volatility,msg.value);
+        uint256 optionFees = options.calculateOptionPrice(_volatility,msg.value,_strikePercent);
 
         //Check whether the deposit is successfull
         if(!deposited){
