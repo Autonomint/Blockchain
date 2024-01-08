@@ -16,27 +16,27 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 contract CDS is Ownable{
     // using SafeERC20 for IERC20;
 
-    ITrinityToken public immutable Trinity_token;
-    IBorrowing public borrowing;
-    ITreasury public treasury;
+    ITrinityToken public immutable Trinity_token; // our stablecoin
+    IBorrowing public borrowing; // Borrowing contract interface
+    ITreasury public treasury; // Treasury contrcat interface
     AggregatorV3Interface internal dataFeed;
-    IERC20 public usdt;
+    IERC20 public usdt; // USDT interface
 
-    address public borrowingContract;
+    address public borrowingContract; // borrowing contract address
 
-    address public ethVault;
-    address public treasuryAddress;
+    address public ethVault; 
+    address public treasuryAddress; // treasury contract address
 
     uint128 public lastEthPrice;
     uint128 public fallbackEthPrice;
-    uint64 public cdsCount;
-    uint64 public withdrawTimeLimit;
-    uint128 public totalCdsDepositedAmount;
-    uint256 public totalAvailableLiquidationAmount;
-    uint128 public lastCumulativeRate;
-    uint8 public amintLimit;
-    uint64 public usdtLimit;
-    uint256 public usdtAmountDepositedTillNow;
+    uint64 public cdsCount; // cds depositors count
+    uint64 public withdrawTimeLimit; // Fixed Time interval between deposit and withdraw
+    uint128 public totalCdsDepositedAmount; // total amint and usdt deposited in cds
+    uint256 public totalAvailableLiquidationAmount; // total deposited amint available for liquidation
+    uint128 public lastCumulativeRate; 
+    uint8 public amintLimit; // amint limit in percent
+    uint64 public usdtLimit; // usdt limit in number
+    uint256 public usdtAmountDepositedTillNow; // total usdt deposited till now
     uint128 public PRECISION = 1e12;
     //uint64 public USDT_PRECISION = 1e6;
 
@@ -69,6 +69,8 @@ contract CDS is Ownable{
     }
 
     mapping (address => CdsDetails) public cdsDetails;
+
+    // liquidations info based on liquidation numbers
     mapping (uint128 liquidationIndex => LiquidationInfo) public liquidationIndexToInfo;
 
     event Deposit(uint128 depositedAmint,uint64 index,uint128 liquidationAmount,uint128 normalizedAmount,uint128 depositVal);
@@ -108,6 +110,13 @@ contract CDS is Ownable{
         return account.code.length > 0;
     }
 
+    /**
+     * @dev amint and usdt deposit to cds
+     * @param usdtAmount usdt amount to deposit
+     * @param amintAmount amint amount to deposit
+     * @param _liquidate whether the user opted for liquidation
+     * @param _liquidationAmount If opted for liquidation,the liquidation amount
+     */
     function deposit(uint128 usdtAmount,uint128 amintAmount,bool _liquidate,uint128 _liquidationAmount) public {
         uint128 totalDepositingAmount = (usdtAmount * PRECISION) + amintAmount;
         require(totalDepositingAmount != 0, "Deposit amount should not be zero"); // check _amount not zero
@@ -202,6 +211,10 @@ contract CDS is Ownable{
         emit Deposit(totalDepositingAmount,index,_liquidationAmount,cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount,cdsDetails[msg.sender].cdsAccountDetails[index].depositValue);
     }
 
+    /**
+     * @dev withdraw amint
+     * @param _index index of the deposit to withdraw
+     */
     function withdraw(uint64 _index) public {
        // require(_amount != 0, "Amount cannot be zero");
         // require(
@@ -303,6 +316,12 @@ contract CDS is Ownable{
         
    }
 
+    /**
+     * @dev acts as dex amint to usdt
+     * @param _amintAmount amint amount to deposit
+     * @param amintPrice amint price
+     * @param usdtPrice usdt price
+     */
     function redeemUSDT(uint128 _amintAmount,uint64 amintPrice,uint64 usdtPrice) public{
         require(_amintAmount != 0,"Amount should not be zero");
 
@@ -361,6 +380,10 @@ contract CDS is Ownable{
         return value;
     }
 
+    /**
+     * @dev calculate cumulative rate
+     * @param fees fees to split
+     */
     function calculateCumulativeRate(uint128 fees) public returns(uint128){
         require(fees != 0,"Fees should not be zero");
         uint128 netCDSPoolValue = totalCdsDepositedAmount + fees;

@@ -221,6 +221,14 @@ contract Treasury is Ownable{
         return (borrowing[user].hasDeposited,borrowerIndex);
     }
 
+    /**
+     * @dev withdraw the deposited eth
+     * @param borrower borrower address
+     * @param toAddress adrress to return eth
+     * @param _amount amount of eth to return
+     * @param index deposit index
+     * @param _ethPrice eth price
+     */
     function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index,uint64 _ethPrice) external onlyBorrowingContract returns(bool){
         // Check the _amount is non zero
         require(_amount > 0, "Cannot withdraw zero Ether");
@@ -536,6 +544,9 @@ contract Treasury is Ownable{
         return currentEquivalentEth - deposit.depositedAmount;
     }
 
+    /**
+     * calculates the interest gained by user from External protocol deposits
+     */
     function totalInterestFromExternalProtocol(address depositor, uint64 index) external returns(uint256){
         uint64 count = borrowing[depositor].depositDetails[index].externalProtocolCount;
         uint256 interestGainedByUser;

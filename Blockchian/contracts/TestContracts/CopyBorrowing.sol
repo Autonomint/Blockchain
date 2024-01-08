@@ -27,11 +27,11 @@ contract BorrowingTest is Ownable {
 
     CDSInterface public cds;
 
-    IProtocolToken public protocolToken;
+    IProtocolToken public protocolToken; // abond stablecoin
 
     ITreasury public treasury;
 
-    IOptions public options;
+    IOptions public options; // options contract interface
 
     uint256 private _downSideProtectionLimit;
     
@@ -42,22 +42,22 @@ contract BorrowingTest is Ownable {
         CDS_VOLUME_BY_BORROWER_VOLUME
     }
 
-    address public treasuryAddress;
-    address public cdsAddress;
-    address public admin;
+    address public treasuryAddress; // treasury contract address
+    address public cdsAddress; // CDS contract address
+    address public admin; // admin address
     uint8 private LTV; // LTV is a percentage eg LTV = 60 is 60%, must be divided by 100 in calculations
-    uint8 public APY;
-    uint256 public totalNormalizedAmount;
-    address public priceFeedAddress;
-    uint128 public lastEthprice;
-    uint256 public lastEthVaultValue;
-    uint256 public lastCDSPoolValue;
+    uint8 public APY; 
+    uint256 public totalNormalizedAmount; // total normalized amount in protocol
+    address public priceFeedAddress; // ETH USD pricefeed address
+    uint128 public lastEthprice; // previous eth price
+    uint256 public lastEthVaultValue; // previous eth vault value
+    uint256 public lastCDSPoolValue; // previous CDS pool value
     uint256 public lastTotalCDSPool;
-    uint256 public lastCumulativeRate;
+    uint256 public lastCumulativeRate; // previous cumulative rate
     uint128 private lastEventTime;
-    uint128 public noOfLiquidations;
-    uint256 public totalAmintSupply;
-    uint256 public totalDiracSupply;
+    uint128 public noOfLiquidations; // total number of liquidation happened till now
+    uint256 public totalAmintSupply; // Total amint supply
+    uint256 public totalDiracSupply; // total abond supply
 
     uint128 PRECISION = 1e6;
     uint128 CUMULATIVE_PRECISION = 1e7;
@@ -100,15 +100,29 @@ contract BorrowingTest is Ownable {
     return size > 0;
     }
 
+    /**
+     * @dev set Treasury contract
+     * @param _treasury treasury contract address
+     */
+
     function initializeTreasury(address _treasury) external onlyOwner{
         require(_treasury != address(0) && isContract(_treasury) != false, "Treasury must be contract address & can't be zero address");
         treasury = ITreasury(_treasury);
         treasuryAddress = _treasury;
     }
+
+    /**
+     * @dev set Options contract
+     * @param _options option contract address
+     */
     function setOptions(address _options) external onlyOwner{
         require(_options != address(0) && isContract(_options) != false, "Options must be contract address & can't be zero address");
         options = IOptions(_options);
     }
+    /**
+     * @dev set admin address
+     * @param _admin  admin address
+     */
     function setAdmin(address _admin) external onlyOwner{
         require(_admin != address(0) && isContract(_admin) != true, "Admin can't be contract address & zero address");
         admin = _admin;    
@@ -132,7 +146,10 @@ contract BorrowingTest is Ownable {
         uint256 tokensToLend = (tokenValueConversion * LTV) / RATIO_PRECISION;
 
         //Call the mint function in Trinity
+        //Mint 80% - options fees to borrower
         bool minted = Trinity.mint(_borrower, (tokensToLend - optionFees));
+
+        //Mint options fees to treasury
         bool treasuryMint = Trinity.mint(treasuryAddress,optionFees);
 
         if(!minted){
@@ -145,6 +162,13 @@ contract BorrowingTest is Ownable {
         totalAmintSupply = Trinity.totalSupply();
         return tokensToLend - optionFees;
     }
+
+    /**
+     * @dev Transfer Abond token to the borrower
+     * @param _toAddress Address of the borrower to transfer
+     * @param _amount adond amount to transfer
+     * @param _bondRatio ratio of abond
+     */
 
     function _mintPToken(address _toAddress,uint256 _amount, uint64 _bondRatio) internal returns(uint128){
         require(_toAddress != address(0), "Borrower cannot be zero address");
@@ -164,9 +188,12 @@ contract BorrowingTest is Ownable {
     }
 
     /**
-    @dev This function takes ethPrice, depositTime, percentageOfEth and receivedType parameters to deposit eth into the contract and mint them back the Trinity tokens.
-    @param _ethPrice get current eth price 
-    @param _depositTime get unixtime stamp at the time of deposit 
+    * @dev This function takes ethPrice, depositTime, percentageOfEth and receivedType parameters to deposit eth into the contract and mint them back the Trinity tokens.
+    * @param _ethPrice get current eth price 
+    * @param _depositTime get unixtime stamp at the time of deposit
+    * @param _strikePercent percentage increase of eth price
+    * @param _strikePrice strike price which the user opted
+    * @param _volatility eth volatility
     **/
 
     function depositTokens (uint128 _ethPrice,uint64 _depositTime,IOptions.StrikePrice _strikePercent,uint64 _strikePrice,uint256 _volatility) external payable {
@@ -179,6 +206,8 @@ contract BorrowingTest is Ownable {
         
         //Call the deposit function in Treasury contract
         (bool deposited,uint64 index) = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
+
+        // Call calculateOptionPrice in options contract to get options fees
         uint256 optionFees = options.calculateOptionPrice(_volatility,msg.value,_strikePercent);
 
         //Check whether the deposit is successfull
@@ -188,10 +217,16 @@ contract BorrowingTest is Ownable {
 
         // Call the transfer function to mint Trinity and Get the borrowedAmount
         uint256 borrowAmount = _transferToken(msg.sender,msg.value,_ethPrice,optionFees);
+
+        // Call calculateCumulativeRate in cds to split fees to cds users
         cds.calculateCumulativeRate(uint128(optionFees));
+
+        //Get the deposit details from treasury
         (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,index);
         depositDetail.borrowedAmount = uint128(borrowAmount);
         depositDetail.optionFees = uint128(optionFees);
+
+        //Update variables in treasury
         treasury.updateHasBorrowed(msg.sender,true);
         treasury.updateTotalBorrowedAmount(msg.sender,borrowAmount);
 
@@ -203,6 +238,8 @@ contract BorrowingTest is Ownable {
 
         depositDetail.normalizedAmount = uint128(normalizedAmount);
         depositDetail.strikePrice = _strikePrice;
+
+        //Update the deposit details
         treasury.updateDepositDetails(msg.sender,index,depositDetail);
 
         // Calculate normalizedAmount of Protocol
@@ -212,18 +249,31 @@ contract BorrowingTest is Ownable {
         emit Deposit(index,msg.value,borrowAmount,normalizedAmount);
     }
 
+    /**
+     * @dev deposit the eth in our protocol to Aave
+     */
     function depositToAaveProtocol() external onlyOwner{
         treasury.depositToAave();
     }
 
+    /**
+     * @dev withdraw the eth from aave which were already deposited
+     */
     function withdrawFromAaveProtocol(uint64 index) external onlyOwner{
         treasury.withdrawFromAave(index);
     }
 
+    /**
+     * @dev deposit the eth in our protocol to Compound
+     */
     function depositToCompoundProtocol() external onlyOwner{
         treasury.depositToCompound();
     }
 
+    /**
+     * @dev withdraw the eth from Compound which were already deposited
+     * @param index index of the deposit
+     */
     function withdrawFromCompoundProtocol(uint64 index) external onlyOwner{
         treasury.withdrawFromCompound(index);
     }
@@ -297,7 +347,7 @@ contract BorrowingTest is Ownable {
                     // Update PToken data
                     depositDetail.pTokensAmount = noOfPTokensminted;
                     treasury.updateTotalPTokensIncrease(msg.sender,noOfPTokensminted);
-                        
+                    // Update deposit details    
                     treasury.updateDepositDetails(msg.sender,_index,depositDetail);}             
                     uint128 ethToReturn;
                     uint128 depositedAmountvalue = (depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/_ethPrice;
@@ -449,6 +499,9 @@ contract BorrowingTest is Ownable {
         // Transfer ETH to CDS Pool
     }
 
+    /**
+     * @dev get the usd value of ETH
+     */
     function getUSDValue() public view returns(uint256){
         AggregatorV3Interface priceFeed = AggregatorV3Interface(priceFeedAddress);
         (,int256 price,,,) = priceFeed.latestRoundData();
@@ -463,11 +516,20 @@ contract BorrowingTest is Ownable {
         return LTV;
     }
 
+    /**
+     * @dev update the last eth vault value
+     * @param _amount eth vault value
+     */
     function updateLastEthVaultValue(uint256 _amount) external onlyTreasury{
         require(_amount != 0,"Last ETH vault value can't be zero");
         lastEthVaultValue -= _amount;
     }
 
+    /**
+     * @dev calculate the ratio of CDS Pool/Eth Vault
+     * @param _amount amount to be depositing
+     * @param currentEthPrice current eth price in usd
+     */
     function _calculateRatio(uint256 _amount,uint currentEthPrice) internal returns(uint64){
 
         uint256 netPLCdsPool;
@@ -541,6 +603,9 @@ contract BorrowingTest is Ownable {
         return APY;
     }
 
+    /**
+     * @dev calculate cumulative rate 
+     */
     function calculateCumulativeRate() public returns(uint256){
         // Get the noOfBorrowers
         uint128 noOfBorrowers = treasury.noOfBorrowers();

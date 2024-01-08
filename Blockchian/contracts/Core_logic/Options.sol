@@ -20,6 +20,7 @@ contract Options{
     uint256 ETH_PRICE_PRECISION = 1e6;
     uint256 OPTION_PRICE_PRECISION = 1e5;
 
+    // enum for different strike price percentages
     enum StrikePrice{FIVE,TEN,FIFTEEN,TWENTY,TWENTY_FIVE}
 
     ITreasury treasury;
