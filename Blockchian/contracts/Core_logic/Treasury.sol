@@ -27,11 +27,11 @@ contract Treasury is Ownable{
 
     IBorrowing public borrow;
     ITrinityToken public trinity;
-    IWrappedTokenGatewayV3 public wethGateway;
-    IPoolAddressesProvider public aavePoolAddressProvider;
+    IWrappedTokenGatewayV3 public wethGateway; // Weth gateway is used to deposit eth in  and withdraw from aave
+    IPoolAddressesProvider public aavePoolAddressProvider; // To get the current pool  address in Aave
     IERC20 public usdt;
-    IATOKEN public aToken;
-    ICEther public cEther;
+    IATOKEN public aToken; // aave token contract
+    ICEther public cEther; // To deposit in and withdraw eth from compound
 
     address public borrowingContract;
     address public cdsContract;  
@@ -102,18 +102,23 @@ contract Treasury is Ownable{
 
     enum Protocol{Aave,Compound}
 
+    // Get depositor details by address
     mapping(address depositor => BorrowerDetails) public borrowing;
+    //Get external protocol deposit details by protocol name (enum)
     mapping(Protocol => ProtocolDeposit) public protocolDeposit;
     uint256 public totalVolumeOfBorrowersAmountinWei;
+    //eth vault value
     uint256 public totalVolumeOfBorrowersAmountinUSD;
     uint128 public noOfBorrowers;
     uint256 public totalInterest;
     uint256 public totalInterestFromLiquidation;
 
+    //no of times deposited in external protocol(always 1 ahead) 
     uint64 public externalProtocolDepositCount = 1;
     uint256 PRECISION = 1e18;
     uint256 CUMULATIVE_PRECISION = 1e27;
 
+    // Eth depsoited in particular index
     mapping(uint256=>uint256) externalProtocolCountTotalValue;
 
     event Deposit(address indexed user,uint256 amount);
@@ -278,6 +283,7 @@ contract Treasury is Ownable{
             revert Treasury_AavePoolAddressZero();
         }
 
+        //Atoken balance before depsoit
         uint256 aTokenBeforeDeposit = aToken.balanceOf(address(this));
 
         // Call the deposit function in aave to deposit eth.
@@ -379,6 +385,7 @@ contract Treasury is Ownable{
         // Compute the current cumulative rate using the change and the stored cumulative rate
         uint256 currentCumulativeRate = (CUMULATIVE_PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate / CUMULATIVE_PRECISION;
         protocolDeposit[Protocol.Aave].cumulativeRate = currentCumulativeRate;
+        //withdraw amount
         uint256 amount = (currentCumulativeRate * protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].discountedPrice)/CUMULATIVE_PRECISION;
         address poolAddress = aavePoolAddressProvider.getPool();
 
@@ -645,12 +652,20 @@ contract Treasury is Ownable{
             borrowing[depositor].depositDetails[index]);
     }
 
+    /**
+     * amint approval
+     * @param _address address to spend
+     * @param _amount amint amount
+     */
     function approveAmint(address _address, uint _amount) external onlyCDSOrBorrowingContract{
         require(_address != address(0) && _amount != 0, "Input address or amount is invalid");
         bool state = trinity.approve(_address, _amount);
         require(state == true, "Approve failed");
     }
 
+    /**
+     * usdt approval
+     */
     function approveUsdt(address _address, uint _amount) external onlyCDSContract{
         require(_address != address(0) && _amount != 0, "Input address or amount is invalid");
         bool state = usdt.approve(_address, _amount);
@@ -670,6 +685,9 @@ contract Treasury is Ownable{
         require(sent, "Failed to send Ether");
     }
 
+    /**
+     * transfer eth from treasury
+     */
     function transferEthToCdsLiquidators(address borrower,uint128 amount) external onlyCDSContract{
         (bool sent,) = payable(borrower).call{value: amount}("");
         if(!sent){

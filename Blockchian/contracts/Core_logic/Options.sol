@@ -11,7 +11,7 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 contract Options{
 
-    AggregatorV3Interface internal priceFeed;
+    AggregatorV3Interface internal priceFeed; //ETH USD pricefeed address
     uint256 private currentEMA;
     uint256 private constant smoothingFactor = 2;
     uint256 private index = 0; // To track the oldest variance
@@ -32,8 +32,12 @@ contract Options{
         cds = CDSInterface(_cdsAddress);
     }
 
-    function depositOption(uint8 percent) external {}
-
+    /**
+     * calculate eth price gains for user
+     * @param depositedAmount eth amount to be deposit
+     * @param strikePrice strikePrice,not percent, price
+     * @param ethPrice eth price
+     */
     function withdrawOption(uint128 depositedAmount,uint128 strikePrice,uint64 ethPrice) external pure returns(uint128){
         require(depositedAmount != 0 && strikePrice != 0 && ethPrice != 0,"Zero inputs in options");
         uint64 currentEthPrice = ethPrice;
@@ -104,8 +108,9 @@ contract Options{
         uint256 baseOptionPrice = ((sqrt(10 * a * ethPrice))*PRECISION)/OPTION_PRICE_PRECISION + (3 * PRECISION / b); // 1e18 is used to handle division precision
 
         uint256 optionPrice;
+        // Calculate option fees based on strike price chose by user
         if(_strikePrice == StrikePrice.FIVE){
-            // constant has extra 1e3 and volatility have 8
+            // constant has extra 1e3 and volatility have 1e8
             optionPrice = baseOptionPrice + (400 * OPTION_PRICE_PRECISION * baseOptionPrice)/(3*a);
         }else if(_strikePrice == StrikePrice.TEN){
             optionPrice = baseOptionPrice + (100 * OPTION_PRICE_PRECISION * baseOptionPrice)/(3*a);

@@ -118,6 +118,7 @@ contract CDS is Ownable{
      * @param _liquidationAmount If opted for liquidation,the liquidation amount
      */
     function deposit(uint128 usdtAmount,uint128 amintAmount,bool _liquidate,uint128 _liquidationAmount) public {
+        // totalDepositingAmount is usdt and amint
         uint128 totalDepositingAmount = (usdtAmount * PRECISION) + amintAmount;
         require(totalDepositingAmount != 0, "Deposit amount should not be zero"); // check _amount not zero
         require(
@@ -148,7 +149,7 @@ contract CDS is Ownable{
             //check it token have successfully transfer or not
             require(transfer == true, "Transfer failed in CDS deposit");
         }
-
+        //increment usdtAmountDepositedTillNow
         usdtAmountDepositedTillNow += usdtAmount;
         if(usdtAmount != 0 ){
             bool success = Trinity_token.mint(treasuryAddress,(usdtAmount * PRECISION));
@@ -194,6 +195,7 @@ contract CDS is Ownable{
        
         //cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(ethPrice);
         cdsDetails[msg.sender].cdsAccountDetails[index].optedLiquidation = _liquidate;
+        //If user opted for liquidation
         if(_liquidate){
             if(borrowing.noOfLiquidations() == 0){
                 cdsDetails[msg.sender].cdsAccountDetails[index].liquidationindex = 1;
@@ -239,7 +241,9 @@ contract CDS is Ownable{
 
         uint128 ethPrice = getLatestData();
         require(ethPrice != 0,"Oracle Failed");
-
+        // Calculate return amount includes
+        // eth Price difference gain or loss
+        // option fees
         uint128 returnAmount = 
             cdsAmountToReturn(msg.sender,_index, ethPrice)+
             ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * lastCumulativeRate)/PRECISION)-(2*(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount));
@@ -247,12 +251,13 @@ contract CDS is Ownable{
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedTime =  _withdrawTime;
 
+        // If user opted for liquidation
         if(cdsDetails[msg.sender].cdsAccountDetails[_index].optedLiquidation){
 
             uint128 currentLiquidations = borrowing.noOfLiquidations();
             uint128 liquidationIndexAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationindex;
             uint128 ethAmount;
-
+        // Loop through the liquidations that were done after user enters
             for(uint128 i = liquidationIndexAtDeposit; i<= currentLiquidations; i++){
                 uint128 liquidationAmount = cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
                 if(liquidationAmount > 0){
@@ -268,9 +273,14 @@ contract CDS is Ownable{
             uint128 returnAmountWithGains = returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
             totalCdsDepositedAmount -= returnAmountWithGains;
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
+            // Get approval from treasury 
             treasury.approveAmint(address(this),returnAmountWithGains);
+
+            //Call transferFrom in amint
             bool success = Trinity_token.transferFrom(treasuryAddress,msg.sender, returnAmountWithGains); // transfer amount to msg.sender
             require(success == true, "Transsuccessed in cds withdraw");
+
+            // Call transferEthToCdsLiquidators to tranfer eth
             treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
             emit Withdraw(returnAmountWithGains,ethAmount);
         }else{

@@ -337,6 +337,7 @@ contract Borrowing is Ownable {
                     if(!transfer){
                         revert Borrowing_WithdrawMUSDTransferFailed();
                     }
+                    //Update totalNormalizedAmount
                     totalNormalizedAmount -= borrowerDebt;
 
                     treasury.updateTotalInterest(borrowerDebt - depositDetail.borrowedAmount);
@@ -350,9 +351,11 @@ contract Borrowing is Ownable {
                     // Update deposit details    
                     treasury.updateDepositDetails(msg.sender,_index,depositDetail);}             
                     uint128 ethToReturn;
+                    //Calculate current depositedAmount value
                     uint128 depositedAmountvalue = (depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/_ethPrice;
 
                     if(borrowingHealth > 10000){
+                        // If the ethPrice is higher than deposit ethPrice,call withdrawOption in options contract
                         ethToReturn = (depositedAmountvalue + (options.withdrawOption(depositDetail.depositedAmount,depositDetail.strikePrice,_ethPrice)));
                     }else if(borrowingHealth == 10000){
                         ethToReturn = depositedAmountvalue;
@@ -363,6 +366,7 @@ contract Borrowing is Ownable {
                     }
                     ethToReturn = (ethToReturn * 50)/100;
                     console.log("eth to return",ethToReturn);
+                    // Call withdraw in treasury
                 bool sent = treasury.withdraw(msg.sender,_toAddress,ethToReturn,_index,_ethPrice);
                 if(!sent){
                     revert Borrowing_WithdrawEthTransferFailed();
@@ -419,10 +423,13 @@ contract Borrowing is Ownable {
             depositDetail.pTokensAmount = 0;
             treasury.updateDepositDetails(msg.sender,_index,depositDetail);
 
+            //Burn the amint from treasury
+            treasury.approveAmint(address(this),((depositDetail.borrowedAmount*50)/100));
             bool transfer = Trinity.burnFromUser(treasuryAddress, ((depositDetail.borrowedAmount*50)/100));
             if(!transfer){
                 revert Borrowing_WithdrawBurnFailed();
             }
+            //Burn the abond from user
             bool success = protocolToken.burnFromUser(msg.sender,pTokensAmount);
             if(!success){
                 revert Borrowing_WithdrawBurnFailed();
