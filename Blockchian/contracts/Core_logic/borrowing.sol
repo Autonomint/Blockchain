@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: unlicensed
 
-pragma solidity 0.8.18;
+pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interface/CDSInterface.sol";
@@ -59,7 +59,7 @@ contract Borrowing is Ownable {
     uint256 public totalAmintSupply; // Total amint supply
     uint256 public totalDiracSupply; // total abond supply
 
-    uint128 PRECISION = 1e6;
+    uint128 PRECISION = 1e6; // ETH price precision
     uint128 CUMULATIVE_PRECISION = 1e7;
     uint128 RATIO_PRECISION = 1e4;
     uint128 RATE_PRECISION = 1e27;

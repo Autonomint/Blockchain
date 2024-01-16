@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: unlicensed
-pragma solidity 0.8.18;
+pragma solidity ^0.8.18;
 
 interface IProtocolToken {
     function balanceOf(address account) external view returns (uint256);

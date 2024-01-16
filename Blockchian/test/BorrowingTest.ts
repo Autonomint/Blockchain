@@ -756,7 +756,7 @@ describe("Borrowing Contract",function(){
             await usdt.connect(user1).approve(CDSContract.address,10000000000);
             await CDSContract.connect(user1).deposit(10000000000,0,true,5000000000);
             await BorrowingContract.connect(user1).depositTokens(ethPrice,timeStamp,1,(ethPrice * 1.1),50622665,{value: ethers.utils.parseEther("1")});
-            console.log("USER's AMINT BALANCE",await Token.balanceOf(user1.address));
+            console.log("USER's AMINT BALANCE",(await Token.balanceOf(user1.address)).toString());
             // console.log("TREASURY's AMINT BALANCE",await Token.balanceOf(treasury.address));
 
             // await options.calculateOptionPrice(50622665,ethers.utils.parseEther("1"));

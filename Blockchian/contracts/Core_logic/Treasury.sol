@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: unlicensed
 
-pragma solidity 0.8.18;
+pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/interfaces/IERC20.sol";
@@ -56,6 +56,8 @@ contract Treasury is Ownable{
         uint64 strikePrice;
         uint128 optionFees;
         uint64 externalProtocolCount;
+        uint256 discountedPrice;
+        uint128 cTokensCredited;
     }
 
     //Borrower Details
@@ -222,6 +224,15 @@ contract Treasury is Ownable{
 
         externalProtocolCountTotalValue[externalProtocolDepositCount] += ((msg.value * 50)/100);
 
+        uint256 externalProtocolDepositEth = ((msg.value * 25)/100);
+
+        depositToAaveByUser(externalProtocolDepositEth);
+
+        // Compute the discounted price of the deposit using the cumulative rate.
+        borrowing[user].depositDetails[borrowerIndex].discountedPrice = externalProtocolDepositEth * CUMULATIVE_PRECISION / protocolDeposit[Protocol.Aave].cumulativeRate;
+
+        borrowing[user].depositDetails[borrowerIndex].cTokensCredited = depositToCompoundByUser(externalProtocolDepositEth);
+
         emit Deposit(user,msg.value);
         return (borrowing[user].hasDeposited,borrowerIndex);
     }
@@ -246,6 +257,9 @@ contract Treasury is Ownable{
             borrowing[borrower].totalBorrowedAmount -= borrowing[borrower].depositDetails[index].borrowedAmount;
         }
         if(borrowing[borrower].depositedAmount == 0){
+            require(borrowing[borrower].depositedAmount == 0,"Invalid Withdraw");
+            withdrawFromAaveByUser(borrower,index);
+            withdrawFromCompoundByUser(borrower,index);
             --noOfBorrowers;
         }
         borrowing[borrower].depositDetails[index].withdrawAmount += uint128(amount);
@@ -537,18 +551,18 @@ contract Treasury is Ownable{
     */
     function getInterestForCompoundDeposit(uint64 count) public returns (uint256) {
         // Retrieve the deposit details for the specified count
-        EachDepositToProtocol storage deposit = protocolDeposit[Protocol.Compound].eachDepositToProtocol[count];
+        EachDepositToProtocol memory externalDeposit = protocolDeposit[Protocol.Compound].eachDepositToProtocol[count];
         
         // Obtain the current exchange rate from the Compound protocol
         uint256 currentExchangeRate = cEther.exchangeRateCurrent();
         
         // Compute the equivalent ETH value of the cTokens at the current exchange rate
         // Taking into account the fixed-point arithmetic (scaling factor of 1e18)
-        uint256 currentEquivalentEth = (deposit.tokensCredited * currentExchangeRate) / PRECISION;
+        uint256 currentEquivalentEth = (externalDeposit.tokensCredited * currentExchangeRate) / PRECISION;
 
         // Calculate the accrued interest by subtracting the original deposited ETH 
         // amount from the current equivalent ETH value
-        return currentEquivalentEth - deposit.depositedAmount;
+        return currentEquivalentEth - externalDeposit.depositedAmount;
     }
 
     /**
@@ -693,6 +707,84 @@ contract Treasury is Ownable{
         if(!sent){
             revert Treasury_EthTransferToCdsLiquidatorFailed();
         }
+    }
+
+    // function compoundWithdraw(uint256 balance) external {
+    //     cEther.redeem(balance);
+    // }
+
+    function depositToAaveByUser(uint256 depositAmount) internal {
+        //Atoken balance before depsoit
+        uint256 aTokenBeforeDeposit = aToken.balanceOf(address(this));
+        address poolAddress = aavePoolAddressProvider.getPool();
+
+        if(poolAddress == address(0)){
+            revert Treasury_AavePoolAddressZero();
+        }
+
+        wethGateway.depositETH{value: depositAmount}(poolAddress,address(this),0);
+        uint256 creditedAmount = aToken.balanceOf(address(this));
+
+        // If it's the first deposit, set the cumulative rate to precision (i.e., 1 in fixed-point representation).
+        if (protocolDeposit[Protocol.Aave].totalCreditedTokens == 0) {
+            protocolDeposit[Protocol.Aave].cumulativeRate = CUMULATIVE_PRECISION; 
+        } else {
+            // Calculate the change in the credited amount relative to the total credited tokens so far.
+            uint256 change = (aTokenBeforeDeposit - protocolDeposit[Protocol.Aave].totalCreditedTokens) * CUMULATIVE_PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
+            // Update the cumulative rate using the calculated change.
+            protocolDeposit[Protocol.Aave].cumulativeRate = ((CUMULATIVE_PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate) / CUMULATIVE_PRECISION;
+        }
+        protocolDeposit[Protocol.Aave].totalCreditedTokens = creditedAmount;
+    }
+
+    function depositToCompoundByUser(uint256 depositAmount) internal returns(uint128){
+
+        // Call the deposit function in Coumpound to deposit eth.
+        cEther.mint{value: depositAmount}();
+
+        uint256 creditedAmount = cEther.balanceOf(address(this));
+
+        uint128 newlyCreditedTokens = uint128(creditedAmount - protocolDeposit[Protocol.Compound].totalCreditedTokens);
+
+        protocolDeposit[Protocol.Compound].totalCreditedTokens = creditedAmount;
+
+        return newlyCreditedTokens;
+    }
+
+    function withdrawFromAaveByUser(address depositor,uint64 index) internal {
+        DepositDetails memory depositDetails = borrowing[depositor].depositDetails[index];
+
+        uint256 creditedAmount = aToken.balanceOf(address(this));
+        // Calculate the change rate based on the difference between the current credited amount and the total credited tokens 
+        uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * CUMULATIVE_PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
+
+        // Compute the current cumulative rate using the change and the stored cumulative rate
+        uint256 currentCumulativeRate = (CUMULATIVE_PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate / CUMULATIVE_PRECISION;
+        protocolDeposit[Protocol.Aave].cumulativeRate = currentCumulativeRate;
+        //withdraw amount
+        uint256 amount = (currentCumulativeRate * depositDetails.discountedPrice)/CUMULATIVE_PRECISION;
+        address poolAddress = aavePoolAddressProvider.getPool();
+
+        if(poolAddress == address(0)){
+            revert Treasury_AavePoolAddressZero();
+        }
+
+        aToken.approve(aaveWETH,amount);
+
+        // Call the withdraw function in aave to withdraw eth.
+        wethGateway.withdrawETH(poolAddress,amount,depositor);
+
+        protocolDeposit[Protocol.Aave].totalCreditedTokens = aToken.balanceOf(address(this));
+    }
+
+    function withdrawFromCompoundByUser(address depositor,uint64 index) internal {
+        DepositDetails memory depositDetails = borrowing[depositor].depositDetails[index];
+
+        uint256 amount = depositDetails.cTokensCredited;
+
+        // Call the redeem function in Compound to withdraw eth.
+        cEther.redeem(amount);
+        protocolDeposit[Protocol.Compound].totalCreditedTokens = cEther.balanceOf(address(this));
     }
 
     receive() external payable{}
