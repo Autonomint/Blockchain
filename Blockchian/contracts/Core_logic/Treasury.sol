@@ -250,9 +250,7 @@ contract Treasury is Ownable{
         require(_amount > 0, "Cannot withdraw zero Ether");
         require(borrowing[borrower].depositDetails[index].withdrawNo > 0,"");
         uint256 amount = _amount;
-        // Send the ETH to Borrower
-        (bool sent,) = payable(toAddress).call{value: amount}("");
-        require(sent, "Failed to send Ether");
+
         if(borrowing[borrower].depositDetails[index].withdrawNo == 1){
             borrowing[borrower].totalBorrowedAmount -= borrowing[borrower].depositDetails[index].borrowedAmount;
         }
@@ -266,6 +264,13 @@ contract Treasury is Ownable{
         borrow.updateLastEthVaultValue(_ethPrice * amount);
         totalVolumeOfBorrowersAmountinUSD -= (_ethPrice * amount);
         totalVolumeOfBorrowersAmountinWei -= amount;
+
+        amount += getInterestForCompoundDeposit(borrower,index); 
+
+        // Send the ETH to Borrower
+        (bool sent,) = payable(toAddress).call{value: amount}("");
+        require(sent, "Failed to send Ether");
+
         emit Withdraw(toAddress,_amount);
         return true;
     }
@@ -531,7 +536,7 @@ contract Treasury is Ownable{
         protocolDeposit[Protocol.Compound].depositedUsdValue = protocolDeposit[Protocol.Compound].depositedAmount * ethPrice;
 
         protocolDeposit[Protocol.Compound].totalCreditedTokens -= amount;
-        protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].interestGained = uint128(getInterestForCompoundDeposit(index));
+        // protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].interestGained = uint128(getInterestForCompoundDeposit(index));
         protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].tokensCredited = 0;
 
         emit WithdrawFromCompound(index,amount);
@@ -546,29 +551,29 @@ contract Treasury is Ownable{
     *
     * Interest = ((cTokens credited * current exchange rate) / scaling factor) - original deposited ETH
     *
-    * @param count The deposit index/count for which the interest needs to be calculated.
+    * @param depositor The deposit index/count for which the interest needs to be calculated.
     * @return The accrued interest for the specified deposit.
     */
-    function getInterestForCompoundDeposit(uint64 count) public returns (uint256) {
+    function getInterestForCompoundDeposit(address depositor,uint64 index) public returns (uint256) {
         // Retrieve the deposit details for the specified count
-        EachDepositToProtocol memory externalDeposit = protocolDeposit[Protocol.Compound].eachDepositToProtocol[count];
+        DepositDetails memory depositDetails = borrowing[depositor].depositDetails[index];
         
         // Obtain the current exchange rate from the Compound protocol
         uint256 currentExchangeRate = cEther.exchangeRateCurrent();
         
         // Compute the equivalent ETH value of the cTokens at the current exchange rate
         // Taking into account the fixed-point arithmetic (scaling factor of 1e18)
-        uint256 currentEquivalentEth = (externalDeposit.tokensCredited * currentExchangeRate) / PRECISION;
+        uint256 currentEquivalentEth = (depositDetails.cTokensCredited * currentExchangeRate) / PRECISION;
 
         // Calculate the accrued interest by subtracting the original deposited ETH 
         // amount from the current equivalent ETH value
-        return currentEquivalentEth - externalDeposit.depositedAmount;
+        return currentEquivalentEth - ((depositDetails.depositedAmount * 25)/100);
     }
 
     /**
      * calculates the interest gained by user from External protocol deposits
      */
-    function totalInterestFromExternalProtocol(address depositor, uint64 index) external returns(uint256){
+    function totalInterestFromExternalProtocol(address depositor, uint64 index) external view returns(uint256){
         uint64 count = borrowing[depositor].depositDetails[index].externalProtocolCount;
         uint256 interestGainedByUser;
 
@@ -602,7 +607,7 @@ contract Treasury is Ownable{
                 if(compoundDeposit.withdrawed){
                     totalInterestFromExtPro += compoundDeposit.interestGained;
                 }else{
-                    totalInterestFromExtPro += getInterestForCompoundDeposit(i);
+                    // totalInterestFromExtPro += getInterestForCompoundDeposit(i);
                 }
 
                 uint256 ratio = ((currentValue * PRECISION)/totalValue);

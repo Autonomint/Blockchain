@@ -152,7 +152,7 @@ contract BorrowTest is Test {
         borrow.depositToCompoundProtocol();
         vm.roll(block.number + 100);
 
-        uint256 interestFromCompound = treasury.getInterestForCompoundDeposit(1);
+        uint256 interestFromCompound = treasury.getInterestForCompoundDeposit(address(owner),1);
         borrow.withdrawFromCompoundProtocol(1);
         uint256 expectedInterestFromCompound = treasury.getBalanceInTreasury() - treasuryBalance;
         assertEq(expectedInterestFromCompound,interestFromCompound);
@@ -213,7 +213,7 @@ contract BorrowTest is Test {
         vm.roll(block.number + 100);
 
         interest += treasury.calculateInterestForDepositAave(1);
-        interest += treasury.getInterestForCompoundDeposit(1);
+        interest += treasury.getInterestForCompoundDeposit(address(owner),1);
 
         borrow.withdrawFromAaveProtocol(1);
         borrow.withdrawFromCompoundProtocol(1);
@@ -236,7 +236,7 @@ contract BorrowTest is Test {
         vm.roll(block.number + 100);
 
         interest += treasury.calculateInterestForDepositAave(3);
-        interest += treasury.getInterestForCompoundDeposit(3);
+        interest += treasury.getInterestForCompoundDeposit(address(owner),3);
 
         borrow.withdrawFromAaveProtocol(3);
         borrow.withdrawFromCompoundProtocol(3);
@@ -245,7 +245,7 @@ contract BorrowTest is Test {
         vm.roll(block.number + 100);
 
         interest += treasury.calculateInterestForDepositAave(2);
-        interest += treasury.getInterestForCompoundDeposit(2);
+        interest += treasury.getInterestForCompoundDeposit(address(owner),2);
 
         borrow.withdrawFromAaveProtocol(2);
         borrow.withdrawFromCompoundProtocol(2);
@@ -261,7 +261,7 @@ contract BorrowTest is Test {
         borrow.depositTokens{value: 7 ether}(100000,uint64(block.timestamp),IOptions.StrikePrice.TEN,110000,50622665);
 
         interest += treasury.calculateInterestForDepositAave(4);
-        interest += treasury.getInterestForCompoundDeposit(4);
+        interest += treasury.getInterestForCompoundDeposit(address(owner),4);
 
         borrow.withdrawFromAaveProtocol(4);
         borrow.withdrawFromCompoundProtocol(4);
@@ -275,7 +275,7 @@ contract BorrowTest is Test {
         vm.roll(block.number + 100);
 
         interest += treasury.calculateInterestForDepositAave(5);
-        interest += treasury.getInterestForCompoundDeposit(5);
+        interest += treasury.getInterestForCompoundDeposit(address(owner),5);
 
         borrow.withdrawFromAaveProtocol(5);
         borrow.withdrawFromCompoundProtocol(5);
@@ -290,7 +290,7 @@ contract BorrowTest is Test {
         vm.roll(block.number + 1);
 
         interest += treasury.calculateInterestForDepositAave(8);
-        interest += treasury.getInterestForCompoundDeposit(8);
+        interest += treasury.getInterestForCompoundDeposit(address(owner),8);
 
         borrow.withdrawFromAaveProtocol(8);
         borrow.withdrawFromCompoundProtocol(8);
@@ -300,7 +300,7 @@ contract BorrowTest is Test {
         vm.roll(block.number + 1);
 
         interest += treasury.calculateInterestForDepositAave(7);
-        interest += treasury.getInterestForCompoundDeposit(7);
+        interest += treasury.getInterestForCompoundDeposit(address(owner),7);
 
         borrow.withdrawFromAaveProtocol(7);
         borrow.withdrawFromCompoundProtocol(7);
@@ -309,7 +309,7 @@ contract BorrowTest is Test {
         vm.roll(block.number + 1);
 
         interest += treasury.calculateInterestForDepositAave(6);
-        interest += treasury.getInterestForCompoundDeposit(6);
+        interest += treasury.getInterestForCompoundDeposit(address(owner),6);
 
         borrow.withdrawFromAaveProtocol(6);
         borrow.withdrawFromCompoundProtocol(6);
@@ -344,7 +344,7 @@ contract BorrowTest is Test {
         vm.roll(block.number + 100);
 
         interest += treasury.calculateInterestForDepositAave(1);
-        interest += treasury.getInterestForCompoundDeposit(1);
+        interest += treasury.getInterestForCompoundDeposit(address(owner),1);
 
         borrow.withdrawFromAaveProtocol(1);
         borrow.withdrawFromCompoundProtocol(1);
@@ -357,7 +357,7 @@ contract BorrowTest is Test {
         vm.roll(block.number + 100);
 
         interest += treasury.calculateInterestForDepositAave(2);
-        interest += treasury.getInterestForCompoundDeposit(2);
+        interest += treasury.getInterestForCompoundDeposit(address(owner),2);
 
         borrow.withdrawFromAaveProtocol(2);
         borrow.withdrawFromCompoundProtocol(2);

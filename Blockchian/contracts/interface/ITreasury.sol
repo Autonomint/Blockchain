@@ -4,24 +4,26 @@ pragma solidity ^0.8.18;
 
 interface ITreasury{
 
-        struct DepositDetails{
-            uint64 depositedTime;
-            uint128 depositedAmount;
-            uint64 downsidePercentage;
-            uint128 ethPriceAtDeposit;
-            uint128 borrowedAmount;
-            uint128 normalizedAmount;
-            uint8 withdrawNo;
-            bool withdrawed;
-            uint128 withdrawAmount;
-            bool liquidated;
-            uint64 ethPriceAtWithdraw;
-            uint64 withdrawTime;
-            uint128 pTokensAmount;
-            uint64 strikePrice;
-            uint128 optionFees;
-            uint64 externalProtocolCount;
-        }
+    struct DepositDetails{
+        uint64 depositedTime;
+        uint128 depositedAmount;
+        uint64 downsidePercentage;
+        uint128 ethPriceAtDeposit;
+        uint128 borrowedAmount;
+        uint128 normalizedAmount;
+        uint8 withdrawNo;
+        bool withdrawed;
+        uint128 withdrawAmount;
+        bool liquidated;
+        uint64 ethPriceAtWithdraw;
+        uint64 withdrawTime;
+        uint128 pTokensAmount;
+        uint64 strikePrice;
+        uint128 optionFees;
+        uint64 externalProtocolCount;
+        uint256 discountedPrice;
+        uint128 cTokensCredited;
+    }
 
         function deposit(address user,uint128 _ethPrice,uint64 _depositTime) external payable returns(bool,uint64);
         function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index,uint64 ethPrice) external returns(bool);
