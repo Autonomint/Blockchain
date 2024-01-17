@@ -58,6 +58,7 @@ contract Borrowing is Ownable {
     uint128 public noOfLiquidations; // total number of liquidation happened till now
     uint256 public totalAmintSupply; // Total amint supply
     uint256 public totalDiracSupply; // total abond supply
+    uint64 public withdrawTimeLimit; // withdraw time limit
 
     uint128 PRECISION = 1e6; // ETH price precision
     uint128 CUMULATIVE_PRECISION = 1e7;
@@ -320,11 +321,11 @@ contract Borrowing is Ownable {
                     // Calculate interest for the borrower's debt
                     //uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
 
-                    uint256 discountedETH = ((10*(depositDetail.depositedAmount))/100)*_ethPrice;
+                    uint256 discountedETH = (((20*((depositDetail.depositedAmount * 50)/100))/100)*_ethPrice)/100; // 0.4
 
                     // Calculate the amount of Trinity to burn and sent to the treasury
                     // uint256 halfValue = (50 *(depositDetail.borrowedAmount))/100;
-                    uint256 burnValue = depositDetail.borrowedAmount - discountedETH;
+                    uint256 burnValue = ((depositDetail.borrowedAmount * 50)/100) - discountedETH;// 
 
                     // Burn the Trinity from the Borrower
                     bool success = Trinity.burnFromUser(msg.sender, burnValue);
@@ -333,7 +334,7 @@ contract Borrowing is Ownable {
                     }
 
                     //Transfer the remaining Trinity to the treasury
-                    bool transfer = Trinity.transferFrom(msg.sender,treasuryAddress,discountedETH);
+                    bool transfer = Trinity.transferFrom(msg.sender,treasuryAddress,borrowerDebt - burnValue);
                     if(!transfer){
                         revert Borrowing_WithdrawMUSDTransferFailed();
                     }
@@ -346,6 +347,7 @@ contract Borrowing is Ownable {
                     uint128 noOfPTokensminted = _mintPToken(msg.sender,discountedETH, _bondRatio);
 
                     // Update PToken data
+                    depositDetail.burnedAmint = burnValue;
                     depositDetail.pTokensAmount = noOfPTokensminted;
                     treasury.updateTotalPTokensIncrease(msg.sender,noOfPTokensminted);
                     // Update deposit details    
@@ -409,14 +411,13 @@ contract Borrowing is Ownable {
 
     function secondWithdraw(address _toAddress,uint64 _index,uint64 _ethPrice,uint64 withdrawTime,uint128 pTokensAmount,uint128 ethToReturn) internal {
             // Check whether the first withdraw passed one month
-            require(block.timestamp >= (withdrawTime + 30 days),"A month not yet completed since withdraw");
-                    
+            require(block.timestamp >= (withdrawTime + withdrawTimeLimit),"A month not yet completed since withdraw");
+
             // Check the user has required pToken
             require(protocolToken.balanceOf(msg.sender) == pTokensAmount,"Don't have enough Protocol Tokens");
             (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,_index);
             // Update Borrower's Data
             treasury.updateTotalDepositedAmount(msg.sender,uint128(depositDetail.depositedAmount));
-            depositDetail.depositedAmount = 0;
             depositDetail.withdrawed = true;
             depositDetail.withdrawNo = 2;
             treasury.updateTotalPTokensDecrease(msg.sender,pTokensAmount);
@@ -425,7 +426,7 @@ contract Borrowing is Ownable {
 
             //Burn the amint from treasury
             treasury.approveAmint(address(this),((depositDetail.borrowedAmount*50)/100));
-            bool transfer = Trinity.burnFromUser(treasuryAddress, ((depositDetail.borrowedAmount*50)/100));
+            bool transfer = Trinity.burnFromUser(treasuryAddress, depositDetail.burnedAmint);
             if(!transfer){
                 revert Borrowing_WithdrawBurnFailed();
             }
@@ -521,6 +522,11 @@ contract Borrowing is Ownable {
 
     function getLTV() public view returns(uint8){
         return LTV;
+    }
+
+    function setWithdrawTimeLimit(uint64 _timeLimit) external onlyOwner {
+        require(_timeLimit != 0, "Withdraw time limit can't be zero");
+        withdrawTimeLimit = _timeLimit;
     }
 
     /**

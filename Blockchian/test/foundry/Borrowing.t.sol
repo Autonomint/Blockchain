@@ -409,4 +409,32 @@ contract BorrowTest is Test {
         console.log(cEther.balanceOfUnderlying(address(USER)));
         vm.stopPrank();
     }
+
+    function testUserCanDepositAndWithdraw() public depositETH{
+        vm.startPrank(USER);
+        vm.warp(block.timestamp + 2592000);
+        vm.roll(block.number + 216000);
+
+        borrow.calculateCumulativeRate();
+
+        tsc.mint(address(USER),10 ether);
+        uint64 usdValue = uint64(borrow.getUSDValue());
+        uint256 amintBalance = tsc.balanceOf(address(USER));
+        console.log("AMINT BALANCE BEFORE WITHDRAW",amintBalance);
+
+        tsc.approve(address(borrow),amintBalance);
+        borrow.withDraw(address(USER),1,usdValue,uint64(block.timestamp),4);
+
+        uint256 amintBalance1 = tsc.balanceOf(address(USER));
+        console.log("AMINT BALANCE AFTER WITHDRAW 1",amintBalance1);
+
+        uint256 aBondBalance = pToken.balanceOf(address(USER));
+        pToken.approve(address(borrow),aBondBalance);
+        //console.log("Treasury Balance",treasury.getBalanceInTreasury());
+        borrow.withDraw(address(USER),1,usdValue,uint64(block.timestamp),4);
+
+        uint256 amintBalance2 = tsc.balanceOf(address(USER));
+        console.log("AMINT BALANCE AFTER WITHDRAW 2",amintBalance2);
+        vm.stopPrank();
+    }
 }

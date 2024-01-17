@@ -55,6 +55,7 @@ contract Treasury is Ownable{
         uint128 pTokensAmount;
         uint64 strikePrice;
         uint128 optionFees;
+        uint256 burnedAmint;
         uint64 externalProtocolCount;
         uint256 discountedPrice;
         uint128 cTokensCredited;
@@ -251,22 +252,29 @@ contract Treasury is Ownable{
         require(borrowing[borrower].depositDetails[index].withdrawNo > 0,"");
         uint256 amount = _amount;
 
-        if(borrowing[borrower].depositDetails[index].withdrawNo == 1){
-            borrowing[borrower].totalBorrowedAmount -= borrowing[borrower].depositDetails[index].borrowedAmount;
-        }
-        if(borrowing[borrower].depositedAmount == 0){
-            require(borrowing[borrower].depositedAmount == 0,"Invalid Withdraw");
-            withdrawFromAaveByUser(borrower,index);
-            withdrawFromCompoundByUser(borrower,index);
-            --noOfBorrowers;
-        }
-        borrowing[borrower].depositDetails[index].withdrawAmount += uint128(amount);
+        // Updating lastEthVaultValue in borrowing
         borrow.updateLastEthVaultValue(_ethPrice * amount);
+        // Updating total volumes
         totalVolumeOfBorrowersAmountinUSD -= (_ethPrice * amount);
         totalVolumeOfBorrowersAmountinWei -= amount;
 
-        amount += getInterestForCompoundDeposit(borrower,index); 
-
+        // If withdrawing for second time
+        if(borrowing[borrower].depositDetails[index].withdrawNo == 2){
+            // Deduct tototalBorrowedAmountt
+            borrowing[borrower].totalBorrowedAmount -= borrowing[borrower].depositDetails[index].borrowedAmount;
+            // Ensure whether the withdraw is second
+            require(borrowing[borrower].depositDetails[index].withdrawNo == 2,"Invalid Withdraw");
+            // Withdraw from external protocol
+            // Get interest
+            uint256 externalProtocolInterest = withdrawFromAaveByUser(borrower,index) + withdrawFromCompoundByUser(borrower,index);
+            // Add the external protocol interest to the withdraw amount
+            amount += externalProtocolInterest;
+            borrowing[borrower].depositDetails[index].depositedAmount = 0;
+        }
+        if(borrowing[borrower].depositedAmount == 0){
+            --noOfBorrowers;
+        }
+        borrowing[borrower].depositDetails[index].withdrawAmount += uint128(amount);
         // Send the ETH to Borrower
         (bool sent,) = payable(toAddress).call{value: amount}("");
         require(sent, "Failed to send Ether");
@@ -756,7 +764,7 @@ contract Treasury is Ownable{
         return newlyCreditedTokens;
     }
 
-    function withdrawFromAaveByUser(address depositor,uint64 index) internal {
+    function withdrawFromAaveByUser(address depositor,uint64 index) internal returns(uint256){
         DepositDetails memory depositDetails = borrowing[depositor].depositDetails[index];
 
         uint256 creditedAmount = aToken.balanceOf(address(this));
@@ -777,19 +785,28 @@ contract Treasury is Ownable{
         aToken.approve(aaveWETH,amount);
 
         // Call the withdraw function in aave to withdraw eth.
-        wethGateway.withdrawETH(poolAddress,amount,depositor);
+        wethGateway.withdrawETH(poolAddress,amount,address(this));
 
         protocolDeposit[Protocol.Aave].totalCreditedTokens = aToken.balanceOf(address(this));
+        return (amount - ((depositDetails.depositedAmount * 25)/100));
     }
 
-    function withdrawFromCompoundByUser(address depositor,uint64 index) internal {
+    function withdrawFromCompoundByUser(address depositor,uint64 index) internal returns(uint256){
         DepositDetails memory depositDetails = borrowing[depositor].depositDetails[index];
 
         uint256 amount = depositDetails.cTokensCredited;
 
+        // Obtain the current exchange rate from the Compound protocol
+        uint256 currentExchangeRate = cEther.exchangeRateCurrent();
+        // Compute the equivalent ETH value of the cTokens at the current exchange rate
+        // Taking into account the fixed-point arithmetic (scaling factor of 1e18)
+        uint256 currentEquivalentEth = (depositDetails.cTokensCredited * currentExchangeRate) / PRECISION;
         // Call the redeem function in Compound to withdraw eth.
         cEther.redeem(amount);
         protocolDeposit[Protocol.Compound].totalCreditedTokens = cEther.balanceOf(address(this));
+        // Calculate the accrued interest by subtracting the original deposited ETH 
+        // amount from the current equivalent ETH value
+        return (currentEquivalentEth - ((depositDetails.depositedAmount * 25)/100));
     }
 
     receive() external payable{}

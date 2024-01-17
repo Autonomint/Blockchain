@@ -20,6 +20,7 @@ interface ITreasury{
         uint128 pTokensAmount;
         uint64 strikePrice;
         uint128 optionFees;
+        uint256 burnedAmint;
         uint64 externalProtocolCount;
         uint256 discountedPrice;
         uint128 cTokensCredited;
