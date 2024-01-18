@@ -60,6 +60,11 @@ contract BorrowingTest is Ownable {
     uint256 public totalDiracSupply; // total abond supply
     uint64 public withdrawTimeLimit; // withdraw time limit
 
+    string  public constant name = "AMINT Stablecoin";
+    string  public constant version = "1";
+    bytes32 public DOMAIN_SEPARATOR;
+    bytes32 public constant PERMIT_TYPEHASH = keccak256("Permit(address holder,address spender,uint256 allowedAmount,bool allowed,uint256 expiry)");
+
     uint128 PRECISION = 1e6; // ETH price precision
     uint128 CUMULATIVE_PRECISION = 1e7;
     uint128 RATIO_PRECISION = 1e4;
@@ -72,7 +77,8 @@ contract BorrowingTest is Ownable {
         address _tokenAddress,
         address _cds,
         address _protocolToken,
-        address _priceFeedAddress
+        address _priceFeedAddress,
+        uint64 chainId
         ){
         Trinity = ITrinityToken(_tokenAddress);
         cds = CDSInterface(_cds);
@@ -81,6 +87,13 @@ contract BorrowingTest is Ownable {
         priceFeedAddress = _priceFeedAddress;                       //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
         lastEthprice = uint128(getUSDValue());
         lastEventTime = uint128(block.timestamp);
+        DOMAIN_SEPARATOR = keccak256(abi.encode(
+            keccak256("EIP712Domain(string name,string version,uint64 chainId,address verifyingContract)"),
+            keccak256(bytes(name)),
+            keccak256(bytes(version)),
+            chainId,
+            address(this)
+        ));
     }
 
     modifier onlyAdmin(){
@@ -637,6 +650,29 @@ contract BorrowingTest is Ownable {
             lastCumulativeRate = currentCumulativeRate/RATE_PRECISION;
         }
         return currentCumulativeRate;
+    }
+
+    function permit(address holder, address spender, uint256 allowedAmount, bool allowed, uint256 expiry, uint8 v, bytes32 r, bytes32 s) external returns(bool){
+
+        require(expiry == 0 || block.timestamp <= expiry, "Permit/expired");
+
+        bytes32 permitHash =
+            keccak256(abi.encodePacked(
+                "\x19\x01",
+                DOMAIN_SEPARATOR,
+                keccak256(abi.encode(PERMIT_TYPEHASH,
+                                     holder,
+                                     spender,
+                                     allowedAmount,
+                                     allowed,
+                                     expiry
+                                     ))
+        ));
+
+        require(holder != address(0), "Permit/Invalid address");
+        require(holder == ecrecover(permitHash, v, r, s), "Permit/invalid-permit");
+        // Trinity.approve(spender, allowedAmount);
+        return true;
     }
 
     function _rpow(uint x, uint n, uint b) internal pure returns (uint z) {

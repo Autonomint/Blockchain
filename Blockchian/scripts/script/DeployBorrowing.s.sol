@@ -36,7 +36,7 @@ contract DeployBorrowing is Script {
         pToken = new ProtocolToken();
         usdt = new USDT();
         cds = new CDSTest(address(tsc),priceFeedAddress,address(usdt));
-        borrow = new BorrowingTest(address(tsc),address(cds),address(pToken),priceFeedAddress);
+        borrow = new BorrowingTest(address(tsc),address(cds),address(pToken),priceFeedAddress,1);
         treasury = new Treasury(address(borrow),address(tsc),address(cds),wethAddress,cEthAddress,aavePoolAddress,aTokenAddress,address(usdt));
         option = new Options(priceFeedAddress,address(treasury),address(cds));
 
