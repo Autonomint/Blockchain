@@ -3,6 +3,7 @@ const { expect } = require("chai");
 const { it } = require("mocha")
 import { ethers } from "hardhat";
 import { Contract,utils,providers,Wallet, Signer } from "ethers";
+import { hexValue } from "@ethersproject/bytes";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { describe } from "node:test";
 import { BorrowingTest, CDSTest, TrinityStablecoin, ProtocolToken, Treasury,Options,USDT} from "../typechain-types";
@@ -46,7 +47,7 @@ describe("Borrowing Contract",function(){
         CDSContract = await CDS.deploy(Token.address,priceFeedAddress,usdt.address);
 
         const Borrowing = await ethers.getContractFactory("BorrowingTest");
-        BorrowingContract = await Borrowing.deploy(Token.address,CDSContract.address,pToken.address,priceFeedAddress);
+        BorrowingContract = await Borrowing.deploy(Token.address,CDSContract.address,pToken.address,priceFeedAddress,1);
 
         const Treasury = await ethers.getContractFactory("Treasury");
         treasury = await Treasury.deploy(BorrowingContract.address,Token.address,CDSContract.address,wethGateway,cEther,aavePoolAddress,aTokenAddress,usdt.address);
@@ -746,7 +747,7 @@ describe("Borrowing Contract",function(){
             expect(tx).to.be.revertedWith("You cannot liquidate");
         })
 
-        it.only("Should calculate Option Price",async function(){
+        it("Should calculate Option Price",async function(){
             const {options,usdt,Token,CDSContract,BorrowingContract} = await loadFixture(deployer);
             const timeStamp = await time.latest();
             const ethPrice = await BorrowingContract.getUSDValue();
@@ -760,6 +761,44 @@ describe("Borrowing Contract",function(){
             // console.log("TREASURY's AMINT BALANCE",await Token.balanceOf(treasury.address));
 
             // await options.calculateOptionPrice(50622665,ethers.utils.parseEther("1"));
+        })
+
+        it.only("Should check EIP712",async function(){
+            const {BorrowingContract,user1} = await loadFixture(deployer);
+            const holder = user1.address; // Use the connected signer's address
+            const spender = ethers.constants.AddressZero;;
+            const allowedAmount = 100;
+            const allowed = true;
+            const expiry = Math.floor(Date.now() / 1000) + 3600;
+            const DOMAIN_SEPARATOR = await BorrowingContract.DOMAIN_SEPARATOR();
+   
+            const messageHash = ethers.utils.solidityPack(
+                            ["address", "address", "uint256", "bool", "uint256"],
+                            [holder, spender, allowedAmount, allowed, expiry]
+                    )
+
+            const permitHash = await BorrowingContract.connect(user1).getMessageHash(messageHash);
+            // const permitHash = ethers.utils.keccak256(
+            //     ethers.utils.solidityPack(
+            //       ["bytes1", "bytes32", "bytes32"],
+            //       [number, DOMAIN_SEPARATOR, (ethers.utils.keccak256(
+            //         ethers.utils.solidityPack(
+            //           ["address", "address", "uint256", "bool", "uint256"],
+            //           [holder, spender, allowedAmount, allowed, expiry]
+            //         )
+            //       ))]
+            //     )
+            // );
+
+            console.log(1);
+            const rawSignature = await user1.signMessage(permitHash);
+            console.log(2);
+            const { v, r, s } = ethers.utils.splitSignature(rawSignature);
+            console.log(3);
+
+            const bool = await BorrowingContract.connect(user1).permit(holder,spender,allowedAmount,allowed,expiry,v,r,s);
+            
+            console.log(bool);
         })
     })
 })

@@ -3,15 +3,17 @@
 pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 import "../interface/CDSInterface.sol";
 import "../interface/ITrinityToken.sol";
 import "../interface/IProtocolToken.sol";
 import "../interface/ITreasury.sol";
 import "../interface/IOptions.sol";
+import "./multiSign.sol";
 import "hardhat/console.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract Borrowing is Ownable {
+contract Borrowing is Ownable,Pausable {
 
     error Borrowing_DepositFailed();
     error Borrowing_GettingETHPriceFailed();
@@ -32,6 +34,8 @@ contract Borrowing is Ownable {
     ITreasury public treasury;
 
     IOptions public options; // options contract interface
+
+    MultiSign public multiSign;
 
     uint256 private _downSideProtectionLimit;
     
@@ -60,6 +64,11 @@ contract Borrowing is Ownable {
     uint256 public totalDiracSupply; // total abond supply
     uint64 public withdrawTimeLimit; // withdraw time limit
 
+    string  public constant name = "AMINT Stablecoin";
+    string  public constant version = "1";
+    bytes32 public DOMAIN_SEPARATOR;
+    bytes32 public constant PERMIT_TYPEHASH = keccak256("Permit(address holder,address spender,uint256 allowedAmount,bool allowed,uint256 expiry)");
+
     uint128 PRECISION = 1e6; // ETH price precision
     uint128 CUMULATIVE_PRECISION = 1e7;
     uint128 RATIO_PRECISION = 1e4;
@@ -72,7 +81,8 @@ contract Borrowing is Ownable {
         address _tokenAddress,
         address _cds,
         address _protocolToken,
-        address _priceFeedAddress
+        address _priceFeedAddress,
+        uint64 chainId
         ){
         Trinity = ITrinityToken(_tokenAddress);
         cds = CDSInterface(_cds);
@@ -81,6 +91,13 @@ contract Borrowing is Ownable {
         priceFeedAddress = _priceFeedAddress;                       //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
         lastEthprice = uint128(getUSDValue());
         lastEventTime = uint128(block.timestamp);
+        DOMAIN_SEPARATOR = keccak256(abi.encode(
+            keccak256("EIP712Domain(string name,string version,uint64 chainId,address verifyingContract)"),
+            keccak256(bytes(name)),
+            keccak256(bytes(version)),
+            chainId,
+            address(this)
+        ));
     }
 
     modifier onlyAdmin(){
@@ -90,6 +107,16 @@ contract Borrowing is Ownable {
     modifier onlyTreasury(){
         require(msg.sender == treasuryAddress);
         _;
+    }
+
+    function pause() public onlyOwner {
+        require(multiSign.execute());
+        _pause();
+    }
+
+    function unpause() public onlyOwner {
+        require(multiSign.execute());
+        _unpause();
     }
 
     // Function to check if an address is a contract
@@ -197,7 +224,7 @@ contract Borrowing is Ownable {
     * @param _volatility eth volatility
     **/
 
-    function depositTokens (uint128 _ethPrice,uint64 _depositTime,IOptions.StrikePrice _strikePercent,uint64 _strikePrice,uint256 _volatility) external payable {
+    function depositTokens (uint128 _ethPrice,uint64 _depositTime,IOptions.StrikePrice _strikePercent,uint64 _strikePrice,uint256 _volatility) external payable whenNotPaused{
         require(msg.value > 0, "Cannot deposit zero tokens");
         require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
 
@@ -287,7 +314,7 @@ contract Borrowing is Ownable {
     @param _withdrawTime time right now
     **/
 
-    function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime, uint64 _bondRatio) external {
+    function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime, uint64 _bondRatio) external whenNotPaused{
         // check is _toAddress in not a zero address and isContract address
         require(_toAddress != address(0) && isContract(_toAddress) != true, "To address cannot be a zero and contract address");
 
@@ -457,7 +484,7 @@ contract Borrowing is Ownable {
      * @param currentEthPrice Current ETH Price.
      */
 
-    function liquidate(address _user,uint64 _index,uint64 currentEthPrice) external onlyAdmin{
+    function liquidate(address _user,uint64 _index,uint64 currentEthPrice) external whenNotPaused onlyAdmin{
 
         // Check whether the liquidator 
         require(_user != address(0), "To address cannot be a zero address");
@@ -637,6 +664,29 @@ contract Borrowing is Ownable {
             lastCumulativeRate = currentCumulativeRate/RATE_PRECISION;
         }
         return currentCumulativeRate;
+    }
+
+    function permit(address holder, address spender, uint256 allowedAmount, bool allowed, uint256 expiry, uint8 v, bytes32 r, bytes32 s) external view returns(bool){
+
+        require(expiry == 0 || block.timestamp <= expiry, "Permit/expired");
+
+        bytes32 permitHash =
+            keccak256(abi.encodePacked(
+                "\x19\x01",
+                DOMAIN_SEPARATOR,
+                keccak256(abi.encode(PERMIT_TYPEHASH,
+                                     holder,
+                                     spender,
+                                     allowedAmount,
+                                     allowed,
+                                     expiry
+                                     ))
+        ));
+
+        require(holder != address(0), "Permit/Invalid address");
+        require(holder == ecrecover(permitHash, v, r, s), "Permit/invalid-permit");
+
+        return true;
     }
 
     function _rpow(uint x, uint n, uint b) internal pure returns (uint z) {

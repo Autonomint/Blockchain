@@ -3,15 +3,17 @@
 pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 import "../interface/CDSInterface.sol";
 import "../interface/ITrinityToken.sol";
 import "../interface/IProtocolToken.sol";
 import "../interface/ITreasury.sol";
 import "../interface/IOptions.sol";
+import "../Core_logic/multiSign.sol";
 import "hardhat/console.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract BorrowingTest is Ownable {
+contract BorrowingTest is Ownable,Pausable {
 
     error Borrowing_DepositFailed();
     error Borrowing_GettingETHPriceFailed();
@@ -32,6 +34,8 @@ contract BorrowingTest is Ownable {
     ITreasury public treasury;
 
     IOptions public options; // options contract interface
+
+    MultiSign public multiSign;
 
     uint256 private _downSideProtectionLimit;
     
@@ -103,6 +107,16 @@ contract BorrowingTest is Ownable {
     modifier onlyTreasury(){
         require(msg.sender == treasuryAddress);
         _;
+    }
+
+    function pause() public onlyOwner {
+        require(multiSign.execute());
+        _pause();
+    }
+
+    function unpause() public onlyOwner {
+        require(multiSign.execute());
+        _unpause();
     }
 
     // Function to check if an address is a contract
@@ -210,7 +224,7 @@ contract BorrowingTest is Ownable {
     * @param _volatility eth volatility
     **/
 
-    function depositTokens (uint128 _ethPrice,uint64 _depositTime,IOptions.StrikePrice _strikePercent,uint64 _strikePrice,uint256 _volatility) external payable {
+    function depositTokens (uint128 _ethPrice,uint64 _depositTime,IOptions.StrikePrice _strikePercent,uint64 _strikePrice,uint256 _volatility) external payable whenNotPaused{
         require(msg.value > 0, "Cannot deposit zero tokens");
         require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
 
@@ -300,7 +314,7 @@ contract BorrowingTest is Ownable {
     @param _withdrawTime time right now
     **/
 
-    function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime, uint64 _bondRatio) external {
+    function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime, uint64 _bondRatio) external whenNotPaused{
         // check is _toAddress in not a zero address and isContract address
         require(_toAddress != address(0) && isContract(_toAddress) != true, "To address cannot be a zero and contract address");
 
@@ -470,7 +484,7 @@ contract BorrowingTest is Ownable {
      * @param currentEthPrice Current ETH Price.
      */
 
-    function liquidate(address _user,uint64 _index,uint64 currentEthPrice) external onlyAdmin{
+    function liquidate(address _user,uint64 _index,uint64 currentEthPrice) external whenNotPaused onlyAdmin{
 
         // Check whether the liquidator 
         require(_user != address(0), "To address cannot be a zero address");
@@ -652,7 +666,7 @@ contract BorrowingTest is Ownable {
         return currentCumulativeRate;
     }
 
-    function permit(address holder, address spender, uint256 allowedAmount, bool allowed, uint256 expiry, uint8 v, bytes32 r, bytes32 s) external returns(bool){
+    function permit(address holder, address spender, uint256 allowedAmount, bool allowed, uint256 expiry, uint8 v, bytes32 r, bytes32 s) external view returns(bool){
 
         require(expiry == 0 || block.timestamp <= expiry, "Permit/expired");
 
@@ -671,8 +685,19 @@ contract BorrowingTest is Ownable {
 
         require(holder != address(0), "Permit/Invalid address");
         require(holder == ecrecover(permitHash, v, r, s), "Permit/invalid-permit");
-        // Trinity.approve(spender, allowedAmount);
+
         return true;
+    }
+
+    function getMessageHash(bytes memory message) public  returns (bytes32) {
+        bytes32 hash = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                DOMAIN_SEPARATOR,
+                keccak256(message)
+            )
+        );
+        return hash;
     }
 
     function _rpow(uint x, uint n, uint b) internal pure returns (uint z) {

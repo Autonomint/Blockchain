@@ -5,21 +5,24 @@ pragma solidity ^0.8.18;
 // import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interface/ITrinityToken.sol";
 import "../interface/IBorrowing.sol";
 import "../interface/ITreasury.sol";
+import "./multiSign.sol";
 import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 
-contract CDS is Ownable{
+contract CDS is Ownable,Pausable{
     // using SafeERC20 for IERC20;
 
     ITrinityToken public immutable Trinity_token; // our stablecoin
     IBorrowing public borrowing; // Borrowing contract interface
     ITreasury public treasury; // Treasury contrcat interface
     AggregatorV3Interface internal dataFeed;
+    MultiSign public multiSign;
     IERC20 public usdt; // USDT interface
 
     address public borrowingContract; // borrowing contract address
@@ -89,6 +92,16 @@ contract CDS is Ownable{
         _;
     }
 
+    function pause() public onlyOwner {
+        require(multiSign.execute());
+        _pause();
+    }
+
+    function unpause() public onlyOwner {
+        require(multiSign.execute());
+        _unpause();
+    }
+
     function getLatestData() internal view returns (uint128) {
         (
             /* uint80 roundID */,
@@ -117,7 +130,7 @@ contract CDS is Ownable{
      * @param _liquidate whether the user opted for liquidation
      * @param _liquidationAmount If opted for liquidation,the liquidation amount
      */
-    function deposit(uint128 usdtAmount,uint128 amintAmount,bool _liquidate,uint128 _liquidationAmount) public {
+    function deposit(uint128 usdtAmount,uint128 amintAmount,bool _liquidate,uint128 _liquidationAmount) public whenNotPaused{
         // totalDepositingAmount is usdt and amint
         uint128 totalDepositingAmount = (usdtAmount * PRECISION) + amintAmount;
         require(totalDepositingAmount != 0, "Deposit amount should not be zero"); // check _amount not zero
@@ -217,7 +230,7 @@ contract CDS is Ownable{
      * @dev withdraw amint
      * @param _index index of the deposit to withdraw
      */
-    function withdraw(uint64 _index) public {
+    function withdraw(uint64 _index) public whenNotPaused{
        // require(_amount != 0, "Amount cannot be zero");
         // require(
         //     _to != address(0) && isContract(_to) == false,
@@ -332,7 +345,7 @@ contract CDS is Ownable{
      * @param amintPrice amint price
      * @param usdtPrice usdt price
      */
-    function redeemUSDT(uint128 _amintAmount,uint64 amintPrice,uint64 usdtPrice) public{
+    function redeemUSDT(uint128 _amintAmount,uint64 amintPrice,uint64 usdtPrice) public whenNotPaused{
         require(_amintAmount != 0,"Amount should not be zero");
 
         require(Trinity_token.balanceOf(msg.sender) >= _amintAmount,"Insufficient balance");
