@@ -31,7 +31,7 @@ contract MultiSign {
     }
 
     // Owners can approve the execution
-    function approve() public onlyOwners{
+    function approve() external onlyOwners{
         require(!approved[msg.sender],'Already approved');
         approved[msg.sender] = true;
     }
@@ -48,7 +48,7 @@ contract MultiSign {
     }
 
     // If the required number of approvals are met,then return true
-    function execute() public returns (bool){
+    function execute() external returns (bool){
         require(getApprovalCount() >= requiredApprovals,'Required approvals not met');
         for(uint64 i; i < owners.length;i++){
             approved[owners[i]] = false;

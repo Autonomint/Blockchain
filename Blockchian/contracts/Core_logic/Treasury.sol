@@ -42,6 +42,7 @@ contract Treasury is Ownable{
     struct DepositDetails{
         uint64 depositedTime;
         uint128 depositedAmount;
+        uint128 depositedAmountUsdValue;
         uint64 downsidePercentage;
         uint128 ethPriceAtDeposit;
         uint128 borrowedAmount;
@@ -219,6 +220,8 @@ contract Treasury is Ownable{
 
         //Adding ethprice to struct
         borrowing[user].depositDetails[borrowerIndex].ethPriceAtDeposit = _ethPrice;
+
+        borrowing[user].depositDetails[borrowerIndex].depositedAmountUsdValue = uint128(msg.value) * _ethPrice;
         
         //having the count of the deposit done to Aave/Compound in batched
         borrowing[user].depositDetails[borrowerIndex].externalProtocolCount = externalProtocolDepositCount;
@@ -253,9 +256,9 @@ contract Treasury is Ownable{
         uint256 amount = _amount;
 
         // Updating lastEthVaultValue in borrowing
-        borrow.updateLastEthVaultValue(_ethPrice * amount);
+        borrow.updateLastEthVaultValue((borrowing[borrower].depositDetails[index].depositedAmountUsdValue * 50)/100);
         // Updating total volumes
-        totalVolumeOfBorrowersAmountinUSD -= (_ethPrice * amount);
+        totalVolumeOfBorrowersAmountinUSD -= ((borrowing[borrower].depositDetails[index].depositedAmountUsdValue * 50)/100);
         totalVolumeOfBorrowersAmountinWei -= amount;
 
         // If withdrawing for second time

@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interface/ITrinityToken.sol";
 import "../interface/IBorrowing.sol";
 import "../interface/ITreasury.sol";
-import "./multiSign.sol";
+import "../interface/IMultiSign.sol";
 import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
@@ -22,7 +22,7 @@ contract CDS is Ownable,Pausable{
     IBorrowing public borrowing; // Borrowing contract interface
     ITreasury public treasury; // Treasury contrcat interface
     AggregatorV3Interface internal dataFeed;
-    MultiSign public multiSign;
+    IMultiSign public multiSign;
     IERC20 public usdt; // USDT interface
 
     address public borrowingContract; // borrowing contract address
@@ -79,9 +79,10 @@ contract CDS is Ownable,Pausable{
     event Deposit(uint128 depositedAmint,uint64 index,uint128 liquidationAmount,uint128 normalizedAmount,uint128 depositVal);
     event Withdraw(uint128 withdrewAmint,uint128 withdrawETH);
 
-    constructor(address _trinity,address priceFeed,address _usdt) {
+    constructor(address _trinity,address priceFeed,address _usdt,address _multiSign) {
         Trinity_token = ITrinityToken(_trinity); // _trinity token contract address
         usdt = IERC20(_usdt);
+        multiSign = IMultiSign(_multiSign);
         dataFeed = AggregatorV3Interface(priceFeed);
         lastEthPrice = getLatestData();
         lastCumulativeRate = PRECISION;
@@ -135,7 +136,7 @@ contract CDS is Ownable,Pausable{
         uint128 totalDepositingAmount = (usdtAmount * PRECISION) + amintAmount;
         require(totalDepositingAmount != 0, "Deposit amount should not be zero"); // check _amount not zero
         require(
-            _liquidationAmount < (usdtAmount + amintAmount),
+            _liquidationAmount <= (totalDepositingAmount),
             "Liquidation amount can't greater than deposited amount"
         );
 

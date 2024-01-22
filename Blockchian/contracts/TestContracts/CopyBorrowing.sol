@@ -9,7 +9,7 @@ import "../interface/ITrinityToken.sol";
 import "../interface/IProtocolToken.sol";
 import "../interface/ITreasury.sol";
 import "../interface/IOptions.sol";
-import "../Core_logic/multiSign.sol";
+import "../interface/IMultiSign.sol";
 import "hardhat/console.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
@@ -35,7 +35,7 @@ contract BorrowingTest is Ownable,Pausable {
 
     IOptions public options; // options contract interface
 
-    MultiSign public multiSign;
+    IMultiSign public multiSign;
 
     uint256 private _downSideProtectionLimit;
     
@@ -81,6 +81,7 @@ contract BorrowingTest is Ownable,Pausable {
         address _tokenAddress,
         address _cds,
         address _protocolToken,
+        address _multiChain,
         address _priceFeedAddress,
         uint64 chainId
         ){
@@ -88,6 +89,7 @@ contract BorrowingTest is Ownable,Pausable {
         cds = CDSInterface(_cds);
         cdsAddress = _cds;
         protocolToken = IProtocolToken(_protocolToken);
+        multiSign = IMultiSign(_multiChain);
         priceFeedAddress = _priceFeedAddress;                       //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
         lastEthprice = uint128(getUSDValue());
         lastEventTime = uint128(block.timestamp);
@@ -236,7 +238,7 @@ contract BorrowingTest is Ownable,Pausable {
         (bool deposited,uint64 index) = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
 
         // Call calculateOptionPrice in options contract to get options fees
-        uint256 optionFees = options.calculateOptionPrice(_volatility,msg.value,_strikePercent);
+        uint256 optionFees = options.calculateOptionPrice(_ethPrice,_volatility,msg.value,_strikePercent);
 
         //Check whether the deposit is successfull
         if(!deposited){
@@ -368,7 +370,7 @@ contract BorrowingTest is Ownable,Pausable {
                     //Update totalNormalizedAmount
                     // totalNormalizedAmount -= borrowerDebt;
 
-                    treasury.updateTotalInterest(borrowerDebt - depositDetail.borrowedAmount);
+                    //////////////treasury.updateTotalInterest(borrowerDebt - depositDetail.borrowedAmount);
 
                     // Mint the pTokens
                     uint128 noOfPTokensminted = _mintPToken(msg.sender,discountedETH, _bondRatio);

@@ -94,10 +94,10 @@ contract Options{
     }
 
     // Function to calculate option price
-    function calculateOptionPrice(uint256 _ethVolatility,uint256 _amount,StrikePrice _strikePrice) public view returns (uint256) {
+    function calculateOptionPrice(uint128 _ethPrice,uint256 _ethVolatility,uint256 _amount,StrikePrice _strikePrice) public view returns (uint256) {
         //uint256 a = calculateStandardDeviation(); 
         uint256 a = _ethVolatility;
-        uint256 ethPrice = getLatestPrice();
+        uint256 ethPrice = _ethPrice;/*getLatestPrice();*/
         uint256 E = (treasury.totalVolumeOfBorrowersAmountinUSD() + (_amount * ethPrice));
         uint256 cdsVault = cds.totalCdsDepositedAmount();
 

@@ -7,6 +7,7 @@ interface ITreasury{
     struct DepositDetails{
         uint64 depositedTime;
         uint128 depositedAmount;
+        uint128 depositedAmountUsdValue;
         uint64 downsidePercentage;
         uint128 ethPriceAtDeposit;
         uint128 borrowedAmount;
