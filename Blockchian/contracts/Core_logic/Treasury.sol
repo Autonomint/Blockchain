@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/interfaces/IERC20.sol";
-import "../interface/ITrinityToken.sol";
+import "../interface/IAmint.sol";
 import "../interface/IBorrowing.sol";
 import "../interface/AaveInterfaces/IWETHGateway.sol";
 import "../interface/AaveInterfaces/IPoolAddressesProvider.sol";
@@ -26,7 +26,7 @@ contract Treasury is Ownable{
     error Treasury_EthTransferToCdsLiquidatorFailed();
 
     IBorrowing public borrow;
-    ITrinityToken public trinity;
+    IAMINT public amint;
     IWrappedTokenGatewayV3 public wethGateway; // Weth gateway is used to deposit eth in  and withdraw from aave
     IPoolAddressesProvider public aavePoolAddressProvider; // To get the current pool  address in Aave
     IERC20 public usdt;
@@ -53,7 +53,7 @@ contract Treasury is Ownable{
         bool liquidated;
         uint64 ethPriceAtWithdraw;
         uint64 withdrawTime;
-        uint128 pTokensAmount;
+        uint128 aBondTokensAmount;
         uint64 strikePrice;
         uint128 optionFees;
         uint256 burnedAmint;
@@ -73,7 +73,7 @@ contract Treasury is Ownable{
         //uint128 ETHPrice;
         //uint64 depositedTime;
         uint64 borrowerIndex;
-        uint128 totalPTokens;
+        uint128 totalAbondTokens;
     }
 
     //Each Deposit to Aave/Compound
@@ -146,7 +146,7 @@ contract Treasury is Ownable{
             borrowingContract = _borrowing;
             cdsContract = _cdsContract;
             borrow = IBorrowing(_borrowing);
-            trinity = ITrinityToken(_tokenAddress);
+            amint = IAMINT(_tokenAddress);
             wethGateway = IWrappedTokenGatewayV3(_wethGateway);       //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
             cEther = ICEther(_cEther);                                //0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5
             compoundAddress = _cEther;
@@ -175,7 +175,7 @@ contract Treasury is Ownable{
     }
 
     /**
-     * @dev This function takes ethPrice, depositTime parameters to deposit eth into the contract and mint them back the Trinity tokens.
+     * @dev This function takes ethPrice, depositTime parameters to deposit eth into the contract and mint them back the AMINT tokens.
      * @param _ethPrice get current eth price 
      * @param _depositTime get unixtime stamp at the time of deposit
      **/
@@ -661,11 +661,11 @@ contract Treasury is Ownable{
     function updateTotalBorrowedAmount(address borrower,uint256 amount) external {
         borrowing[borrower].totalBorrowedAmount += amount;
     }
-    function updateTotalPTokensIncrease(address borrower,uint128 amount) external {
-        borrowing[borrower].totalPTokens += amount;
+    function updateTotalAbondTokensIncrease(address borrower,uint128 amount) external {
+        borrowing[borrower].totalAbondTokens += amount;
     }
-    function updateTotalPTokensDecrease(address borrower,uint128 amount) external {
-        borrowing[borrower].totalPTokens -= amount;
+    function updateTotalAbondTokensDecrease(address borrower,uint128 amount) external {
+        borrowing[borrower].totalAbondTokens -= amount;
     }
 
     function updateTotalInterest(uint _amount) external{
@@ -689,7 +689,7 @@ contract Treasury is Ownable{
      */
     function approveAmint(address _address, uint _amount) external onlyCDSOrBorrowingContract{
         require(_address != address(0) && _amount != 0, "Input address or amount is invalid");
-        bool state = trinity.approve(_address, _amount);
+        bool state = amint.approve(_address, _amount);
         require(state == true, "Approve failed");
     }
 
@@ -711,7 +711,7 @@ contract Treasury is Ownable{
     function withdrawInterest(address toAddress,uint256 amount) external onlyOwner{
         require(toAddress != address(0) && amount != 0, "Input address or amount is invalid");
         require(amount <= (totalInterest + totalInterestFromLiquidation),"Treasury don't have enough interest");
-        bool sent = trinity.transfer(toAddress,amount);
+        bool sent = amint.transfer(toAddress,amount);
         require(sent, "Failed to send Ether");
     }
 

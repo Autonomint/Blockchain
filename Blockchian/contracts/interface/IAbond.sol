@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: unlicensed
 pragma solidity ^0.8.18;
 
-interface IProtocolToken {
+interface IABONDToken {
     function balanceOf(address account) external view returns (uint256);
     function mint(address to, uint256 amount) external returns(bool);
     function burnFromUser(address to, uint256 amount) external returns(bool);

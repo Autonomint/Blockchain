@@ -6,8 +6,8 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract ProtocolToken is ERC20, ERC20Burnable, Pausable, Ownable {
-    constructor() ERC20("ProtocolToken", "PT") {}
+contract AMINTStablecoin is ERC20, ERC20Burnable, Pausable, Ownable {
+    constructor() ERC20("AMINT TOKEN", "AMINT") {}
 
     mapping(address => bool) public whitelist;
 
@@ -23,7 +23,6 @@ contract ProtocolToken is ERC20, ERC20Burnable, Pausable, Ownable {
         _mint(to, amount);
         return true;
     }
-
     function burnFromUser(address to, uint256 amount) public returns(bool){
         burnFrom(to, amount);
         return true;

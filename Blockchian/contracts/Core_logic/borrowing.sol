@@ -5,8 +5,8 @@ pragma solidity ^0.8.18;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "../interface/CDSInterface.sol";
-import "../interface/ITrinityToken.sol";
-import "../interface/IProtocolToken.sol";
+import "../interface/IAmint.sol";
+import "../interface/IAbond.sol";
 import "../interface/ITreasury.sol";
 import "../interface/IOptions.sol";
 import "../interface/IMultiSign.sol";
@@ -17,19 +17,19 @@ contract Borrowing is Ownable,Pausable {
 
     error Borrowing_DepositFailed();
     error Borrowing_GettingETHPriceFailed();
-    error Borrowing_MUSDMintFailed();
-    error Borrowing_pTokenMintFailed();
-    error Borrowing_WithdrawMUSDTransferFailed();
+    error Borrowing_amintMintFailed();
+    error Borrowing_abondMintFailed();
+    error Borrowing_WithdrawAMINTTransferFailed();
     error Borrowing_WithdrawEthTransferFailed();
     error Borrowing_WithdrawBurnFailed();
     error Borrowing_LiquidateBurnFailed();
     error Borrowing_LiquidateEthTransferToCdsFailed();
 
-    ITrinityToken public Trinity; // our stablecoin
+    IAMINT public amint; // our stablecoin
 
     CDSInterface public cds;
 
-    IProtocolToken public protocolToken; // abond stablecoin
+    IABONDToken public abond; // abond stablecoin
 
     ITreasury public treasury;
 
@@ -63,6 +63,7 @@ contract Borrowing is Ownable,Pausable {
     uint256 public totalAmintSupply; // Total amint supply
     uint256 public totalDiracSupply; // total abond supply
     uint64 public withdrawTimeLimit; // withdraw time limit
+    uint128 public ratePerSec;
 
     string  public constant name = "AMINT Stablecoin";
     string  public constant version = "1";
@@ -80,16 +81,16 @@ contract Borrowing is Ownable,Pausable {
     constructor(
         address _tokenAddress,
         address _cds,
-        address _protocolToken,
-        address _multiChain,
+        address _abondToken,
+        address _multiSign,
         address _priceFeedAddress,
         uint64 chainId
         ){
-        Trinity = ITrinityToken(_tokenAddress);
+        amint = IAMINT(_tokenAddress);
         cds = CDSInterface(_cds);
         cdsAddress = _cds;
-        protocolToken = IProtocolToken(_protocolToken);
-        multiSign = IMultiSign(_multiChain);
+        abond = IABONDToken(_abondToken);
+        multiSign = IMultiSign(_multiSign);
         priceFeedAddress = _priceFeedAddress;                       //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
         lastEthprice = uint128(getUSDValue());
         lastEventTime = uint128(block.timestamp);
@@ -103,11 +104,11 @@ contract Borrowing is Ownable,Pausable {
     }
 
     modifier onlyAdmin(){
-        require(msg.sender == admin);
+        require(msg.sender == admin,"Caller is not an admin");
         _;
     }
     modifier onlyTreasury(){
-        require(msg.sender == treasuryAddress);
+        require(msg.sender == treasuryAddress,"Function should only be called by treasury");
         _;
     }
 
@@ -159,7 +160,7 @@ contract Borrowing is Ownable,Pausable {
     }
 
     /**
-     * @dev Transfer Trinity token to the borrower
+     * @dev Transfer AMINT token to the borrower
      * @param _borrower Address of the borrower to transfer
      * @param amount deposited amount of the borrower
      * @param _ethPrice current eth price
@@ -175,21 +176,21 @@ contract Borrowing is Ownable,Pausable {
 
         uint256 tokensToLend = (tokenValueConversion * LTV) / RATIO_PRECISION;
 
-        //Call the mint function in Trinity
+        //Call the mint function in AMINT
         //Mint 80% - options fees to borrower
-        bool minted = Trinity.mint(_borrower, (tokensToLend - optionFees));
+        bool minted = amint.mint(_borrower, (tokensToLend - optionFees));
 
         //Mint options fees to treasury
-        bool treasuryMint = Trinity.mint(treasuryAddress,optionFees);
+        bool treasuryMint = amint.mint(treasuryAddress,optionFees);
 
         if(!minted){
-            revert Borrowing_MUSDMintFailed();
+            revert Borrowing_amintMintFailed();
         }
 
         if(!treasuryMint){
-            revert Borrowing_MUSDMintFailed();
+            revert Borrowing_amintMintFailed();
         }
-        totalAmintSupply = Trinity.totalSupply();
+        totalAmintSupply = amint.totalSupply();
         return tokensToLend - optionFees;
     }
 
@@ -200,25 +201,25 @@ contract Borrowing is Ownable,Pausable {
      * @param _bondRatio ratio of abond
      */
 
-    function _mintPToken(address _toAddress,uint256 _amount, uint64 _bondRatio) internal returns(uint128){
+    function _mintAbondToken(address _toAddress,uint256 _amount, uint64 _bondRatio) internal returns(uint128){
         require(_toAddress != address(0), "Borrower cannot be zero address");
         require(_amount != 0,"Amount can't be zero");
 
-        // PToken:Trinity = 4:1
+        // ABOND:AMINT = 4:1
         uint128 amount = (uint128(_amount) * 100)/(_bondRatio*100);
 
-        //Call the mint function in ProtocolToken
-        bool minted = protocolToken.mint(_toAddress,amount);
+        //Call the mint function in ABONDToken
+        bool minted = abond.mint(_toAddress,amount);
 
         if(!minted){
-            revert Borrowing_pTokenMintFailed();
+            revert Borrowing_abondMintFailed();
         }
-        totalDiracSupply = protocolToken.totalSupply();
+        totalDiracSupply = abond.totalSupply();
         return amount;
     }
 
     /**
-    * @dev This function takes ethPrice, depositTime, percentageOfEth and receivedType parameters to deposit eth into the contract and mint them back the Trinity tokens.
+    * @dev This function takes ethPrice, depositTime, percentageOfEth and receivedType parameters to deposit eth into the contract and mint them back the AMINT tokens.
     * @param _ethPrice get current eth price 
     * @param _depositTime get unixtime stamp at the time of deposit
     * @param _strikePercent percentage increase of eth price
@@ -245,7 +246,7 @@ contract Borrowing is Ownable,Pausable {
             revert Borrowing_DepositFailed();
         }
 
-        // Call the transfer function to mint Trinity and Get the borrowedAmount
+        // Call the transfer function to mint AMINT and Get the borrowedAmount
         uint256 borrowAmount = _transferToken(msg.sender,msg.value,_ethPrice,optionFees);
 
         // Call calculateCumulativeRate in cds to split fees to cds users
@@ -341,7 +342,7 @@ contract Borrowing is Ownable,Pausable {
                     uint256 borrowerDebt = ((depositDetail.normalizedAmount * lastCumulativeRate)/RATE_PRECISION);
                     lastCumulativeRate = calculateCumulativeRate()/RATE_PRECISION;
                     // Check whether the Borrower have enough Trinty
-                    require(Trinity.balanceOf(msg.sender) >= borrowerDebt, "User balance is less than required");
+                    require(amint.balanceOf(msg.sender) >= borrowerDebt, "User balance is less than required");
                             
                     // Update the borrower's data
                     {depositDetail.ethPriceAtWithdraw = _ethPrice;
@@ -352,33 +353,33 @@ contract Borrowing is Ownable,Pausable {
 
                     uint256 discountedETH = (((20*((depositDetail.depositedAmount * 50)/100))/100)*_ethPrice)/100; // 0.4
 
-                    // Calculate the amount of Trinity to burn and sent to the treasury
+                    // Calculate the amount of AMINT to burn and sent to the treasury
                     // uint256 halfValue = (50 *(depositDetail.borrowedAmount))/100;
                     uint256 burnValue = ((depositDetail.borrowedAmount * 50)/100) - discountedETH;// 
 
-                    // Burn the Trinity from the Borrower
-                    bool success = Trinity.burnFromUser(msg.sender, burnValue);
+                    // Burn the AMINT from the Borrower
+                    bool success = amint.burnFromUser(msg.sender, burnValue);
                     if(!success){
                         revert Borrowing_WithdrawBurnFailed();
                     }
 
-                    //Transfer the remaining Trinity to the treasury
-                    bool transfer = Trinity.transferFrom(msg.sender,treasuryAddress,borrowerDebt - burnValue);
+                    //Transfer the remaining AMINT to the treasury
+                    bool transfer = amint.transferFrom(msg.sender,treasuryAddress,borrowerDebt - burnValue);
                     if(!transfer){
-                        revert Borrowing_WithdrawMUSDTransferFailed();
+                        revert Borrowing_WithdrawAMINTTransferFailed();
                     }
                     //Update totalNormalizedAmount
                     totalNormalizedAmount -= borrowerDebt;
 
                     treasury.updateTotalInterest(borrowerDebt - depositDetail.borrowedAmount);
 
-                    // Mint the pTokens
-                    uint128 noOfPTokensminted = _mintPToken(msg.sender,discountedETH, _bondRatio);
+                    // Mint the ABondTokens
+                    uint128 noOfAbondTokensminted = _mintAbondToken(msg.sender,discountedETH, _bondRatio);
 
-                    // Update PToken data
+                    // Update ABONDToken data
                     depositDetail.burnedAmint = burnValue;
-                    depositDetail.pTokensAmount = noOfPTokensminted;
-                    treasury.updateTotalPTokensIncrease(msg.sender,noOfPTokensminted);
+                    depositDetail.aBondTokensAmount = noOfAbondTokensminted;
+                    treasury.updateTotalAbondTokensIncrease(msg.sender,noOfAbondTokensminted);
                     // Update deposit details    
                     treasury.updateDepositDetails(msg.sender,_index,depositDetail);}             
                     uint128 ethToReturn;
@@ -396,15 +397,14 @@ contract Borrowing is Ownable,Pausable {
                         revert("BorrowingHealth is Low");
                     }
                     ethToReturn = (ethToReturn * 50)/100;
-                    console.log("eth to return",ethToReturn);
                     // Call withdraw in treasury
                 bool sent = treasury.withdraw(msg.sender,_toAddress,ethToReturn,_index,_ethPrice);
                 if(!sent){
                     revert Borrowing_WithdrawEthTransferFailed();
                 }
-                totalAmintSupply = Trinity.totalSupply();
-                totalDiracSupply = protocolToken.totalSupply();
-                emit Withdraw(borrowerDebt,ethToReturn,depositDetail.pTokensAmount);
+                totalAmintSupply = amint.totalSupply();
+                totalDiracSupply = abond.totalSupply();
+                emit Withdraw(borrowerDebt,ethToReturn,depositDetail.aBondTokensAmount);
                 }// Check whether it is second withdraw
                 else if(depositDetail.withdrawNo == 1){
                     secondWithdraw(
@@ -412,10 +412,10 @@ contract Borrowing is Ownable,Pausable {
                         _index,
                         _ethPrice,
                         depositDetail.withdrawTime,
-                        depositDetail.pTokensAmount,
+                        depositDetail.aBondTokensAmount,
                         depositDetail.withdrawAmount);
-                    totalAmintSupply = Trinity.totalSupply();
-                    totalDiracSupply = protocolToken.totalSupply();
+                    totalAmintSupply = amint.totalSupply();
+                    totalDiracSupply = abond.totalSupply();
                 }else{
                     // update withdrawed to true
                     revert("User already withdraw entire amount");
@@ -433,34 +433,34 @@ contract Borrowing is Ownable,Pausable {
      * @dev This function withdraw ETH.
      * @param _toAddress The address to whom to transfer ETH.
      * @param _index Index of the borrow
-     * @param pTokensAmount Amount of pTokens transferred.
+     * @param aBondTokensAmount Amount of pTokens transferred.
      * @param withdrawTime time at first withdraw
      * @param ethToReturn ethToReturn
      */
 
-    function secondWithdraw(address _toAddress,uint64 _index,uint64 _ethPrice,uint64 withdrawTime,uint128 pTokensAmount,uint128 ethToReturn) internal {
+    function secondWithdraw(address _toAddress,uint64 _index,uint64 _ethPrice,uint64 withdrawTime,uint128 aBondTokensAmount,uint128 ethToReturn) internal {
             // Check whether the first withdraw passed one month
-            require(block.timestamp >= (withdrawTime + withdrawTimeLimit),"A month not yet completed since withdraw");
+            require(block.timestamp >= (withdrawTime + withdrawTimeLimit),"Can't withdraw before the withdraw time limit");
 
             // Check the user has required pToken
-            require(protocolToken.balanceOf(msg.sender) == pTokensAmount,"Don't have enough Protocol Tokens");
+            require(abond.balanceOf(msg.sender) == aBondTokensAmount,"Don't have enough ABOND Tokens");
             (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,_index);
             // Update Borrower's Data
             treasury.updateTotalDepositedAmount(msg.sender,uint128(depositDetail.depositedAmount));
             depositDetail.withdrawed = true;
             depositDetail.withdrawNo = 2;
-            treasury.updateTotalPTokensDecrease(msg.sender,pTokensAmount);
-            depositDetail.pTokensAmount = 0;
+            treasury.updateTotalAbondTokensDecrease(msg.sender,aBondTokensAmount);
+            depositDetail.aBondTokensAmount = 0;
             treasury.updateDepositDetails(msg.sender,_index,depositDetail);
 
             //Burn the amint from treasury
             treasury.approveAmint(address(this),((depositDetail.borrowedAmount*50)/100));
-            bool transfer = Trinity.burnFromUser(treasuryAddress, depositDetail.burnedAmint);
+            bool transfer = amint.burnFromUser(treasuryAddress, depositDetail.burnedAmint);
             if(!transfer){
                 revert Borrowing_WithdrawBurnFailed();
             }
             //Burn the abond from user
-            bool success = protocolToken.burnFromUser(msg.sender,pTokensAmount);
+            bool success = abond.burnFromUser(msg.sender,aBondTokensAmount);
             if(!success){
                 revert Borrowing_WithdrawBurnFailed();
             }
@@ -528,11 +528,11 @@ contract Borrowing is Ownable,Pausable {
 
         // Burn the borrow amount
         treasury.approveAmint(address(this),depositDetail.borrowedAmount);
-        bool success = Trinity.burnFromUser(treasuryAddress, depositDetail.borrowedAmount);
+        bool success = amint.burnFromUser(treasuryAddress, depositDetail.borrowedAmount);
         if(!success){
             revert Borrowing_LiquidateBurnFailed();
         }
-        totalAmintSupply = Trinity.totalSupply();
+        totalAmintSupply = amint.totalSupply();
         // Transfer ETH to CDS Pool
     }
 
@@ -636,9 +636,11 @@ contract Borrowing is Ownable,Pausable {
         return ratio;
     }
 
-    function setAPY(uint8 _apy) external onlyOwner{
-        require(_apy != 0,"APY should not be zero");
+    function setAPY(uint8 _apy,uint128 _ratePerSec) external onlyOwner{
+        require(_apy != 0 && _ratePerSec != 0,"APY and rate should not be zero");
+        require(multiSign.execute());
         APY = _apy;
+        ratePerSec = _ratePerSec;
     }
 
     function getAPY() public view returns(uint8){
@@ -652,7 +654,6 @@ contract Borrowing is Ownable,Pausable {
         // Get the noOfBorrowers
         uint128 noOfBorrowers = treasury.noOfBorrowers();
 
-        uint128 ratePerSec = 1000000001547125957863212449;
         uint256 currentCumulativeRate;
 
         //If first event

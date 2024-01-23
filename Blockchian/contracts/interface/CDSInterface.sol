@@ -21,7 +21,8 @@ interface CDSInterface {
         uint128 ethAmount;
         uint256 availableLiquidationAmount;
     }
-
+    function pause() external;
+    function unpause() external;
     function deposit(uint256 _amount, uint128 _timeStamp) external;
     function withdraw(address _to, uint96 _index, uint64 _withdrawTime) external;
     function withdraw_fee(address _to, uint96 _amount) external;

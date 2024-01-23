@@ -18,7 +18,7 @@ interface ITreasury{
         bool liquidated;
         uint64 ethPriceAtWithdraw;
         uint64 withdrawTime;
-        uint128 pTokensAmount;
+        uint128 aBondTokensAmount;
         uint64 strikePrice;
         uint128 optionFees;
         uint256 burnedAmint;
@@ -45,8 +45,8 @@ interface ITreasury{
         function updateHasBorrowed(address borrower,bool _bool) external;
         function updateTotalDepositedAmount(address borrower,uint128 amount) external;
         function updateTotalBorrowedAmount(address borrower,uint256 amount) external;
-        function updateTotalPTokensIncrease(address borrower,uint128 amount) external;
-        function updateTotalPTokensDecrease(address borrower,uint128 amount) external;
+        function updateTotalAbondTokensIncrease(address borrower,uint128 amount) external;
+        function updateTotalAbondTokensDecrease(address borrower,uint128 amount) external;
 
         function getBorrowing(address depositor,uint64 index) external view returns(uint64,DepositDetails memory);
         function updateDepositDetails(address depositor,uint64 index,DepositDetails memory depositDetail) external;

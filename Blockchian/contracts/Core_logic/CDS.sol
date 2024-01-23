@@ -7,7 +7,7 @@ pragma solidity ^0.8.18;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../interface/ITrinityToken.sol";
+import "../interface/IAmint.sol";
 import "../interface/IBorrowing.sol";
 import "../interface/ITreasury.sol";
 import "../interface/IMultiSign.sol";
@@ -18,7 +18,7 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 contract CDS is Ownable,Pausable{
     // using SafeERC20 for IERC20;
 
-    ITrinityToken public immutable Trinity_token; // our stablecoin
+    IAMINT public immutable amint; // our stablecoin
     IBorrowing public borrowing; // Borrowing contract interface
     ITreasury public treasury; // Treasury contrcat interface
     AggregatorV3Interface internal dataFeed;
@@ -79,8 +79,8 @@ contract CDS is Ownable,Pausable{
     event Deposit(uint128 depositedAmint,uint64 index,uint128 liquidationAmount,uint128 normalizedAmount,uint128 depositVal);
     event Withdraw(uint128 withdrewAmint,uint128 withdrawETH);
 
-    constructor(address _trinity,address priceFeed,address _usdt,address _multiSign) {
-        Trinity_token = ITrinityToken(_trinity); // _trinity token contract address
+    constructor(address _amint,address priceFeed,address _usdt,address _multiSign) {
+        amint = IAMINT(_amint); // amint token contract address
         usdt = IERC20(_usdt);
         multiSign = IMultiSign(_multiSign);
         dataFeed = AggregatorV3Interface(priceFeed);
@@ -143,31 +143,31 @@ contract CDS is Ownable,Pausable{
         if(usdtAmountDepositedTillNow < usdtLimit){
             require((usdtAmount * PRECISION) == totalDepositingAmount,'100% of amount must be USDT');
         }else{
-            require(amintAmount >= (amintLimit * totalDepositingAmount)/100,"Insufficient AMINT amount");
-            require(Trinity_token.balanceOf(msg.sender) >= amintAmount,"Insufficient balance with msg.sender"); // check if user has sufficient trinity token
+            require(amintAmount >= (amintLimit * totalDepositingAmount)/100,"Required AMINT amount not met");
+            require(amint.balanceOf(msg.sender) >= amintAmount,"Insufficient AMINT balance with msg.sender"); // check if user has sufficient AMINT token
         }
         if(usdtAmount != 0 && amintAmount != 0){
-            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient balance with msg.sender"); // check if user has sufficient trinity token
+            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient USDT balance with msg.sender"); // check if user has sufficient AMINT token
             bool usdtTransfer = usdt.transferFrom(msg.sender, treasuryAddress, usdtAmount); // transfer amount to this contract
-            require(usdtTransfer == true, "Transfer failed in CDS deposit");
-            //Transfer trinity tokens from msg.sender to this contract
-            bool amintTransfer = Trinity_token.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract       
-            require(amintTransfer == true, "Transfer failed in CDS deposit");
+            require(usdtTransfer == true, "USDT Transfer failed in CDS deposit");
+            //Transfer AMINT tokens from msg.sender to this contract
+            bool amintTransfer = amint.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract       
+            require(amintTransfer == true, "AMINT Transfer failed in CDS deposit");
         }else if(usdtAmount == 0){
-            bool transfer = Trinity_token.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract
+            bool transfer = amint.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract
             //check it token have successfully transfer or not
-            require(transfer == true, "Transfer failed in CDS deposit");
+            require(transfer == true, "AMINT Transfer failed in CDS deposit");
         }else{
-            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient balance with msg.sender"); // check if user has sufficient trinity token
+            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient USDT balance with msg.sender"); // check if user has sufficient AMINT token
             bool transfer = usdt.transferFrom(msg.sender, treasuryAddress, usdtAmount); // transfer amount to this contract
             //check it token have successfully transfer or not
-            require(transfer == true, "Transfer failed in CDS deposit");
+            require(transfer == true, "USDT Transfer failed in CDS deposit");
         }
         //increment usdtAmountDepositedTillNow
         usdtAmountDepositedTillNow += usdtAmount;
         if(usdtAmount != 0 ){
-            bool success = Trinity_token.mint(treasuryAddress,(usdtAmount * PRECISION));
-            require(success == true, "Transfer failed in CDS deposit");
+            bool success = amint.mint(treasuryAddress,(usdtAmount * PRECISION));
+            require(success == true, "AMINT mint to treasury failed in CDS deposit");
         }
 
         uint128 ethPrice = getLatestData();
@@ -243,9 +243,7 @@ contract CDS is Ownable,Pausable{
         
         uint64 _withdrawTime = uint64(block.timestamp);
 
-        // if (cdsDetails[msg.sender].cdsAccountDetails[_index].depositedTime + withdrawTimeLimit <= _withdrawTime) {
-        // revert("cannot withdraw before the withdraw time limit");
-        // }
+        require(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedTime + withdrawTimeLimit <= _withdrawTime,"cannot withdraw before the withdraw time limit");
 
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawed = true;
 
@@ -260,14 +258,14 @@ contract CDS is Ownable,Pausable{
         // option fees
         uint128 returnAmount = 
             cdsAmountToReturn(msg.sender,_index, ethPrice)+
-            ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * lastCumulativeRate)/PRECISION)-(2*(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount));
+            ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * lastCumulativeRate)/PRECISION)-(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount);
         
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedTime =  _withdrawTime;
 
         // If user opted for liquidation
         if(cdsDetails[msg.sender].cdsAccountDetails[_index].optedLiquidation){
-
+            returnAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
             uint128 currentLiquidations = borrowing.noOfLiquidations();
             uint128 liquidationIndexAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationindex;
             uint128 ethAmount;
@@ -291,17 +289,17 @@ contract CDS is Ownable,Pausable{
             treasury.approveAmint(address(this),returnAmountWithGains);
 
             //Call transferFrom in amint
-            bool success = Trinity_token.transferFrom(treasuryAddress,msg.sender, returnAmountWithGains); // transfer amount to msg.sender
+            bool success = amint.transferFrom(treasuryAddress,msg.sender, returnAmountWithGains); // transfer amount to msg.sender
             require(success == true, "Transsuccessed in cds withdraw");
 
             // Call transferEthToCdsLiquidators to tranfer eth
             treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
             emit Withdraw(returnAmountWithGains,ethAmount);
         }else{
-            // Trinity_token.approve(msg.sender, returnAmount);
+            // amint.approve(msg.sender, returnAmount);
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
             treasury.approveAmint(address(this),returnAmount);
-            bool transfer = Trinity_token.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
+            bool transfer = amint.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
             require(transfer == true, "Transfer failed in cds withdraw");
             emit Withdraw(returnAmount,0);
         }
@@ -349,8 +347,8 @@ contract CDS is Ownable,Pausable{
     function redeemUSDT(uint128 _amintAmount,uint64 amintPrice,uint64 usdtPrice) public whenNotPaused{
         require(_amintAmount != 0,"Amount should not be zero");
 
-        require(Trinity_token.balanceOf(msg.sender) >= _amintAmount,"Insufficient balance");
-        bool transfer = Trinity_token.transferFrom(msg.sender,treasuryAddress,_amintAmount);
+        require(amint.balanceOf(msg.sender) >= _amintAmount,"Insufficient balance");
+        bool transfer = amint.transferFrom(msg.sender,treasuryAddress,_amintAmount);
         require(transfer == true, "Trinity Transfer failed in redeemUSDT");
 
         uint128 _usdtAmount = (amintPrice * _amintAmount/(PRECISION * usdtPrice));  
@@ -389,7 +387,7 @@ contract CDS is Ownable,Pausable{
 
     function calculateValue(uint128 _price) internal view returns(uint128) {
         uint128 _amount = 1000;
-        uint128 treasuryBal = uint128(Trinity_token.balanceOf(treasuryAddress));
+        uint128 treasuryBal = uint128(amint.balanceOf(treasuryAddress));
         uint128 vaultBal = uint128(treasury.getBalanceInTreasury());
         uint128 priceDiff;
 
