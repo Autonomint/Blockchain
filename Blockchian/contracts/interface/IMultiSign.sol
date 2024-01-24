@@ -3,6 +3,8 @@
 pragma solidity ^0.8.18;
 
 interface IMultiSign{
-    function approve() external;
-    function execute() external returns (bool);
+
+    enum Functions{BorrowingDeposit,BorrowingWithdraw,Liquidation,SetAPR,CDSDeposit,CDSWithdraw,RedeemUSDT}
+    function functionState(Functions) external returns(bool);
+    function executeSetAPR() external returns (bool);
 }

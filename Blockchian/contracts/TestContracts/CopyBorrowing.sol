@@ -3,7 +3,6 @@
 pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "../interface/CDSInterface.sol";
 import "../interface/IAmint.sol";
 import "../interface/IAbond.sol";
@@ -13,7 +12,7 @@ import "../interface/IMultiSign.sol";
 import "hardhat/console.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract BorrowingTest is Ownable,Pausable {
+contract BorrowingTest is Ownable {
 
     error Borrowing_DepositFailed();
     error Borrowing_GettingETHPriceFailed();
@@ -112,14 +111,9 @@ contract BorrowingTest is Ownable,Pausable {
         _;
     }
 
-    function pause() public onlyOwner {
-        require(multiSign.execute());
-        _pause();
-    }
-
-    function unpause() public onlyOwner {
-        require(multiSign.execute());
-        _unpause();
+    modifier whenNotPaused(IMultiSign.Functions _function) {
+        require(!multiSign.functionState(_function),"Paused");
+        _;
     }
 
     // Function to check if an address is a contract
@@ -227,7 +221,7 @@ contract BorrowingTest is Ownable,Pausable {
     * @param _volatility eth volatility
     **/
 
-    function depositTokens (uint128 _ethPrice,uint64 _depositTime,IOptions.StrikePrice _strikePercent,uint64 _strikePrice,uint256 _volatility) external payable whenNotPaused{
+    function depositTokens (uint128 _ethPrice,uint64 _depositTime,IOptions.StrikePrice _strikePercent,uint64 _strikePrice,uint256 _volatility) external payable whenNotPaused(IMultiSign.Functions(0)){
         require(msg.value > 0, "Cannot deposit zero tokens");
         require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
 
@@ -317,7 +311,7 @@ contract BorrowingTest is Ownable,Pausable {
     @param _withdrawTime time right now
     **/
 
-    function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime, uint64 _bondRatio) external whenNotPaused{
+    function withDraw(address _toAddress, uint64 _index, uint64 _ethPrice, uint64 _withdrawTime, uint64 _bondRatio) external whenNotPaused(IMultiSign.Functions(1)){
         // check is _toAddress in not a zero address and isContract address
         require(_toAddress != address(0) && isContract(_toAddress) != true, "To address cannot be a zero and contract address");
 
@@ -486,7 +480,7 @@ contract BorrowingTest is Ownable,Pausable {
      * @param currentEthPrice Current ETH Price.
      */
 
-    function liquidate(address _user,uint64 _index,uint64 currentEthPrice) external whenNotPaused onlyAdmin{
+    function liquidate(address _user,uint64 _index,uint64 currentEthPrice) external whenNotPaused(IMultiSign.Functions(2)) onlyAdmin{
 
         // Check whether the liquidator 
         require(_user != address(0), "To address cannot be a zero address");
@@ -636,16 +630,15 @@ contract BorrowingTest is Ownable,Pausable {
         return ratio;
     }
 
-    function setAPY(uint8 _apy,uint128 _ratePerSec) external onlyOwner{
-        require(_apy != 0 && _ratePerSec != 0,"APY and rate should not be zero");
-        require(multiSign.execute());
-        APY = _apy;
+    function setAPR(uint128 _ratePerSec) external whenNotPaused(IMultiSign.Functions(3)) onlyOwner{
+        require(multiSign.executeSetAPR());
+        require(_ratePerSec != 0,"Rate should not be zero");
         ratePerSec = _ratePerSec;
     }
 
-    function getAPY() public view returns(uint8){
-        return APY;
-    }
+    // function getAPY() public view returns(uint8){
+    //     return APY;
+    // }
 
     /**
      * @dev calculate cumulative rate 

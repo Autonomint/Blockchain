@@ -68,9 +68,9 @@ describe("Testing contracts ", function(){
         await CDSContract.setAmintLimit(80);
         await CDSContract.setUsdtLimit(20000000000);
 
-        await multiSign.connect(owner).approve();
-        await multiSign.connect(owner1).approve();
-        await BorrowingContract.setAPY(5,BigInt("1000000001547125957863212449"));
+        await multiSign.connect(owner).approveSetAPR();
+        await multiSign.connect(owner1).approveSetAPR();
+        await BorrowingContract.setAPR(BigInt("1000000001547125957863212449"));
         await BorrowingContract.calculateCumulativeRate();
 
         await BorrowingContract.setAdmin(owner.address);

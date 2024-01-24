@@ -5,7 +5,6 @@ pragma solidity ^0.8.18;
 // import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interface/IAmint.sol";
 import "../interface/IBorrowing.sol";
@@ -15,7 +14,7 @@ import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 
-contract CDSTest is Ownable,Pausable{
+contract CDSTest is Ownable{
     // using SafeERC20 for IERC20;
 
     IAMINT public immutable amint; // our stablecoin
@@ -93,14 +92,9 @@ contract CDSTest is Ownable,Pausable{
         _;
     }
 
-    function pause() public onlyOwner {
-        require(multiSign.execute());
-        _pause();
-    }
-
-    function unpause() public onlyOwner {
-        require(multiSign.execute());
-        _unpause();
+    modifier whenNotPaused(IMultiSign.Functions _function) {
+        require(!multiSign.functionState(_function),'Paused');
+        _;
     }
 
     function getLatestData() internal view returns (uint128) {
@@ -131,7 +125,7 @@ contract CDSTest is Ownable,Pausable{
      * @param _liquidate whether the user opted for liquidation
      * @param _liquidationAmount If opted for liquidation,the liquidation amount
      */
-    function deposit(uint128 usdtAmount,uint128 amintAmount,bool _liquidate,uint128 _liquidationAmount) public whenNotPaused{
+    function deposit(uint128 usdtAmount,uint128 amintAmount,bool _liquidate,uint128 _liquidationAmount) public whenNotPaused(IMultiSign.Functions(4)){
         // totalDepositingAmount is usdt and amint
         uint128 totalDepositingAmount = (usdtAmount * PRECISION) + amintAmount;
         require(totalDepositingAmount != 0, "Deposit amount should not be zero"); // check _amount not zero
@@ -231,7 +225,7 @@ contract CDSTest is Ownable,Pausable{
      * @dev withdraw amint
      * @param _index index of the deposit to withdraw
      */
-    function withdraw(uint64 _index) public whenNotPaused{
+    function withdraw(uint64 _index) public whenNotPaused(IMultiSign.Functions(5)){
        // require(_amount != 0, "Amount cannot be zero");
         // require(
         //     _to != address(0) && isContract(_to) == false,
@@ -344,7 +338,7 @@ contract CDSTest is Ownable,Pausable{
      * @param amintPrice amint price
      * @param usdtPrice usdt price
      */
-    function redeemUSDT(uint128 _amintAmount,uint64 amintPrice,uint64 usdtPrice) public whenNotPaused{
+    function redeemUSDT(uint128 _amintAmount,uint64 amintPrice,uint64 usdtPrice) public whenNotPaused(IMultiSign.Functions(6)){
         require(_amintAmount != 0,"Amount should not be zero");
 
         require(amint.balanceOf(msg.sender) >= _amintAmount,"Insufficient balance");
