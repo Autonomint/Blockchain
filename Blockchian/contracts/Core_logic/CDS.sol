@@ -127,7 +127,7 @@ contract CDS is Ownable{
      */
     function deposit(uint128 usdtAmount,uint128 amintAmount,bool _liquidate,uint128 _liquidationAmount) public whenNotPaused(IMultiSign.Functions(4)){
         // totalDepositingAmount is usdt and amint
-        uint128 totalDepositingAmount = (usdtAmount * PRECISION) + amintAmount;
+        uint128 totalDepositingAmount = usdtAmount + amintAmount;
         require(totalDepositingAmount != 0, "Deposit amount should not be zero"); // check _amount not zero
         require(
             _liquidationAmount <= (totalDepositingAmount),
@@ -135,7 +135,7 @@ contract CDS is Ownable{
         );
 
         if(usdtAmountDepositedTillNow < usdtLimit){
-            require((usdtAmount * PRECISION) == totalDepositingAmount,'100% of amount must be USDT');
+            require(usdtAmount == totalDepositingAmount,'100% of amount must be USDT');
         }else{
             require(amintAmount >= (amintLimit * totalDepositingAmount)/100,"Required AMINT amount not met");
             require(amint.balanceOf(msg.sender) >= amintAmount,"Insufficient AMINT balance with msg.sender"); // check if user has sufficient AMINT token
@@ -160,7 +160,7 @@ contract CDS is Ownable{
         //increment usdtAmountDepositedTillNow
         usdtAmountDepositedTillNow += usdtAmount;
         if(usdtAmount != 0 ){
-            bool success = amint.mint(treasuryAddress,(usdtAmount * PRECISION));
+            bool success = amint.mint(treasuryAddress,usdtAmount);
             require(success == true, "AMINT mint to treasury failed in CDS deposit");
         }
 
@@ -345,7 +345,7 @@ contract CDS is Ownable{
         bool transfer = amint.transferFrom(msg.sender,treasuryAddress,_amintAmount);
         require(transfer == true, "Trinity Transfer failed in redeemUSDT");
 
-        uint128 _usdtAmount = (amintPrice * _amintAmount/(PRECISION * usdtPrice));  
+        uint128 _usdtAmount = (amintPrice * _amintAmount/usdtPrice);  
           
         treasury.approveUsdt(address(this),_usdtAmount);
         bool success = usdt.transferFrom(treasuryAddress,msg.sender,_usdtAmount);

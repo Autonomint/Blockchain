@@ -12,39 +12,49 @@ import {
   priceFeedAddressSepolia,
   aavePoolAddressMumbai,
   aavePoolAddressSepolia,
-  usdtTokenAddress
-  // deployedTrinityStablecoin.address,
-  // deployedProtocolToken.address
+  owner1,owner2,owner3
+  // deployedAMINTStablecoin.address,
+  // deployedABONDToken.address
 } from"./index"
 
 async function main() {
-  const TrinityStablecoin = await ethers.getContractFactory("TrinityStablecoin");
-  const deployedTrinityStablecoin = await TrinityStablecoin.deploy();
-  await deployedTrinityStablecoin.deployed();
-  console.log("TRINITY ADDRESS",deployedTrinityStablecoin.address);
+  const AMINTStablecoin = await ethers.getContractFactory("AMINTStablecoin");
+  const deployedAMINTStablecoin = await AMINTStablecoin.deploy();
+  await deployedAMINTStablecoin.deployed();
+  console.log("AMINT ADDRESS",deployedAMINTStablecoin.address);
 
-  const ProtocolToken = await ethers.getContractFactory("ProtocolToken");
-  const deployedProtocolToken = await ProtocolToken.deploy();
-  await deployedProtocolToken.deployed();
-  console.log("DIRAC ADDRESS",deployedProtocolToken.address);
+  const ABONDToken = await ethers.getContractFactory("ABONDToken");
+  const deployedABONDToken = await ABONDToken.deploy();
+  await deployedABONDToken.deployed();
+  console.log("ABOND ADDRESS",deployedABONDToken.address);
+
+  const TestUSDT = await ethers.getContractFactory("TestUSDT");
+  const deployedTestUSDT = await TestUSDT.deploy();
+  await deployedTestUSDT.deployed();
+  console.log("TEST USDT ADDRESS",deployedTestUSDT.address);
+
+  const multiSign = await ethers.getContractFactory("MultiSign");
+  const deployedMultisign = await multiSign.deploy([owner1,owner2,owner3],2);
+  await deployedMultisign.deployed();
+  console.log("MULTISIGN ADDRESS",deployedMultisign.address);
 
   const CDS = await ethers.getContractFactory("CDSTest");
-  const deployedCDS = await CDS.deploy(deployedTrinityStablecoin.address,priceFeedAddressMumbai);
+  const deployedCDS = await CDS.deploy(deployedAMINTStablecoin.address,priceFeedAddressMumbai,deployedTestUSDT.address,deployedMultisign.address);
   await deployedCDS.deployed();
   console.log("CDS ADDRESS",deployedCDS.address);
 
   const Borrowing = await ethers.getContractFactory("BorrowingTest");
-  const deployedBorrowing = await Borrowing.deploy(deployedTrinityStablecoin.address,deployedCDS.address,deployedProtocolToken.address,priceFeedAddressMumbai);
+  const deployedBorrowing = await Borrowing.deploy(deployedAMINTStablecoin.address,deployedCDS.address,deployedABONDToken.address,deployedMultisign.address,priceFeedAddressMumbai,80001);
   await deployedBorrowing.deployed();
   console.log("BORROWING ADDRESS",deployedBorrowing.address);
 
   const Treasury = await ethers.getContractFactory("Treasury");
-  const deployedTreasury = await Treasury.deploy(deployedBorrowing.address,deployedTrinityStablecoin.address,deployedCDS.address,wethGatewayMumbai,cEtherMumbai,aavePoolAddressMumbai,aTokenAddressMumbai);
+  const deployedTreasury = await Treasury.deploy(deployedBorrowing.address,deployedAMINTStablecoin.address,deployedCDS.address,wethGatewayMumbai,cEtherMumbai,aavePoolAddressMumbai,aTokenAddressMumbai,deployedTestUSDT.address);
   await deployedTreasury.deployed();
   console.log("TREASURY ADDRESS",deployedTreasury.address);
 
   const options = await ethers.getContractFactory("Options");
-  const deployedOptions = await options.deploy();
+  const deployedOptions = await options.deploy(priceFeedAddressMumbai,deployedTreasury.address,deployedCDS.address);
   await deployedOptions.deployed();
   console.log("OPTIONS ADDRESS",deployedOptions.address);
 
@@ -57,46 +67,57 @@ async function main() {
   await sleep(30 * 1000);
 
   await hre.run("verify:verify", {
-    address: deployedTrinityStablecoin.address,
-    contract: "contracts/Token/Trinity_ERC20.sol:TrinityStablecoin"
+    address: deployedAMINTStablecoin.address,
+    contract: "contracts/Token/Amint.sol:AMINTStablecoin"
   });
 
   await hre.run("verify:verify", {
-    address: deployedProtocolToken.address,
-    contract: "contracts/Token/Protocol_Token.sol:ProtocolToken"
+    address: deployedABONDToken.address,
+    contract: "contracts/Token/Abond_Token.sol:ABONDToken"
+  });
+
+  await hre.run("verify:verify", {
+    address: deployedTestUSDT.address,
+    contract: "contracts/TestContracts/CopyUsdt.sol:TestUSDT"
+  });
+
+  await hre.run("verify:verify", {
+    address: deployedMultisign.address,
+    constructorArguments: [[owner1,owner2,owner3],2],
   });
 
   await hre.run("verify:verify", {
     address: deployedCDS.address,
     contract: "contracts/TestContracts/CopyCDS.sol:CDSTest",
-    constructorArguments: [deployedTrinityStablecoin.address,priceFeedAddressMumbai],
+    constructorArguments: [deployedAMINTStablecoin.address,priceFeedAddressMumbai,deployedTestUSDT.address,deployedMultisign.address],
   });
 
   await hre.run("verify:verify", {
     address: deployedBorrowing.address,
     contract: "contracts/TestContracts/CopyBorrowing.sol:BorrowingTest",
-    constructorArguments: [deployedTrinityStablecoin.address,deployedCDS.address,deployedProtocolToken.address,priceFeedAddressMumbai],
+    constructorArguments: [deployedAMINTStablecoin.address,deployedCDS.address,deployedABONDToken.address,deployedMultisign.address,priceFeedAddressMumbai,80001],
   });
 
   await hre.run("verify:verify", {
     address: deployedTreasury.address,
-    constructorArguments: [deployedBorrowing.address,deployedTrinityStablecoin.address,deployedCDS.address,wethGatewayMumbai,cEtherMumbai,aavePoolAddressMumbai,aTokenAddressMumbai],
+    constructorArguments: [deployedBorrowing.address,deployedAMINTStablecoin.address,deployedCDS.address,wethGatewayMumbai,cEtherMumbai,aavePoolAddressMumbai,aTokenAddressMumbai,deployedTestUSDT.address],
   });
 
   await hre.run("verify:verify", {
     address: deployedOptions.address,
-    constructorArguments: [],
+    constructorArguments: [priceFeedAddressMumbai,deployedTreasury.address,deployedCDS.address],
   });
 
-  //await deployedTreasury.setBorrowingContract(deployedBorrowing.address);
-  await deployedCDS.setBorrowingContract(deployedBorrowing.address);
-  await deployedCDS.setTreasury(deployedTreasury.address);
+
   await deployedBorrowing.initializeTreasury(deployedTreasury.address);
   await deployedBorrowing.setOptions(deployedOptions.address);
-
-  await deployedBorrowing.setAPY(5);
   await deployedBorrowing.setLTV(80);
-  await deployedBorrowing.calculateCumulativeRate();
+  await deployedBorrowing.setAdmin(owner1);
+
+  await deployedCDS.setBorrowingContract(deployedBorrowing.address);
+  await deployedCDS.setTreasury(deployedTreasury.address);
+  await deployedCDS.setAmintLimit(80);
+  await deployedCDS.setUsdtLimit(20000000000);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

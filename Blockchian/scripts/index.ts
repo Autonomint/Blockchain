@@ -11,3 +11,8 @@ export const priceFeedAddressSepolia = "0x694AA1769357215DE4FAC081bf1f309aDC3253
 export const aavePoolAddressSepolia = "0x012bAC54348C0E635dCAc9D5FB99f06F24136C9A";
 export const aTokenAddressSepolia = "0x5b071b590a59395fE4025A0Ccc1FcC931AAc1830";
 export const usdtTokenAddress = "0x7169D38820dfd117C3FA1f22a697dBA58d90BA06";
+
+
+export const owner1 = "0xc2858E82b388e4E5e8644Ca89D3f1b03D9047181";
+export const owner2 = "0x876b4dE42e35A37E6D0eaf8762836CAD860C0c18";
+export const owner3 = "";

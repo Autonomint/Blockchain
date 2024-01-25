@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Pausable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract USDT is ERC20, ERC20Burnable, Pausable, Ownable {
+contract TestUSDT is ERC20, ERC20Burnable, Pausable, Ownable {
     constructor() ERC20("TUSDT", "Test Tether") {}
 
     mapping(address => bool) public whitelist;

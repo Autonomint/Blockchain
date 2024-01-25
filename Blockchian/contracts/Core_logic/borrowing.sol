@@ -73,6 +73,7 @@ contract Borrowing is Ownable {
     uint128 CUMULATIVE_PRECISION = 1e7;
     uint128 RATIO_PRECISION = 1e4;
     uint128 RATE_PRECISION = 1e27;
+    uint128 AMINT_PRECISION = 1e12;
 
     event Deposit(uint64 index,uint256 depositedAmount,uint256 borrowAmount,uint256 normalizedAmount);
     event Withdraw(uint256 borrowDebt,uint128 withdrawAmount,uint128 noOfAbond);
@@ -163,7 +164,7 @@ contract Borrowing is Ownable {
         require(_borrower != address(0), "Borrower cannot be zero address");
         require(LTV != 0, "LTV must be set to non-zero value before providing loans");
         
-        uint256 tokenValueConversion = amount * _ethPrice; // dummy data
+        uint256 tokenValueConversion = (amount * _ethPrice)/AMINT_PRECISION; // dummy data
 
         // tokenValueConversion is in USD, and our stablecoin is pegged to USD in 1:1 ratio
         // Hence if tokenValueConversion = 1, then equivalent stablecoin tokens = tokenValueConversion
@@ -345,7 +346,7 @@ contract Borrowing is Ownable {
                     // Calculate interest for the borrower's debt
                     //uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
 
-                    uint256 discountedETH = (((20*((depositDetail.depositedAmount * 50)/100))/100)*_ethPrice)/100; // 0.4
+                    uint256 discountedETH = ((((20*((depositDetail.depositedAmount * 50)/100))/100)*_ethPrice)/100)/AMINT_PRECISION; // 0.4
 
                     // Calculate the amount of AMINT to burn and sent to the treasury
                     // uint256 halfValue = (50 *(depositDetail.borrowedAmount))/100;
@@ -505,8 +506,8 @@ contract Borrowing is Ownable {
         uint256 borrowerDebt = ((depositDetail.normalizedAmount * lastCumulativeRate)/RATE_PRECISION);
         lastCumulativeRate = calculateCumulativeRate()/RATE_PRECISION;
         uint128 returnToTreasury = uint128(borrowerDebt) /*+ uint128 fees*/;
-        uint128 returnToDirac = ((((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/100) - returnToTreasury) * 10)/100;
-        uint128 cdsProfits = ((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/100) - returnToTreasury - returnToDirac;
+        uint128 returnToDirac = ((((((depositDetail.depositedAmount) * depositDetail.ethPriceAtDeposit)/AMINT_PRECISION)/100) - returnToTreasury) * 10)/100;
+        uint128 cdsProfits = (((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/AMINT_PRECISION)/100) - returnToTreasury - returnToDirac;
         uint128 liquidationAmountNeeded = returnToTreasury + returnToDirac;
         
         CDSInterface.LiquidationInfo memory liquidationInfo;
@@ -597,7 +598,7 @@ contract Borrowing is Ownable {
             currentEthVaultValue = lastEthVaultValue;
 
             // Get the total amount in CDS
-            lastTotalCDSPool = cds.totalCdsDepositedAmount();
+            lastTotalCDSPool = cds.totalCdsDepositedAmount() * AMINT_PRECISION;
 
             if (currentEthPrice >= lastEthprice){
                 lastCDSPoolValue = lastTotalCDSPool + netPLCdsPool;
@@ -612,7 +613,7 @@ contract Borrowing is Ownable {
             currentEthVaultValue = lastEthVaultValue + (_amount * currentEthPrice);
             lastEthVaultValue = currentEthVaultValue;
 
-            uint256 latestTotalCDSPool = cds.totalCdsDepositedAmount();
+            uint256 latestTotalCDSPool = cds.totalCdsDepositedAmount() * AMINT_PRECISION;
 
             if(currentEthPrice >= lastEthprice){
                 currentCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) + netPLCdsPool;

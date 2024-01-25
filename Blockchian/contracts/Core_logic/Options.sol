@@ -19,6 +19,7 @@ contract Options{
     uint256 PRECISION = 1e18;
     uint256 ETH_PRICE_PRECISION = 1e6;
     uint256 OPTION_PRICE_PRECISION = 1e5;
+    uint128 AMINT_PRECISION = 1e12;
 
     // enum for different strike price percentages
     enum StrikePrice{FIVE,TEN,FIFTEEN,TWENTY,TWENTY_FIVE}
@@ -99,7 +100,7 @@ contract Options{
         uint256 a = _ethVolatility;
         uint256 ethPrice = _ethPrice;/*getLatestPrice();*/
         uint256 E = (treasury.totalVolumeOfBorrowersAmountinUSD() + (_amount * ethPrice));
-        uint256 cdsVault = cds.totalCdsDepositedAmount();
+        uint256 cdsVault = cds.totalCdsDepositedAmount() * AMINT_PRECISION;
 
         require(E != 0, "Treasury balance is zero");
         require(cdsVault != 0, "CDS Vault is zero");
@@ -124,7 +125,7 @@ contract Options{
             revert("Incorrect Strike Price");
         }
         // console.log((optionPrice * _amount)/PRECISION);
-        return (optionPrice * _amount)/PRECISION;
+        return ((optionPrice * _amount)/PRECISION)/AMINT_PRECISION;
     }
 
     // Provided square root function

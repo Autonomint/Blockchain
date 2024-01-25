@@ -11,6 +11,10 @@ contract ABONDToken is ERC20, ERC20Burnable, Pausable, Ownable {
 
     mapping(address => bool) public whitelist;
 
+    function decimals() public pure override returns (uint8) {
+        return 6;
+    }
+
     function pause() public onlyOwner {
         _pause();
     }
