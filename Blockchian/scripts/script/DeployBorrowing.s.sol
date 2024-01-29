@@ -5,38 +5,47 @@ import {Script} from "../../lib/forge-std/src/Script.sol";
 import {BorrowingTest} from "../../contracts/TestContracts/CopyBorrowing.sol";
 import {Treasury} from "../../contracts/Core_logic/Treasury.sol";
 import {CDSTest} from "../../contracts/TestContracts/CopyCDS.sol";
-import {TrinityStablecoin} from "../../contracts/Token/Trinity_ERC20.sol";
-import {ProtocolToken} from "../../contracts/Token/Protocol_Token.sol";
+import {AMINTStablecoin} from "../../contracts/Token/Amint.sol";
+import {ABONDToken} from "../../contracts/Token/Abond_Token.sol";
 import {Options} from "../../contracts/Core_logic/Options.sol";
-import {USDT} from "../../contracts/TestContracts/CopyUsdt.sol";
+import {MultiSign} from "../../contracts/Core_logic/multiSign.sol";
+import {TestUSDT} from "../../contracts/TestContracts/CopyUsdt.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
 
 contract DeployBorrowing is Script {
 
-    TrinityStablecoin tsc;
-    ProtocolToken pToken;
-    USDT usdt;
+    AMINTStablecoin tsc;
+    ABONDToken pToken;
+    TestUSDT usdt;
     Options option;
     CDSTest cds;
     BorrowingTest borrow;
     Treasury treasury;
+    MultiSign multiSign;
     address public priceFeedAddress;
     address wethAddress = 0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C;
     address cEthAddress = 0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5;
     address aavePoolAddress = 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e;
     address aTokenAddress = 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8;
 
-    function run() external returns (TrinityStablecoin,ProtocolToken,USDT,BorrowingTest,Treasury,CDSTest,HelperConfig){
+    address[] owners = [
+        0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,
+        0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,
+        0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC
+        ];
+
+    function run() external returns (AMINTStablecoin,ABONDToken,TestUSDT,BorrowingTest,Treasury,CDSTest,MultiSign,HelperConfig){
         HelperConfig config = new HelperConfig();
         (address ethUsdPriceFeed,uint256 deployerKey) = config.activeNetworkConfig();
 
         priceFeedAddress = ethUsdPriceFeed;
         vm.startBroadcast(deployerKey);
-        tsc = new TrinityStablecoin();
-        pToken = new ProtocolToken();
-        usdt = new USDT();
-        cds = new CDSTest(address(tsc),priceFeedAddress,address(usdt));
-        borrow = new BorrowingTest(address(tsc),address(cds),address(pToken),priceFeedAddress,1);
+        tsc = new AMINTStablecoin();
+        pToken = new ABONDToken();
+        usdt = new TestUSDT();
+        multiSign = new MultiSign(owners,2);
+        cds = new CDSTest(address(tsc),priceFeedAddress,address(usdt),address(multiSign));
+        borrow = new BorrowingTest(address(tsc),address(cds),address(pToken),address(multiSign),priceFeedAddress,1);
         treasury = new Treasury(address(borrow),address(tsc),address(cds),wethAddress,cEthAddress,aavePoolAddress,aTokenAddress,address(usdt));
         option = new Options(priceFeedAddress,address(treasury),address(cds));
 
@@ -50,6 +59,6 @@ contract DeployBorrowing is Script {
         borrow.calculateCumulativeRate();
 
         vm.stopBroadcast();
-        return(tsc,pToken,usdt,borrow,treasury,cds,config);
+        return(tsc,pToken,usdt,borrow,treasury,cds,multiSign,config);
     }
 }

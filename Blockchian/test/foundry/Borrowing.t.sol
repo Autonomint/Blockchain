@@ -6,10 +6,11 @@ import {console} from "../../lib/forge-std/src/console.sol";
 import {BorrowingTest} from "../../contracts/TestContracts/CopyBorrowing.sol";
 import {Treasury} from "../../contracts/Core_logic/Treasury.sol";
 import {Options} from "../../contracts/Core_logic/Options.sol";
+import {MultiSign} from "../../contracts/Core_logic/multiSign.sol";
 import {CDSTest} from "../../contracts/TestContracts/CopyCDS.sol";
-import {TrinityStablecoin} from "../../contracts/Token/Trinity_ERC20.sol";
-import {ProtocolToken} from "../../contracts/Token/Protocol_Token.sol";
-import {USDT} from "../../contracts/TestContracts/CopyUsdt.sol";
+import {AMINTStablecoin} from "../../contracts/Token/Amint.sol";
+import {ABONDToken} from "../../contracts/Token/Abond_Token.sol";
+import {TestUSDT} from "../../contracts/TestContracts/CopyUsdt.sol";
 import {HelperConfig} from "../../scripts/script/HelperConfig.s.sol";
 import {DeployBorrowing} from "../../scripts/script/DeployBorrowing.s.sol";
 
@@ -23,13 +24,14 @@ import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 
 contract BorrowTest is Test {
     DeployBorrowing deployer;
-    TrinityStablecoin tsc;
-    ProtocolToken pToken;
-    USDT usdt;
+    AMINTStablecoin tsc;
+    ABONDToken pToken;
+    TestUSDT usdt;
     CDSTest cds;
     BorrowingTest borrow;
     Treasury treasury;
     Options option;
+    MultiSign multiSign;
     HelperConfig config;
 
     address ethUsdPriceFeed;
@@ -49,7 +51,7 @@ contract BorrowTest is Test {
 
     function setUp() public {
         deployer = new DeployBorrowing();
-        (tsc,pToken,usdt,borrow,treasury,cds,config) = deployer.run();
+        (tsc,pToken,usdt,borrow,treasury,cds,multiSign,config) = deployer.run();
         (ethUsdPriceFeed,) = config.activeNetworkConfig();
 
         wethGateway = IWrappedTokenGatewayV3(wethAddress);

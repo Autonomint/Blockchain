@@ -1,1 +1,1 @@
-{"abi":[],"bytecode":{"object":"0x","linkReferences":{}},"deployedBytecode":{"object":"0x","linkReferences":{}},"ast":{"absolutePath":"test/foundry/fuzz/Invariants.t.sol","id":63831,"exportedSymbols":{},"nodeType":"SourceUnit","src":"3214:0:52","nodes":[],"license":"UNLICENSED"},"id":52}
+{"abi":[],"bytecode":{"object":"0x","linkReferences":{}},"deployedBytecode":{"object":"0x","linkReferences":{}},"ast":{"absolutePath":"test/foundry/fuzz/Invariants.t.sol","id":64833,"exportedSymbols":{},"nodeType":"SourceUnit","src":"3214:0:53","nodes":[],"license":"UNLICENSED"},"id":53}
