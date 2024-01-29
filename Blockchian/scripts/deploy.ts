@@ -3,14 +3,19 @@ import hre = require("hardhat");
 
 import {
   wethGatewayMumbai,
+  wethGatewayGoerli,
   wethGatewaySepolia,
   cEtherMumbai,
+  cEtherGoerli,
   cEtherSepolia,
   aTokenAddressMumbai,
+  aTokenAddressGoerli,
   aTokenAddressSepolia,
   priceFeedAddressMumbai,
+  priceFeedAddressGoerli,
   priceFeedAddressSepolia,
   aavePoolAddressMumbai,
+  aavePoolAddressGoerli,
   aavePoolAddressSepolia,
   owner1,owner2,owner3
   // deployedAMINTStablecoin.address,
@@ -38,23 +43,23 @@ async function main() {
   await deployedMultisign.deployed();
   console.log("MULTISIGN ADDRESS",deployedMultisign.address);
 
-  const CDS = await ethers.getContractFactory("CDSTest");
-  const deployedCDS = await CDS.deploy(deployedAMINTStablecoin.address,priceFeedAddressMumbai,deployedTestUSDT.address,deployedMultisign.address);
+  const CDS = await ethers.getContractFactory("CDS");
+  const deployedCDS = await CDS.deploy(deployedAMINTStablecoin.address,priceFeedAddressGoerli,deployedTestUSDT.address,deployedMultisign.address);
   await deployedCDS.deployed();
   console.log("CDS ADDRESS",deployedCDS.address);
 
-  const Borrowing = await ethers.getContractFactory("BorrowingTest");
-  const deployedBorrowing = await Borrowing.deploy(deployedAMINTStablecoin.address,deployedCDS.address,deployedABONDToken.address,deployedMultisign.address,priceFeedAddressMumbai,80001);
+  const Borrowing = await ethers.getContractFactory("Borrowing");
+  const deployedBorrowing = await Borrowing.deploy(deployedAMINTStablecoin.address,deployedCDS.address,deployedABONDToken.address,deployedMultisign.address,priceFeedAddressGoerli,5);
   await deployedBorrowing.deployed();
   console.log("BORROWING ADDRESS",deployedBorrowing.address);
 
   const Treasury = await ethers.getContractFactory("Treasury");
-  const deployedTreasury = await Treasury.deploy(deployedBorrowing.address,deployedAMINTStablecoin.address,deployedCDS.address,wethGatewayMumbai,cEtherMumbai,aavePoolAddressMumbai,aTokenAddressMumbai,deployedTestUSDT.address);
+  const deployedTreasury = await Treasury.deploy(deployedBorrowing.address,deployedAMINTStablecoin.address,deployedCDS.address,wethGatewayGoerli,cEtherGoerli,aavePoolAddressGoerli,aTokenAddressGoerli,deployedTestUSDT.address);
   await deployedTreasury.deployed();
   console.log("TREASURY ADDRESS",deployedTreasury.address);
 
   const options = await ethers.getContractFactory("Options");
-  const deployedOptions = await options.deploy(priceFeedAddressMumbai,deployedTreasury.address,deployedCDS.address);
+  const deployedOptions = await options.deploy(priceFeedAddressGoerli,deployedTreasury.address,deployedCDS.address);
   await deployedOptions.deployed();
   console.log("OPTIONS ADDRESS",deployedOptions.address);
 
@@ -83,29 +88,32 @@ async function main() {
 
   await hre.run("verify:verify", {
     address: deployedMultisign.address,
+    contract: "contracts/Core_logic/multiSign.sol:MultiSign",
     constructorArguments: [[owner1,owner2,owner3],2],
   });
 
   await hre.run("verify:verify", {
     address: deployedCDS.address,
-    contract: "contracts/TestContracts/CopyCDS.sol:CDSTest",
-    constructorArguments: [deployedAMINTStablecoin.address,priceFeedAddressMumbai,deployedTestUSDT.address,deployedMultisign.address],
+    contract: "contracts/Core_logic/CDS.sol:CDS",
+    constructorArguments: [deployedAMINTStablecoin.address,priceFeedAddressGoerli,deployedTestUSDT.address,deployedMultisign.address],
   });
 
   await hre.run("verify:verify", {
     address: deployedBorrowing.address,
-    contract: "contracts/TestContracts/CopyBorrowing.sol:BorrowingTest",
-    constructorArguments: [deployedAMINTStablecoin.address,deployedCDS.address,deployedABONDToken.address,deployedMultisign.address,priceFeedAddressMumbai,80001],
+    contract: "contracts/Core_logic/borrowing.sol:Borrowing",
+    constructorArguments: [deployedAMINTStablecoin.address,deployedCDS.address,deployedABONDToken.address,deployedMultisign.address,priceFeedAddressGoerli,5],
   });
 
   await hre.run("verify:verify", {
     address: deployedTreasury.address,
-    constructorArguments: [deployedBorrowing.address,deployedAMINTStablecoin.address,deployedCDS.address,wethGatewayMumbai,cEtherMumbai,aavePoolAddressMumbai,aTokenAddressMumbai,deployedTestUSDT.address],
+    contract: "contracts/Core_logic/Treasury.sol:Treasury",
+    constructorArguments: [deployedBorrowing.address,deployedAMINTStablecoin.address,deployedCDS.address,wethGatewayGoerli,cEtherGoerli,aavePoolAddressGoerli,aTokenAddressGoerli,deployedTestUSDT.address],
   });
 
   await hre.run("verify:verify", {
     address: deployedOptions.address,
-    constructorArguments: [priceFeedAddressMumbai,deployedTreasury.address,deployedCDS.address],
+    contract: "contracts/Core_logic/Options.sol:Options",
+    constructorArguments: [priceFeedAddressGoerli,deployedTreasury.address,deployedCDS.address],
   });
 
 

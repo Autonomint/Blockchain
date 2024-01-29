@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { ethers, network } from "hardhat";
 import type { Wallet } from "ethers";
-import {BorrowingTest,Treasury,AMINTStablecoin,ABONDToken,Options,CDSTest,USDT,MultiSign} from "../typechain-types";
+import {BorrowingTest,Treasury,AMINTStablecoin,ABONDToken,Options,CDSTest,TestUSDT,MultiSign} from "../typechain-types";
 import { loadFixture,time } from'@nomicfoundation/hardhat-network-helpers';
 import { ChildProcess } from "child_process";
 import { token } from "../typechain-types/contracts";
@@ -21,7 +21,7 @@ describe("Testing contracts ", function(){
     let BorrowingContract : BorrowingTest;
     let Token : AMINTStablecoin;
     let abondToken : ABONDToken;
-    let usdt: USDT;
+    let usdt: TestUSDT;
     let treasury : Treasury;
     let options : Options;
     let multiSign : MultiSign; 
@@ -45,7 +45,7 @@ describe("Testing contracts ", function(){
         const MultiSign = await ethers.getContractFactory("MultiSign");
         multiSign = await MultiSign.deploy([owner.address,owner1.address,owner2.address],2);
 
-        const USDTToken = await ethers.getContractFactory("USDT");
+        const USDTToken = await ethers.getContractFactory("TestUSDT");
         usdt = await USDTToken.deploy();
 
         const CDS = await ethers.getContractFactory("CDSTest");
