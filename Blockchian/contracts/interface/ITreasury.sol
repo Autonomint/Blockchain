@@ -19,7 +19,7 @@ interface ITreasury{
         uint64 ethPriceAtWithdraw;
         uint64 withdrawTime;
         uint128 aBondTokensAmount;
-        uint64 strikePrice;
+        uint128 strikePrice;
         uint128 optionFees;
         uint256 burnedAmint;
         uint64 externalProtocolCount;

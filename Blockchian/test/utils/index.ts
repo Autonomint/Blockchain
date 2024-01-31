@@ -1,9 +1,9 @@
-export const wethGateway = "0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C";
-export const cEther = "0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5";
-export const priceFeedAddress = "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419";
-export const aavePoolAddress = "0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e";
-export const aTokenAddress = "0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8";
-export const usdtTokenAddress = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
+export const wethGateway = "0x3bd3a20Ac9Ff1dda1D99C0dFCE6D65C4960B3627";
+export const cEther = "0x64078a6189Bf45f80091c6Ff2fCEe1B15Ac8dbde";
+export const priceFeedAddress = "0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e";
+export const aavePoolAddress = "0x5E52dEc931FFb32f609681B8438A51c675cc232d";
+export const aTokenAddress = "0x22404B0e2a7067068AcdaDd8f9D586F834cCe2c5";
+// export const usdtTokenAddress = "0xdAC17F958D2ee523a2206206994597C13D831ec7";
 
 export const INFURA_URL = "https://mainnet.infura.io/v3/e9cf275f1ddc4b81aa62c5aa0b11ac0f";
 

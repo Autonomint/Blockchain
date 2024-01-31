@@ -15,7 +15,7 @@ export const wethGatewayGoerli = "0x3bd3a20Ac9Ff1dda1D99C0dFCE6D65C4960B3627";
 export const cEtherGoerli = "0x64078a6189Bf45f80091c6Ff2fCEe1B15Ac8dbde";
 export const priceFeedAddressGoerli = "0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e";
 export const aavePoolAddressGoerli = "0x5E52dEc931FFb32f609681B8438A51c675cc232d";
-export const aTokenAddressGoerli = "0x030bA81f1c18d280636F32af80b9AAd02Cf0854e";
+export const aTokenAddressGoerli = "0x22404B0e2a7067068AcdaDd8f9D586F834cCe2c5";
 
 
 export const owner1 = "0xc2858E82b388e4E5e8644Ca89D3f1b03D9047181";

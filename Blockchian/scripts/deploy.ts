@@ -126,6 +126,9 @@ async function main() {
   await deployedCDS.setTreasury(deployedTreasury.address);
   await deployedCDS.setAmintLimit(80);
   await deployedCDS.setUsdtLimit(20000000000);
+
+  await deployedTestUSDT.mint(owner1,10000000000);
+  await deployedTestUSDT.approve(deployedCDS.address,10000000000);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

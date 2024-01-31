@@ -84,6 +84,7 @@ contract CDSTest is Ownable{
         multiSign = IMultiSign(_multiSign);
         dataFeed = AggregatorV3Interface(priceFeed);
         lastEthPrice = getLatestData();
+        fallbackEthPrice = lastEthPrice;
         lastCumulativeRate = PRECISION;
     }
 
@@ -201,7 +202,6 @@ contract CDSTest is Ownable{
         cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = uint64(block.timestamp);
         cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount = ((totalDepositingAmount * PRECISION)/lastCumulativeRate);
        
-        //cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(ethPrice);
         cdsDetails[msg.sender].cdsAccountDetails[index].optedLiquidation = _liquidate;
         //If user opted for liquidation
         if(_liquidate){
@@ -226,13 +226,7 @@ contract CDSTest is Ownable{
      * @param _index index of the deposit to withdraw
      */
     function withdraw(uint64 _index) public whenNotPaused(IMultiSign.Functions(5)){
-       // require(_amount != 0, "Amount cannot be zero");
-        // require(
-        //     _to != address(0) && isContract(_to) == false,
-        //     "Invalid address"
-        // );
         require(cdsDetails[msg.sender].index >= _index , "user doesn't have the specified index");
-       // require(totalCdsDepositedAmount >= _amount, "Contract doesnt have sufficient balance");
         require(cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawed == false,"Already withdrawn");
         
         uint64 _withdrawTime = uint64(block.timestamp);
@@ -309,7 +303,7 @@ contract CDSTest is Ownable{
    //Deduced amount will be calculated using the percentage of CDS a user owns
    function cdsAmountToReturn(address _user, uint64 index, uint128 _ethPrice) internal view returns(uint128){
 
-        uint128 withdrawalVal; /*= calculateValue(_ethPrice);*/
+        uint128 withdrawalVal = calculateValue(_ethPrice);
         uint128 depositVal = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
 
         if(withdrawalVal <= depositVal){
@@ -379,20 +373,24 @@ contract CDSTest is Ownable{
         usdtLimit = amount;  
     }
 
-    function calculateValue(uint128 _price) internal view returns(uint128) {
+    function calculateValue(uint128 _price) internal view returns(uint128 value) {
         uint128 _amount = 1000;
         uint128 treasuryBal = uint128(amint.balanceOf(treasuryAddress));
         uint128 vaultBal = uint128(treasury.getBalanceInTreasury());
         uint128 priceDiff;
 
-        if(_price != lastEthPrice){
-            priceDiff = _price - lastEthPrice;
-        }
+        if(treasuryBal == 0){
+            value = 0;
+        }else{
+            if(_price != lastEthPrice){
+                priceDiff = _price - lastEthPrice;
+            }
 
-        else{
-            priceDiff = _price - fallbackEthPrice;
+            else{
+                priceDiff = _price - fallbackEthPrice;
+            }
+            value = (_amount * vaultBal * priceDiff) / (PRECISION * treasuryBal);
         }
-        uint128 value = (_amount * vaultBal * priceDiff) / treasuryBal;
         return value;
     }
 
@@ -405,7 +403,6 @@ contract CDSTest is Ownable{
         uint128 netCDSPoolValue = totalCdsDepositedAmount + fees;
         totalCdsDepositedAmount += fees;
         uint128 percentageChange = (fees * PRECISION)/netCDSPoolValue;
-        // console.log(percentageChange);
         uint128 currentCumulativeRate;
         if(treasury.noOfBorrowers() == 0){
             currentCumulativeRate = (1 * PRECISION) + percentageChange;

@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/interfaces/IERC20.sol";
 import "../interface/IAmint.sol";
 import "../interface/IBorrowing.sol";
 import "../interface/AaveInterfaces/IWETHGateway.sol";
-import "../interface/AaveInterfaces/IPoolAddressesProvider.sol";
+import "../interface/AaveInterfaces/ILendingPoolAddressesProvider.sol";
 import "../interface/AaveInterfaces/IPool.sol";
 import "../interface/ICEther.sol";
 import "hardhat/console.sol";
@@ -28,7 +28,7 @@ contract Treasury is Ownable{
     IBorrowing public borrow;
     IAMINT public amint;
     IWrappedTokenGatewayV3 public wethGateway; // Weth gateway is used to deposit eth in  and withdraw from aave
-    IPoolAddressesProvider public aavePoolAddressProvider; // To get the current pool  address in Aave
+    ILendingPoolAddressesProvider public aavePoolAddressProvider; // To get the current pool  address in Aave
     IERC20 public usdt;
     IATOKEN public aToken; // aave token contract
     ICEther public cEther; // To deposit in and withdraw eth from compound
@@ -54,7 +54,7 @@ contract Treasury is Ownable{
         uint64 ethPriceAtWithdraw;
         uint64 withdrawTime;
         uint128 aBondTokensAmount;
-        uint64 strikePrice;
+        uint128 strikePrice;
         uint128 optionFees;
         uint256 burnedAmint;
         uint64 externalProtocolCount;
@@ -150,7 +150,7 @@ contract Treasury is Ownable{
             wethGateway = IWrappedTokenGatewayV3(_wethGateway);       //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
             cEther = ICEther(_cEther);                                //0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5
             compoundAddress = _cEther;
-            aavePoolAddressProvider = IPoolAddressesProvider(_aavePoolAddressProvider);  //0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
+            aavePoolAddressProvider = ILendingPoolAddressesProvider(_aavePoolAddressProvider);  //0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
             aToken = IATOKEN(_aToken);                                                   //0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
             aaveWETH = _wethGateway;
             usdt = IERC20(_usdt);
@@ -307,7 +307,7 @@ contract Treasury is Ownable{
             revert Treasury_ZeroDeposit();
         }
 
-        address poolAddress = aavePoolAddressProvider.getPool();
+        address poolAddress = aavePoolAddressProvider.getLendingPool();
 
         if(poolAddress == address(0)){
             revert Treasury_AavePoolAddressZero();
@@ -417,7 +417,7 @@ contract Treasury is Ownable{
         protocolDeposit[Protocol.Aave].cumulativeRate = currentCumulativeRate;
         //withdraw amount
         uint256 amount = (currentCumulativeRate * protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].discountedPrice)/CUMULATIVE_PRECISION;
-        address poolAddress = aavePoolAddressProvider.getPool();
+        address poolAddress = aavePoolAddressProvider.getLendingPool();
 
         if(poolAddress == address(0)){
             revert Treasury_AavePoolAddressZero();
@@ -732,7 +732,7 @@ contract Treasury is Ownable{
     function depositToAaveByUser(uint256 depositAmount) internal {
         //Atoken balance before depsoit
         uint256 aTokenBeforeDeposit = aToken.balanceOf(address(this));
-        address poolAddress = aavePoolAddressProvider.getPool();
+        address poolAddress = aavePoolAddressProvider.getLendingPool();
 
         if(poolAddress == address(0)){
             revert Treasury_AavePoolAddressZero();
@@ -779,7 +779,7 @@ contract Treasury is Ownable{
         protocolDeposit[Protocol.Aave].cumulativeRate = currentCumulativeRate;
         //withdraw amount
         uint256 amount = (currentCumulativeRate * depositDetails.discountedPrice)/CUMULATIVE_PRECISION;
-        address poolAddress = aavePoolAddressProvider.getPool();
+        address poolAddress = aavePoolAddressProvider.getLendingPool();
 
         if(poolAddress == address(0)){
             revert Treasury_AavePoolAddressZero();

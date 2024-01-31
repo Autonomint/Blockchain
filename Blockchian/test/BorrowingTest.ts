@@ -2,8 +2,6 @@ const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { expect } = require("chai");
 const { it } = require("mocha")
 import { ethers } from "hardhat";
-import { Contract,utils,providers,Wallet, Signer } from "ethers";
-import { hexValue } from "@ethersproject/bytes";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { describe } from "node:test";
 import { BorrowingTest, CDSTest, AMINTStablecoin, ABONDToken, Treasury,Options,TestUSDT,MultiSign} from "../typechain-types";
@@ -96,7 +94,7 @@ describe("Borrowing Contract",function(){
             await usdt.connect(user1).mint(user1.address,10000000000)
             await usdt.connect(user1).approve(CDSContract.address,10000000000);
             await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000);
-            await BorrowingContract.connect(user1).depositTokens(200000,timeStamp,1,220000,ethVolatility,{value: ethers.utils.parseEther("2.5")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.utils.parseEther("50")});
             // await expect(await Token.totalSupply()).to.be.equal(ethers.utils.parseEther("800"));
         })
 
@@ -899,7 +897,7 @@ describe("Borrowing Contract",function(){
             await usdt.connect(user1).mint(user1.address,10000000000)
             await usdt.connect(user1).approve(CDSContract.address,10000000000);
             await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000);
-            await BorrowingContract.connect(user1).depositTokens(ethPrice,timeStamp,1,(ethPrice * 1.1),50622665,{value: ethers.utils.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,50622665,{value: ethers.utils.parseEther("1")});
             // console.log("TREASURY's AMINT BALANCE",await Token.balanceOf(treasury.address));
 
             // await options.calculateOptionPrice(50622665,ethers.utils.parseEther("1"));

@@ -99,14 +99,14 @@ contract Options{
         //uint256 a = calculateStandardDeviation(); 
         uint256 a = _ethVolatility;
         uint256 ethPrice = _ethPrice;/*getLatestPrice();*/
-        uint256 E = (treasury.totalVolumeOfBorrowersAmountinUSD() + (_amount * ethPrice));
+        uint256 E = treasury.totalVolumeOfBorrowersAmountinUSD();
         uint256 cdsVault = cds.totalCdsDepositedAmount() * AMINT_PRECISION;
 
         require(E != 0, "Treasury balance is zero");
         require(cdsVault != 0, "CDS Vault is zero");
 
-        uint256 b = (cdsVault * 1e2)/ E;
-        uint256 baseOptionPrice = ((sqrt(10 * a * ethPrice))*PRECISION)/OPTION_PRICE_PRECISION + (3 * PRECISION / b); // 1e18 is used to handle division precision
+        uint256 b = (cdsVault * 1e2 * OPTION_PRICE_PRECISION)/ E;
+        uint256 baseOptionPrice = ((sqrt(10 * a * ethPrice))*PRECISION)/OPTION_PRICE_PRECISION + ((3 * PRECISION * OPTION_PRICE_PRECISION )/ b); // 1e18 is used to handle division precision
 
         uint256 optionPrice;
         // Calculate option fees based on strike price chose by user
@@ -124,7 +124,6 @@ contract Options{
         }else{
             revert("Incorrect Strike Price");
         }
-        // console.log((optionPrice * _amount)/PRECISION);
         return ((optionPrice * _amount)/PRECISION)/AMINT_PRECISION;
     }
 

@@ -263,7 +263,7 @@ contract BorrowingTest is Ownable {
         uint256 normalizedAmount = (borrowAmount * RATE_PRECISION * RATE_PRECISION)/currentCumulativeRate;
 
         depositDetail.normalizedAmount = uint128(normalizedAmount);
-        depositDetail.strikePrice = _strikePrice;
+        depositDetail.strikePrice = _strikePrice * uint128(msg.value);
 
         //Update the deposit details
         treasury.updateDepositDetails(msg.sender,index,depositDetail);
@@ -317,7 +317,6 @@ contract BorrowingTest is Ownable {
         require(_toAddress != address(0) && isContract(_toAddress) != true, "To address cannot be a zero and contract address");
 
         lastEthprice = uint128(_ethPrice);
-        lastEventTime = uint128(block.timestamp);
 
         (uint64 borrowerIndex,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,_index);
 
@@ -336,6 +335,7 @@ contract BorrowingTest is Ownable {
                     // Calculate th borrower's debt
                     uint256 borrowerDebt = ((depositDetail.normalizedAmount * lastCumulativeRate)/RATE_PRECISION);
                     lastCumulativeRate = calculateCumulativeRate()/RATE_PRECISION;
+                    lastEventTime = uint128(block.timestamp);
                     // Check whether the Borrower have enough Trinty
                     require(amint.balanceOf(msg.sender) >= borrowerDebt, "User balance is less than required");
                             
@@ -364,9 +364,9 @@ contract BorrowingTest is Ownable {
                         revert Borrowing_WithdrawAMINTTransferFailed();
                     }
                     //Update totalNormalizedAmount
-                    // totalNormalizedAmount -= borrowerDebt;
+                    totalNormalizedAmount -= depositDetail.normalizedAmount;
 
-                    //////////////treasury.updateTotalInterest(borrowerDebt - depositDetail.borrowedAmount);
+                    treasury.updateTotalInterest(borrowerDebt - depositDetail.borrowedAmount);
 
                     // Mint the ABondTokens
                     uint128 noOfAbondTokensminted = _mintAbondToken(msg.sender,discountedETH, _bondRatio);

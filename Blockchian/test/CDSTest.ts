@@ -1,17 +1,13 @@
 import { expect } from "chai";
-import { ethers, network } from "hardhat";
-import type { Wallet } from "ethers";
+import { ethers} from "hardhat";
 import {BorrowingTest,Treasury,AMINTStablecoin,ABONDToken,Options,CDSTest,TestUSDT,MultiSign} from "../typechain-types";
 import { loadFixture,time } from'@nomicfoundation/hardhat-network-helpers';
-import { ChildProcess } from "child_process";
-import { token } from "../typechain-types/contracts";
 import {
     wethGateway,
     priceFeedAddress,
     aTokenAddress,
     aavePoolAddress,
-    cEther,
-    usdtTokenAddress
+    cEther
     } from "./utils/index"
 
 
@@ -283,7 +279,7 @@ describe("Testing contracts ", function(){
 
     describe("To check CDS withdrawl function",function(){
         it("Should withdraw from cds",async () => {
-            const {CDSContract,treasury,Token,usdt} = await loadFixture(deployer);
+            const {CDSContract,usdt} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
             await usdt.mint(user2.address,20000000000)
@@ -302,7 +298,7 @@ describe("Testing contracts ", function(){
         })
 
         it("Should withdraw from cds",async () => {
-            const {CDSContract,treasury,Token} = await loadFixture(deployer);
+            const {CDSContract} = await loadFixture(deployer);
 
             await usdt.connect(user1).mint(user1.address,30000000000);
             await usdt.connect(user1).approve(CDSContract.address,30000000000);
@@ -312,7 +308,7 @@ describe("Testing contracts ", function(){
         })
 
         it("Should revert Already withdrawn",async () => {
-            const {CDSContract,treasury,Token} = await loadFixture(deployer);
+            const {CDSContract} = await loadFixture(deployer);
 
             await usdt.connect(user1).mint(user1.address,30000000000);
             await usdt.connect(user1).approve(CDSContract.address,30000000000);
@@ -330,13 +326,10 @@ describe("Testing contracts ", function(){
             await usdt.mint(owner.address,30000000000);
             await usdt.connect(owner).approve(CDSContract.address,30000000000);
 
-            await Token.mint(user1.address,ethers.utils.parseEther("4000"));
-            await Token.connect(user1).approve(CDSContract.address,ethers.utils.parseEther("4000"));
+            await Token.mint(user1.address,4000000000);
+            await Token.connect(user1).approve(CDSContract.address,4000000000);
 
             await CDSContract.deposit(20000000000,0,true,10000000000);
-
-            // await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
-            // await BorrowingContract.calculateCumulativeRate();
             await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,0,105000,ethVolatility,{value: ethers.utils.parseEther("2")});
 
             await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
@@ -387,7 +380,7 @@ describe("Testing contracts ", function(){
         })
 
         it("Should revert cannot withdraw before the withdraw time limit",async () => {
-            const {CDSContract,treasury,Token} = await loadFixture(deployer);
+            const {CDSContract} = await loadFixture(deployer);
 
             await CDSContract.connect(owner).setWithdrawTimeLimit(1000);
             await usdt.connect(user1).mint(user1.address,30000000000);
@@ -399,19 +392,19 @@ describe("Testing contracts ", function(){
             await expect(tx).to.be.revertedWith("cannot withdraw before the withdraw time limit");
         })
     })
-    // describe("To check cdsAmountToReturn function",function(){
-    //     it("Should calculate cdsAmountToReturn ",async function(){
-    //         const {CDSContract,Token} = await loadFixture(deployer);
 
-    //         await Token.mint(owner.address,ethers.utils.parseEther("1"));
-    //         await Token.connect(owner).approve(CDSContract.address,ethers.utils.parseEther("1"));
+    describe("To check cdsAmountToReturn function",function(){
+        it("Should calculate cdsAmountToReturn ",async function(){
+            const {CDSContract,Token} = await loadFixture(deployer);
 
-    //         await CDSContract.connect(owner).deposit(ethers.utils.parseEther("1"));
-    //         const ethPrice = await CDSContract.lastEthPrice();
-    //         const tx = await CDSContract.connect(user1).cdsAmountToReturn(user1.address,1,ethPrice);
-    //         console.log(tx);
-    //     })
-    // })
+            await usdt.mint(user1.address,20000000000);
+            await usdt.connect(user1).approve(CDSContract.address,20000000000);
+
+            await CDSContract.connect(user1).deposit(20000000000,0,true,10000000000);
+            const ethPrice = await CDSContract.lastEthPrice();
+            await CDSContract.connect(user1).cdsAmountToReturn(user1.address,1,ethPrice);
+        })
+    })
 
     describe("Should redeem USDT correctly",function(){
         it("Should redeem USDT correctly",async function(){
@@ -469,7 +462,56 @@ describe("Testing contracts ", function(){
             const {CDSContract} = await loadFixture(deployer);
             await expect(CDSContract.connect(user1).calculateCumulativeRate(0)).to.be.revertedWith("Fees should not be zero");
         })
+    })
+
+    describe("Should calculate value correctly",function(){
+        it("Should calculate value for no deposit in borrowing",async function(){
+            const {CDSContract,BorrowingContract,Token,treasury,usdt} = await loadFixture(deployer);
+            await usdt.mint(user1.address,20000000000);
+            await usdt.connect(user1).approve(CDSContract.address,20000000000);
+            await CDSContract.connect(user1).deposit(20000000000,0,true,10000000000);
+        })
+
+        it("Should calculate value for no deposit in borrowing and 2 deposit in cds",async function(){
+            const {CDSContract,usdt} = await loadFixture(deployer);
+            await usdt.mint(user1.address,20000000000);
+            await usdt.connect(user1).approve(CDSContract.address,20000000000);
+            await CDSContract.connect(user1).deposit(20000000000,0,true,10000000000);
+
+            await Token.mint(user2.address,4000000000);
+            await Token.connect(user2).approve(CDSContract.address,4000000000);
+            await CDSContract.connect(user2).deposit(0,4000000000,true,4000000000);
+
+            await CDSContract.connect(user1).withdraw(1);
+        })
+
+        // it("Should calculate value for 1 deposit in borrowing",async function(){
+        //     const {CDSContract,usdt} = await loadFixture(deployer);
+        //     const timeStamp = await time.latest();
+
+        //     await usdt.mint(user1.address,20000000000);
+        //     await usdt.connect(user1).approve(CDSContract.address,20000000000);
+        //     await CDSContract.connect(user1).deposit(20000000000,0,true,10000000000);
+
+        //     const ethPrice = await BorrowingContract.getUSDValue();
+        //     await BorrowingContract.connect(user2).depositTokens(ethPrice,timeStamp,1,256785,ethVolatility,{value: ethers.utils.parseEther("2")});
+
+        //     await Token.mint(user3.address,4000000000);
+        //     await Token.connect(user3).approve(CDSContract.address,4000000000);
+        //     await CDSContract.connect(user3).deposit(0,4000000000,true,4000000000);
+
+        //     await BorrowingContract.connect(user2).depositTokens(ethPrice,timeStamp,1,256785,ethVolatility,{value: ethers.utils.parseEther("2")});
+
+        //     await CDSContract.connect(user1).withdraw(1);
+        //     await CDSContract.connect(user3).withdraw(1);
+
+        //     await Token.connect(user1).transfer(user2.address,21);
+        //     await Token.connect(user2).approve(BorrowingContract.address,await Token.balanceOf(user2.address));
+        //     await BorrowingContract.connect(user2).withDraw(user2.address,1,256885,timeStamp,4);
 
 
+        //     await abondToken.connect(user2).approve(BorrowingContract.address,await abondToken.balanceOf(user2.address));
+        //     await BorrowingContract.connect(user2).withDraw(user2.address,1,ethPrice,timeStamp,4);
+        // })
     })
 })
