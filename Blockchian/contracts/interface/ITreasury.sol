@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: unlicensed
 
-pragma solidity ^0.8.18;
+pragma solidity 0.8.19;
 
 interface ITreasury{
 
@@ -28,7 +28,7 @@ interface ITreasury{
     }
 
         function deposit(address user,uint128 _ethPrice,uint64 _depositTime) external payable returns(bool,uint64);
-        function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index,uint64 ethPrice) external returns(bool);
+        function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index) external returns(bool);
         function depositToAave() external;
         function withdrawFromAave(uint64 index) external;
         function depositToCompound() external;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.19;
 
 // import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 // import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -39,7 +39,9 @@ contract CDSTest is Ownable{
     uint8 public amintLimit; // amint limit in percent
     uint64 public usdtLimit; // usdt limit in number
     uint256 public usdtAmountDepositedTillNow; // total usdt deposited till now
+    uint256 public burnedAmintInRedeem;
     uint128 public PRECISION = 1e12;
+    uint128 RATIO_PRECISION = 1e4;
     //uint64 public USDT_PRECISION = 1e6;
 
     struct CdsAccountDetails {
@@ -285,11 +287,15 @@ contract CDSTest is Ownable{
             emit Withdraw(returnAmountWithGains,ethAmount);
         }else{
             // amint.approve(msg.sender, returnAmount);
+            totalCdsDepositedAmount -= returnAmount;
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
             treasury.approveAmint(address(this),returnAmount);
             bool transfer = amint.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
             require(transfer == true, "Transfer failed in cds withdraw");
             emit Withdraw(returnAmount,0);
+        }
+        if(treasury.totalVolumeOfBorrowersAmountinUSD() != 0){
+            require(borrowing.calculateRatio(0,ethPrice) > (2 * RATIO_PRECISION),"Not enough fund in CDS");
         }
 
         if(ethPrice != lastEthPrice){
@@ -301,7 +307,7 @@ contract CDSTest is Ownable{
    //calculating Ethereum value to return to CDS owner
    //The function will deduct some amount of ether if it is borrowed
    //Deduced amount will be calculated using the percentage of CDS a user owns
-   function cdsAmountToReturn(address _user, uint64 index, uint128 _ethPrice) internal view returns(uint128){
+   function cdsAmountToReturn(address _user, uint64 index, uint128 _ethPrice) public view returns(uint128){
 
         uint128 withdrawalVal = calculateValue(_ethPrice);
         uint128 depositVal = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
@@ -336,8 +342,9 @@ contract CDSTest is Ownable{
         require(_amintAmount != 0,"Amount should not be zero");
 
         require(amint.balanceOf(msg.sender) >= _amintAmount,"Insufficient balance");
-        bool transfer = amint.transferFrom(msg.sender,treasuryAddress,_amintAmount);
-        require(transfer == true, "Trinity Transfer failed in redeemUSDT");
+        burnedAmintInRedeem += _amintAmount;
+        bool transfer = amint.burnFromUser(msg.sender,_amintAmount);
+        require(transfer == true, "AMINT Burn failed in redeemUSDT");
 
         uint128 _usdtAmount = (amintPrice * _amintAmount/usdtPrice);  
           

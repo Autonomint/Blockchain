@@ -307,6 +307,22 @@ describe("Testing contracts ", function(){
             await CDSContract.connect(user1).withdraw(1);
         })
 
+        it("Should Not enough fund in CDS",async () => {
+            const {CDSContract} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+
+            await usdt.connect(user1).mint(user1.address,2000000000);
+            await usdt.connect(user1).approve(CDSContract.address,2000000000);
+            await CDSContract.connect(user1).deposit(1000000000,0,false,0);
+            await CDSContract.connect(user1).deposit(1000000000,0,false,0);
+
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.utils.parseEther("5")});
+
+            await CDSContract.connect(user1).withdraw(1);
+            await expect(CDSContract.connect(user1).withdraw(2)).to.revertedWith("Not enough fund in CDS");
+        })
+
         it("Should revert Already withdrawn",async () => {
             const {CDSContract} = await loadFixture(deployer);
 
@@ -357,8 +373,6 @@ describe("Testing contracts ", function(){
 
             await CDSContract.deposit(20000000000,0,true,10000000000);
 
-            // await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
-            // await BorrowingContract.calculateCumulativeRate();
             await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,0,105000,ethVolatility,{value: ethers.utils.parseEther("1")});
             await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,0,105000,ethVolatility,{value: ethers.utils.parseEther("1")});
             
@@ -414,12 +428,12 @@ describe("Testing contracts ", function(){
 
             await CDSContract.connect(user1).deposit(20000000000,0,true,10000000000);
 
-            await Token.mint(owner.address,800000000)
+            await Token.mint(owner.address,800000000);
             await Token.connect(owner).approve(CDSContract.address,800000000);
 
             await CDSContract.connect(owner).redeemUSDT(800000000,1500,1000);
 
-            expect(await Token.balanceOf(owner.address)).to.be.equal(0);
+            expect(await Token.totalSupply()).to.be.equal(20000000000);
             expect(await usdt.balanceOf(owner.address)).to.be.equal(1200000000);
         })
 

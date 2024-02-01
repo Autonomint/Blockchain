@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: unlicensed
 
-pragma solidity ^0.8.18;
+pragma solidity 0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "../interface/CDSInterface.sol";
@@ -47,7 +47,7 @@ contract BorrowingTest is Ownable {
 
     address public treasuryAddress; // treasury contract address
     address public cdsAddress; // CDS contract address
-    address public admin; // admin address
+    address private admin; // admin address
     uint8 private LTV; // LTV is a percentage eg LTV = 60 is 60%, must be divided by 100 in calculations
     uint8 public APY; 
     uint256 public totalNormalizedAmount; // total normalized amount in protocol
@@ -227,7 +227,7 @@ contract BorrowingTest is Ownable {
         require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
 
         //Call calculateInverseOfRatio function to find ratio
-        uint64 ratio = _calculateRatio(msg.value,uint128(_ethPrice));
+        uint64 ratio = calculateRatio(msg.value,uint128(_ethPrice));
         require(ratio >= (2 * RATIO_PRECISION),"Not enough fund in CDS");
         
         //Call the deposit function in Treasury contract
@@ -393,7 +393,7 @@ contract BorrowingTest is Ownable {
                     }
                     ethToReturn = (ethToReturn * 50)/100;
                     // Call withdraw in treasury
-                bool sent = treasury.withdraw(msg.sender,_toAddress,ethToReturn,_index,_ethPrice);
+                bool sent = treasury.withdraw(msg.sender,_toAddress,ethToReturn,_index);
                 if(!sent){
                     revert Borrowing_WithdrawEthTransferFailed();
                 }
@@ -405,7 +405,6 @@ contract BorrowingTest is Ownable {
                     secondWithdraw(
                         _toAddress,
                         _index,
-                        _ethPrice,
                         depositDetail.withdrawTime,
                         depositDetail.aBondTokensAmount,
                         depositDetail.withdrawAmount);
@@ -433,7 +432,7 @@ contract BorrowingTest is Ownable {
      * @param ethToReturn ethToReturn
      */
 
-    function secondWithdraw(address _toAddress,uint64 _index,uint64 _ethPrice,uint64 withdrawTime,uint128 aBondTokensAmount,uint128 ethToReturn) internal {
+    function secondWithdraw(address _toAddress,uint64 _index,uint64 withdrawTime,uint128 aBondTokensAmount,uint128 ethToReturn) internal {
             // Check whether the first withdraw passed one month
             require(block.timestamp >= (withdrawTime + withdrawTimeLimit),"Can't withdraw before the withdraw time limit");
 
@@ -460,7 +459,7 @@ contract BorrowingTest is Ownable {
                 revert Borrowing_WithdrawBurnFailed();
             }
             // Call withdraw function in Treasury
-            bool sent = treasury.withdraw(msg.sender,_toAddress,ethToReturn,_index,_ethPrice);
+            bool sent = treasury.withdraw(msg.sender,_toAddress,ethToReturn,_index);
             if(!sent){
                 revert Borrowing_WithdrawEthTransferFailed();
             }
@@ -567,7 +566,7 @@ contract BorrowingTest is Ownable {
      * @param _amount amount to be depositing
      * @param currentEthPrice current eth price in usd
      */
-    function _calculateRatio(uint256 _amount,uint currentEthPrice) internal returns(uint64){
+    function calculateRatio(uint256 _amount,uint currentEthPrice) public returns(uint64){
 
         uint256 netPLCdsPool;
 
@@ -616,9 +615,17 @@ contract BorrowingTest is Ownable {
             uint256 latestTotalCDSPool = cds.totalCdsDepositedAmount() * AMINT_PRECISION;
 
             if(currentEthPrice >= lastEthprice){
-                currentCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) + netPLCdsPool;
+                if(latestTotalCDSPool > lastTotalCDSPool){
+                    currentCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) + netPLCdsPool;  
+                }else{
+                    currentCDSPoolValue = lastCDSPoolValue - (lastTotalCDSPool - latestTotalCDSPool) + netPLCdsPool;
+                }
             }else{
-                currentCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) - netPLCdsPool;
+                if(latestTotalCDSPool > lastTotalCDSPool){
+                    currentCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) - netPLCdsPool;  
+                }else{
+                    currentCDSPoolValue = lastCDSPoolValue - (lastTotalCDSPool - latestTotalCDSPool) - netPLCdsPool;
+                }
             }
 
             lastTotalCDSPool = latestTotalCDSPool;
@@ -686,16 +693,16 @@ contract BorrowingTest is Ownable {
         return true;
     }
 
-    function getMessageHash(bytes memory message) public  returns (bytes32) {
-        bytes32 hash = keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                DOMAIN_SEPARATOR,
-                keccak256(message)
-            )
-        );
-        return hash;
-    }
+    // function getMessageHash(bytes memory message) public  returns (bytes32) {
+    //     bytes32 hash = keccak256(
+    //         abi.encodePacked(
+    //             "\x19\x01",
+    //             DOMAIN_SEPARATOR,
+    //             keccak256(message)
+    //         )
+    //     );
+    //     return hash;
+    // }
 
     function _rpow(uint x, uint n, uint b) internal pure returns (uint z) {
       assembly {

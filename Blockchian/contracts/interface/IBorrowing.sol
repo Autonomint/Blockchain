@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: unlicensed
 
-pragma solidity ^0.8.18;
+pragma solidity 0.8.19;
 
 interface IBorrowing{
     function pause() external;
@@ -9,4 +9,6 @@ interface IBorrowing{
     function getUSDValue() external view returns(uint256);
     function noOfLiquidations() external view returns(uint128);
     function updateLastEthVaultValue(uint256 _amount) external;
+    function calculateRatio(uint256 _amount,uint currentEthPrice) external returns(uint64);
+
 }
