@@ -24,6 +24,7 @@ contract Treasury is Ownable{
     error Treasury_CompoundDepositAndMintFailed();
     error Treasury_CompoundWithdrawFailed();
     error Treasury_EthTransferToCdsLiquidatorFailed();
+    error Treasury_WithdrawExternalProtocolInterestFailed();
 
     IBorrowing  public borrow;
     IAMINT      public amint;
@@ -114,6 +115,9 @@ contract Treasury is Ownable{
     uint128 public noOfBorrowers;
     uint256 public totalInterest;
     uint256 public totalInterestFromLiquidation;
+    uint256 public abondAmintPool;
+    uint256 public ethProfitsOfLiquidators;
+    uint256 public interestFromExternalProtocolDuringLiquidation;
 
     //no of times deposited in external protocol(always 1 ahead) 
     uint64 public externalProtocolDepositCount = 1;
@@ -182,8 +186,7 @@ contract Treasury is Ownable{
         address user,
         uint128 _ethPrice,
         uint64 _depositTime
-        )
-        external payable onlyBorrowingContract returns(bool,uint64) {
+    ) external payable onlyBorrowingContract returns(bool,uint64) {
 
         uint64 borrowerIndex;
         //check if borrower is depositing for the first time or not
@@ -246,7 +249,12 @@ contract Treasury is Ownable{
      * @param _amount amount of eth to return
      * @param index deposit index
      */
-    function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index) external onlyBorrowingContract returns(bool){
+    function withdraw(
+        address borrower,
+        address toAddress,
+        uint256 _amount,
+        uint64 index
+    ) external onlyBorrowingContract returns(bool){
         // Check the _amount is non zero
         require(_amount > 0, "Cannot withdraw zero Ether");
         require(borrowing[borrower].depositDetails[index].withdrawNo > 0,"");
@@ -637,32 +645,57 @@ contract Treasury is Ownable{
         return address(this).balance;
     }
 
-    function updateDepositDetails(address depositor,uint64 index,DepositDetails memory depositDetail) external {
+    function updateDepositDetails(
+        address depositor,
+        uint64 index,DepositDetails memory depositDetail
+    ) external onlyBorrowingContract{
             borrowing[depositor].depositDetails[index] = depositDetail;
     }
 
-    function updateHasBorrowed(address borrower,bool _bool) external {
+    function updateHasBorrowed(address borrower,bool _bool) external onlyBorrowingContract{
         borrowing[borrower].hasBorrowed = _bool;
     }
-    function updateTotalDepositedAmount(address borrower,uint128 amount) external {
+    function updateTotalDepositedAmount(address borrower,uint128 amount) external onlyBorrowingContract{
         borrowing[borrower].depositedAmount -= amount;
     }
-    function updateTotalBorrowedAmount(address borrower,uint256 amount) external {
+    function updateTotalBorrowedAmount(address borrower,uint256 amount) external onlyBorrowingContract{
         borrowing[borrower].totalBorrowedAmount += amount;
     }
-    function updateTotalAbondTokensIncrease(address borrower,uint128 amount) external {
+    function updateTotalAbondTokensIncrease(address borrower,uint128 amount) external onlyBorrowingContract{
         borrowing[borrower].totalAbondTokens += amount;
     }
-    function updateTotalAbondTokensDecrease(address borrower,uint128 amount) external {
+    function updateTotalAbondTokensDecrease(address borrower,uint128 amount) external onlyBorrowingContract{
         borrowing[borrower].totalAbondTokens -= amount;
     }
 
-    function updateTotalInterest(uint _amount) external{
+    function updateTotalInterest(uint256 _amount) external onlyBorrowingContract{
         totalInterest += _amount;
     }
 
-    function updateTotalInterestFromLiquidation(uint _amount) external{
+    function updateTotalInterestFromLiquidation(uint256 _amount) external onlyBorrowingContract{
         totalInterestFromLiquidation += _amount;
+    }
+
+    function updateAbondAmintPool(uint256 amount,bool operation) external onlyBorrowingContract{
+        require(amount != 0, "Treasury:Amount should not be zero");
+        if(operation){
+            abondAmintPool += amount;
+        }else{
+            abondAmintPool -= amount;
+        }
+    }
+
+    function updateEthProfitsOfLiquidators(uint256 amount,bool operation) external onlyCDSOrBorrowingContract{
+        require(amount != 0, "Treasury:Amount should not be zero");
+        if(operation){
+            ethProfitsOfLiquidators += amount;
+        }else{
+            ethProfitsOfLiquidators -= amount;
+        }
+    }
+
+    function updateInterestFromExternalProtocol(uint256 amount) external onlyBorrowingContract{
+        interestFromExternalProtocolDuringLiquidation += amount;
     }
 
     function getBorrowing(address depositor,uint64 index) external view returns(uint64,DepositDetails memory){
@@ -700,6 +733,7 @@ contract Treasury is Ownable{
     function withdrawInterest(address toAddress,uint256 amount) external onlyOwner{
         require(toAddress != address(0) && amount != 0, "Input address or amount is invalid");
         require(amount <= (totalInterest + totalInterestFromLiquidation),"Treasury don't have enough interest");
+        totalInterest -= amount;
         bool sent = amint.transfer(toAddress,amount);
         require(sent, "Failed to send Ether");
     }
@@ -708,9 +742,22 @@ contract Treasury is Ownable{
      * transfer eth from treasury
      */
     function transferEthToCdsLiquidators(address borrower,uint128 amount) external onlyCDSContract{
+        require(borrower != address(0) && amount != 0, "Input address or amount is invalid");
+        require(amount <= ethProfitsOfLiquidators,"Treasury don't have enough ETH amount");
+        ethProfitsOfLiquidators -= amount;
         (bool sent,) = payable(borrower).call{value: amount}("");
         if(!sent){
             revert Treasury_EthTransferToCdsLiquidatorFailed();
+        }
+    }
+
+    function withdrawExternalProtocolInterest(address toAddress,uint128 amount) external onlyOwner{
+        require(toAddress != address(0) && amount != 0, "Input address or amount is invalid");
+        require(amount <= interestFromExternalProtocolDuringLiquidation,"Treasury don't have enough interest amount");
+        interestFromExternalProtocolDuringLiquidation -= amount;
+        (bool sent,) = payable(toAddress).call{value: amount}("");
+        if(!sent){
+            revert Treasury_WithdrawExternalProtocolInterestFailed();
         }
     }
 
@@ -718,7 +765,7 @@ contract Treasury is Ownable{
     //     cEther.redeem(balance);
     // }
 
-    function depositToAaveByUser(uint256 depositAmount) internal {
+    function depositToAaveByUser(uint256 depositAmount) internal onlyBorrowingContract{
         //Atoken balance before depsoit
         uint256 aTokenBeforeDeposit = aToken.balanceOf(address(this));
         address poolAddress = aavePoolAddressProvider.getLendingPool();
@@ -742,7 +789,7 @@ contract Treasury is Ownable{
         protocolDeposit[Protocol.Aave].totalCreditedTokens = creditedAmount;
     }
 
-    function depositToCompoundByUser(uint256 depositAmount) internal returns(uint128){
+    function depositToCompoundByUser(uint256 depositAmount) internal onlyBorrowingContract returns(uint128){
 
         // Call the deposit function in Coumpound to deposit eth.
         cEther.mint{value: depositAmount}();
@@ -756,7 +803,7 @@ contract Treasury is Ownable{
         return newlyCreditedTokens;
     }
 
-    function withdrawFromAaveByUser(address depositor,uint64 index) internal returns(uint256){
+    function withdrawFromAaveByUser(address depositor,uint64 index) public onlyBorrowingContract returns(uint256){
         DepositDetails memory depositDetails = borrowing[depositor].depositDetails[index];
 
         uint256 creditedAmount = aToken.balanceOf(address(this));
@@ -783,7 +830,7 @@ contract Treasury is Ownable{
         return (amount - ((depositDetails.depositedAmount * 25)/100));
     }
 
-    function withdrawFromCompoundByUser(address depositor,uint64 index) internal returns(uint256){
+    function withdrawFromCompoundByUser(address depositor,uint64 index) public onlyBorrowingContract returns(uint256){
         DepositDetails memory depositDetails = borrowing[depositor].depositDetails[index];
 
         uint256 amount = depositDetails.cTokensCredited;

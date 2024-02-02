@@ -5,6 +5,7 @@ pragma solidity 0.8.19;
 // import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interface/IAmint.sol";
 import "../interface/IBorrowing.sol";
@@ -14,7 +15,7 @@ import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 
-contract CDSTest is Ownable{
+contract CDSTest is Ownable,ReentrancyGuard{
     // using SafeERC20 for IERC20;
 
     IAMINT public immutable amint; // our stablecoin
@@ -128,7 +129,12 @@ contract CDSTest is Ownable{
      * @param _liquidate whether the user opted for liquidation
      * @param _liquidationAmount If opted for liquidation,the liquidation amount
      */
-    function deposit(uint128 usdtAmount,uint128 amintAmount,bool _liquidate,uint128 _liquidationAmount) public whenNotPaused(IMultiSign.Functions(4)){
+    function deposit(
+        uint128 usdtAmount,
+        uint128 amintAmount,
+        bool _liquidate,
+        uint128 _liquidationAmount
+    ) public nonReentrant whenNotPaused(IMultiSign.Functions(4)){
         // totalDepositingAmount is usdt and amint
         uint128 totalDepositingAmount = usdtAmount + amintAmount;
         require(totalDepositingAmount != 0, "Deposit amount should not be zero"); // check _amount not zero
@@ -227,7 +233,7 @@ contract CDSTest is Ownable{
      * @dev withdraw amint
      * @param _index index of the deposit to withdraw
      */
-    function withdraw(uint64 _index) public whenNotPaused(IMultiSign.Functions(5)){
+    function withdraw(uint64 _index) public nonReentrant whenNotPaused(IMultiSign.Functions(5)){
         require(cdsDetails[msg.sender].index >= _index , "user doesn't have the specified index");
         require(cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawed == false,"Already withdrawn");
         
@@ -281,9 +287,13 @@ contract CDSTest is Ownable{
             //Call transferFrom in amint
             bool success = amint.transferFrom(treasuryAddress,msg.sender, returnAmountWithGains); // transfer amount to msg.sender
             require(success == true, "Transsuccessed in cds withdraw");
+            
+            if(ethAmount != 0){
+                treasury.updateEthProfitsOfLiquidators(ethAmount,false);
+                // Call transferEthToCdsLiquidators to tranfer eth
+                treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
+            }
 
-            // Call transferEthToCdsLiquidators to tranfer eth
-            treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
             emit Withdraw(returnAmountWithGains,ethAmount);
         }else{
             // amint.approve(msg.sender, returnAmount);
@@ -304,10 +314,14 @@ contract CDSTest is Ownable{
     }
    
 
-   //calculating Ethereum value to return to CDS owner
-   //The function will deduct some amount of ether if it is borrowed
-   //Deduced amount will be calculated using the percentage of CDS a user owns
-   function cdsAmountToReturn(address _user, uint64 index, uint128 _ethPrice) public view returns(uint128){
+    //calculating Ethereum value to return to CDS owner
+    //The function will deduct some amount of ether if it is borrowed
+    //Deduced amount will be calculated using the percentage of CDS a user owns
+    function cdsAmountToReturn(
+        address _user,
+        uint64 index,
+        uint128 _ethPrice
+    ) public view returns(uint128){
 
         uint128 withdrawalVal = calculateValue(_ethPrice);
         uint128 depositVal = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
@@ -338,7 +352,11 @@ contract CDSTest is Ownable{
      * @param amintPrice amint price
      * @param usdtPrice usdt price
      */
-    function redeemUSDT(uint128 _amintAmount,uint64 amintPrice,uint64 usdtPrice) public whenNotPaused(IMultiSign.Functions(6)){
+    function redeemUSDT(
+        uint128 _amintAmount,
+        uint64 amintPrice,
+        uint64 usdtPrice
+    ) public nonReentrant whenNotPaused(IMultiSign.Functions(6)){
         require(_amintAmount != 0,"Amount should not be zero");
 
         require(amint.balanceOf(msg.sender) >= _amintAmount,"Insufficient balance");

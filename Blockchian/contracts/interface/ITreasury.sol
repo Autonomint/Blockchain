@@ -29,10 +29,13 @@ interface ITreasury{
 
         function deposit(address user,uint128 _ethPrice,uint64 _depositTime) external payable returns(bool,uint64);
         function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index) external returns(bool);
-        function depositToAave() external;
-        function withdrawFromAave(uint64 index) external;
-        function depositToCompound() external;
-        function withdrawFromCompound(uint64 index) external;
+        // function depositToAave() external;
+        // function withdrawFromAave(uint64 index) external;
+        // function depositToCompound() external;
+        // function withdrawFromCompound(uint64 index) external;
+        function withdrawFromAaveByUser(address depositor,uint64 index) external returns(uint256);
+        function withdrawFromCompoundByUser(address depositor,uint64 index) external returns(uint256);
+
         function getBalanceInTreasury() external view returns(uint256);
         function approveAmint(address _address, uint _amount) external;
         function approveUsdt(address _address, uint _amount) external;
@@ -40,6 +43,8 @@ interface ITreasury{
 
 
         function noOfBorrowers() external returns(uint128);
+        function ethProfitsOfLiquidators() external view returns(uint256);
+        function totalVolumeOfBorrowersAmountinWei() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinUSD() external view returns(uint256);
 
         function updateHasBorrowed(address borrower,bool _bool) external;
@@ -50,8 +55,11 @@ interface ITreasury{
 
         function getBorrowing(address depositor,uint64 index) external view returns(uint64,DepositDetails memory);
         function updateDepositDetails(address depositor,uint64 index,DepositDetails memory depositDetail) external;
-        function updateTotalInterest(uint _amount) external;
-        function updateTotalInterestFromLiquidation(uint _amount) external;
+        function updateTotalInterest(uint256 _amount) external;
+        function updateTotalInterestFromLiquidation(uint256 _amount) external;
+        function updateAbondAmintPool(uint256 amount,bool operation) external;
+        function updateEthProfitsOfLiquidators(uint256 amount,bool operation) external;
+        function updateInterestFromExternalProtocol(uint256 amount) external;
 
         event Deposit(address indexed user,uint256 amount);
         event Withdraw(address indexed user,uint256 amount);
