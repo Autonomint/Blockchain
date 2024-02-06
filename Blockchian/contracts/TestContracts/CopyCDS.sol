@@ -18,12 +18,12 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 contract CDSTest is Ownable,ReentrancyGuard{
     // using SafeERC20 for IERC20;
 
-    IAMINT public immutable amint; // our stablecoin
-    IBorrowing public borrowing; // Borrowing contract interface
-    ITreasury public treasury; // Treasury contrcat interface
+    IAMINT      public immutable amint; // our stablecoin
+    IBorrowing  public borrowing; // Borrowing contract interface
+    ITreasury   public treasury; // Treasury contrcat interface
     AggregatorV3Interface internal dataFeed;
-    IMultiSign public multiSign;
-    IERC20 public usdt; // USDT interface
+    IMultiSign  public multiSign;
+    IERC20      public usdt; // USDT interface
 
     address public borrowingContract; // borrowing contract address
 
@@ -32,18 +32,20 @@ contract CDSTest is Ownable,ReentrancyGuard{
 
     uint128 public lastEthPrice;
     uint128 public fallbackEthPrice;
-    uint64 public cdsCount; // cds depositors count
-    uint64 public withdrawTimeLimit; // Fixed Time interval between deposit and withdraw
-    uint128 public totalCdsDepositedAmount; // total amint and usdt deposited in cds
+    uint64  public cdsCount; // cds depositors count
+    uint64  public withdrawTimeLimit; // Fixed Time interval between deposit and withdraw
+    uint256 public totalCdsDepositedAmount; // total amint and usdt deposited in cds
+    uint256 public totalCdsDepositedAmountWithOptionFees;
     uint256 public totalAvailableLiquidationAmount; // total deposited amint available for liquidation
     uint128 public lastCumulativeRate; 
-    uint8 public amintLimit; // amint limit in percent
-    uint64 public usdtLimit; // usdt limit in number
+    uint8   public amintLimit; // amint limit in percent
+    uint64  public usdtLimit; // usdt limit in number
     uint256 public usdtAmountDepositedTillNow; // total usdt deposited till now
     uint256 public burnedAmintInRedeem;
+    uint128 public cumulativeValue;
+    bool    public cumulativeValueSign;
     uint128 public PRECISION = 1e12;
     uint128 RATIO_PRECISION = 1e4;
-    //uint64 public USDT_PRECISION = 1e6;
 
     struct CdsAccountDetails {
         uint64 depositedTime;
@@ -53,6 +55,7 @@ contract CDSTest is Ownable,ReentrancyGuard{
         bool withdrawed;
         uint128 depositPrice;
         uint128 depositValue;
+        bool depositValueSign;
         bool optedLiquidation;
         uint128 InitialLiquidationAmount;
         uint128 liquidationAmount;
@@ -130,6 +133,7 @@ contract CDSTest is Ownable,ReentrancyGuard{
      * @param _liquidationAmount If opted for liquidation,the liquidation amount
      */
     function deposit(
+        uint128 ethPrice,
         uint128 usdtAmount,
         uint128 amintAmount,
         bool _liquidate,
@@ -173,9 +177,9 @@ contract CDSTest is Ownable,ReentrancyGuard{
             require(success == true, "AMINT mint to treasury failed in CDS deposit");
         }
 
-        uint128 ethPrice = getLatestData();
+        // uint128 ethPrice = getLatestData();
 
-        require(ethPrice != 0,"Oracle Failed");
+        // require(ethPrice != 0,"Oracle Failed");
 
         uint64 index;
 
@@ -202,9 +206,14 @@ contract CDSTest is Ownable,ReentrancyGuard{
 
         //storing current ETH/USD rate
         cdsDetails[msg.sender].cdsAccountDetails[index].depositPrice = ethPrice;
+        (uint128 depositValue,bool gains) = calculateValue(ethPrice);
+        setCumulativeValue(depositValue,gains);
+        cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = cumulativeValue;
+        cdsDetails[msg.sender].cdsAccountDetails[index].depositValueSign = cumulativeValueSign;
 
         //add deposited amount to totalCdsDepositedAmount
         totalCdsDepositedAmount += totalDepositingAmount;
+        totalCdsDepositedAmountWithOptionFees += totalDepositingAmount;
         
         //add deposited time of perticular index and amount in cdsAccountDetails
         cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = uint64(block.timestamp);
@@ -233,7 +242,7 @@ contract CDSTest is Ownable,ReentrancyGuard{
      * @dev withdraw amint
      * @param _index index of the deposit to withdraw
      */
-    function withdraw(uint64 _index) public nonReentrant whenNotPaused(IMultiSign.Functions(5)){
+    function withdraw(uint128 ethPrice,uint64 _index) public nonReentrant whenNotPaused(IMultiSign.Functions(5)){
         require(cdsDetails[msg.sender].index >= _index , "user doesn't have the specified index");
         require(cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawed == false,"Already withdrawn");
         
@@ -247,15 +256,15 @@ contract CDSTest is Ownable,ReentrancyGuard{
             --cdsCount;
         }
 
-        uint128 ethPrice = getLatestData();
-        require(ethPrice != 0,"Oracle Failed");
+        // uint128 ethPrice = getLatestData();
+        // require(ethPrice != 0,"Oracle Failed");
         // Calculate return amount includes
         // eth Price difference gain or loss
         // option fees
+        console.log(cdsAmountToReturn(msg.sender,_index, ethPrice));
         uint128 returnAmount = 
             cdsAmountToReturn(msg.sender,_index, ethPrice)+
             ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * lastCumulativeRate)/PRECISION)-(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount);
-        
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedTime =  _withdrawTime;
 
@@ -279,7 +288,8 @@ contract CDSTest is Ownable,ReentrancyGuard{
                 }
             }
             uint128 returnAmountWithGains = returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
-            totalCdsDepositedAmount -= returnAmountWithGains;
+            totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
+            totalCdsDepositedAmountWithOptionFees -= returnAmountWithGains;
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
             // Get approval from treasury 
             treasury.approveAmint(address(this),returnAmountWithGains);
@@ -297,7 +307,8 @@ contract CDSTest is Ownable,ReentrancyGuard{
             emit Withdraw(returnAmountWithGains,ethAmount);
         }else{
             // amint.approve(msg.sender, returnAmount);
-            totalCdsDepositedAmount -= returnAmount;
+            totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
+            totalCdsDepositedAmountWithOptionFees -= returnAmount;
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
             treasury.approveAmint(address(this),returnAmount);
             bool transfer = amint.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
@@ -321,29 +332,54 @@ contract CDSTest is Ownable,ReentrancyGuard{
         address _user,
         uint64 index,
         uint128 _ethPrice
-    ) public view returns(uint128){
+    ) public returns(uint128){
 
-        uint128 withdrawalVal = calculateValue(_ethPrice);
+        // Calculate current value
+        (uint128 currentVal,bool gains) = calculateValue(_ethPrice);
+        setCumulativeValue(currentVal,gains);
+        uint128 depositedAmount = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
         uint128 depositVal = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
+        // Get the cumulative value sign at the time of deposit
+        bool depositValSign = cdsDetails[msg.sender].cdsAccountDetails[index].depositValueSign;
+        uint128 valDiff;
 
-        if(withdrawalVal <= depositVal){
-            uint128 valDiff = depositVal - withdrawalVal;
-
-            uint128 safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
-            uint128 loss = (safeAmountInCDS * valDiff) / 1e5;
-
-            return (safeAmountInCDS - loss);
+        // If the depositVal and cumulativeValue both are in same sign
+        if(depositValSign == cumulativeValueSign){
+            if(depositVal > cumulativeValue){
+                valDiff = depositVal - cumulativeValue;
+            }else{
+                valDiff = cumulativeValue - depositVal;
+            }
+            // If cumulative value sign at the time of deposit is positive
+            if(depositValSign){
+                if(depositVal > cumulativeValue){
+                    // Its loss since cumulative val is low
+                    uint128 loss = (depositedAmount * valDiff) / 1e11;
+                    return (depositedAmount - loss);
+                }else{
+                    // Its gain since cumulative val is high
+                    uint128 profit = (depositedAmount * valDiff)/1e11;
+                    return (depositedAmount + profit);
+                }
+            }else{
+                if(depositVal > cumulativeValue){
+                    uint128 profit = (depositedAmount * valDiff)/1e11;
+                    return (depositedAmount + profit);
+                }else{
+                    uint128 loss = (depositedAmount * valDiff) / 1e11;
+                    return (depositedAmount - loss);
+                }
+            }
+        }else{
+            valDiff = depositVal + cumulativeValue;
+            if(depositValSign){
+                uint128 loss = (depositedAmount * valDiff) / 1e11;
+                return (depositedAmount - loss);
+            }else{
+                uint128 profit = (depositedAmount * valDiff)/1e11;
+                return (depositedAmount + profit);            
+            }
         }
-
-        else{
-            uint128 valDiff = withdrawalVal - depositVal;
-
-            uint128 safeAmountInCDS = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
-            uint128 toReturn = (safeAmountInCDS * valDiff) / 1e5;
-            
-            return (toReturn + safeAmountInCDS);
-        }
-        
    }
 
     /**
@@ -398,25 +434,40 @@ contract CDSTest is Ownable,ReentrancyGuard{
         usdtLimit = amount;  
     }
 
-    function calculateValue(uint128 _price) internal view returns(uint128 value) {
+    function calculateValue(uint128 _price) internal view returns(uint128,bool) {
         uint128 _amount = 1000;
-        uint128 treasuryBal = uint128(amint.balanceOf(treasuryAddress));
-        uint128 vaultBal = uint128(treasury.getBalanceInTreasury());
+        uint256 vaultBal = treasury.totalVolumeOfBorrowersAmountinWei();
         uint128 priceDiff;
+        uint128 value;
+        bool gains;
 
-        if(treasuryBal == 0){
+        if(totalCdsDepositedAmount == 0){
             value = 0;
         }else{
             if(_price != lastEthPrice){
-                priceDiff = _price - lastEthPrice;
+                // If the current eth price is higher than last eth price,then it is gains
+                if(_price > lastEthPrice){
+                    priceDiff = _price - lastEthPrice;
+                    gains = true;    
+                }else{
+                    priceDiff = lastEthPrice - _price;
+                    gains = false;
+                }
             }
-
             else{
-                priceDiff = _price - fallbackEthPrice;
+                // If the current eth price is higher than fallback eth price,then it is gains
+                if(_price > fallbackEthPrice){
+                    priceDiff = _price - fallbackEthPrice;
+                    gains = true;   
+                }else{
+                    priceDiff = fallbackEthPrice - _price;
+                    gains = false;
+                }
             }
-            value = (_amount * vaultBal * priceDiff) / (PRECISION * treasuryBal);
+            value = uint128((_amount * vaultBal * priceDiff * 1e6) / (PRECISION * totalCdsDepositedAmount));
         }
-        return value;
+        // console.log("VALUE",value);
+        return (value,gains);
     }
 
     /**
@@ -425,8 +476,8 @@ contract CDSTest is Ownable,ReentrancyGuard{
      */
     function calculateCumulativeRate(uint128 fees) public returns(uint128){
         require(fees != 0,"Fees should not be zero");
-        uint128 netCDSPoolValue = totalCdsDepositedAmount + fees;
-        totalCdsDepositedAmount += fees;
+        totalCdsDepositedAmountWithOptionFees += fees;
+        uint128 netCDSPoolValue = uint128(totalCdsDepositedAmountWithOptionFees);
         uint128 percentageChange = (fees * PRECISION)/netCDSPoolValue;
         uint128 currentCumulativeRate;
         if(treasury.noOfBorrowers() == 0){
@@ -437,6 +488,45 @@ contract CDSTest is Ownable,ReentrancyGuard{
             lastCumulativeRate = (currentCumulativeRate/PRECISION);
         }
         return currentCumulativeRate;
+    }
+
+    /**
+     * @param value cumulative value to add or subtract
+     * @param gains if true,add value else subtract 
+     */
+    function setCumulativeValue(uint128 value,bool gains) public{
+        if(gains){
+            // If the cumulativeValue is positive
+            if(cumulativeValueSign){
+                // Add value to cumulativeValue
+                cumulativeValue += value;
+            }else{
+                // if the cumulative value is greater than value 
+                if(cumulativeValue > value){
+                    // Remains in negative
+                    cumulativeValue -= value;
+                }else{
+                    // Going to postive since value is higher than cumulative value
+                    cumulativeValue = value - cumulativeValue;
+                    cumulativeValueSign = true;
+                }
+            }
+        }else{
+            // If cumulative value is in positive
+            if(cumulativeValueSign){
+                if(cumulativeValue > value){
+                    // Cumulative value remains in positive
+                    cumulativeValue -= value;
+                }else{
+                    // Going to negative since value is higher than cumulative value
+                    cumulativeValue = value - cumulativeValue;
+                    cumulativeValueSign = false;
+                }
+            }else{
+                // Cumulative value is in negative
+                cumulativeValue += value;
+            }
+        }
     }
 
     function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory,uint64){
@@ -453,6 +543,10 @@ contract CDSTest is Ownable,ReentrancyGuard{
 
     function updateTotalCdsDepositedAmount(uint128 _amount) external{
         totalCdsDepositedAmount -= _amount;
+    }
+
+    function updateTotalCdsDepositedAmountWithOptionFees(uint128 _amount) external{
+        totalCdsDepositedAmountWithOptionFees -= _amount;
     }
 
     receive() external payable{}

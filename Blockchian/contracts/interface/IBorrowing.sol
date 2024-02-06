@@ -8,6 +8,10 @@ interface IBorrowing{
     function transferToken(address _borrower, uint64 borrowerIndex) external;
     function getUSDValue() external view returns(uint256);
     function noOfLiquidations() external view returns(uint128);
+    function lastEthVaultValue() external view returns(uint256);
+    function lastCDSPoolValue() external view returns(uint256);
+
+
     function updateLastEthVaultValue(uint256 _amount) external;
     function calculateRatio(uint256 _amount,uint currentEthPrice) external returns(uint64);
 

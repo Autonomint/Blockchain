@@ -77,6 +77,7 @@ contract BorrowingTest is Ownable,ReentrancyGuard {
 
     event Deposit(uint64 index,uint256 depositedAmount,uint256 borrowAmount,uint256 normalizedAmount);
     event Withdraw(uint256 borrowDebt,uint128 withdrawAmount,uint128 noOfAbond);
+    event Liquidate(uint64 index,uint128 liquidationAmount,uint128 profits,uint128 ethAmount,uint256 availableLiquidationAmount);
 
     constructor(
         address _tokenAddress,
@@ -528,6 +529,7 @@ contract BorrowingTest is Ownable,ReentrancyGuard {
 
         cds.updateLiquidationInfo(noOfLiquidations,liquidationInfo);
         cds.updateTotalCdsDepositedAmount(liquidationAmountNeeded);
+        cds.updateTotalCdsDepositedAmountWithOptionFees(liquidationAmountNeeded);
         cds.updateTotalAvailableLiquidationAmount(liquidationAmountNeeded);
         treasury.updateEthProfitsOfLiquidators(depositDetail.depositedAmount,true);
         treasury.updateInterestFromExternalProtocol(externalProtocolInterest);
@@ -544,6 +546,7 @@ contract BorrowingTest is Ownable,ReentrancyGuard {
             revert Borrowing_LiquidateBurnFailed();
         }
         // Transfer ETH to CDS Pool
+        emit Liquidate(index,liquidationAmountNeeded,cdsProfits,depositDetail.depositedAmount,cds.totalAvailableLiquidationAmount());
     }
 
     /**

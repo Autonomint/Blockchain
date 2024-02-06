@@ -4,6 +4,7 @@ pragma solidity 0.8.19;
 
 import "../interface/ITreasury.sol";
 import "../interface/CDSInterface.sol";
+import "../interface/IBorrowing.sol";
 
 import "hardhat/console.sol";
 
@@ -26,11 +27,13 @@ contract Options{
 
     ITreasury treasury;
     CDSInterface cds;
+    IBorrowing borrowing;
 
-    constructor(address _priceFeed, address _treasuryAddress, address _cdsAddress) {
+    constructor(address _priceFeed, address _treasuryAddress, address _cdsAddress,address _borrowingAddress) {
         priceFeed = AggregatorV3Interface(_priceFeed);
         treasury = ITreasury(_treasuryAddress);
         cds = CDSInterface(_cdsAddress);
+        borrowing = IBorrowing(_borrowingAddress);
     }
 
     /**
@@ -100,7 +103,8 @@ contract Options{
         uint256 a = _ethVolatility;
         uint256 ethPrice = _ethPrice;/*getLatestPrice();*/
         uint256 E = treasury.totalVolumeOfBorrowersAmountinUSD();
-        uint256 cdsVault = cds.totalCdsDepositedAmount() * AMINT_PRECISION;
+        require(E != 0,"No borrowers in protocol");
+        uint256 cdsVault = borrowing.lastCDSPoolValue();
 
         require(E != 0, "Treasury balance is zero");
         require(cdsVault != 0, "CDS Vault is zero");

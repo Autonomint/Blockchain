@@ -39,4 +39,5 @@ interface CDSInterface {
     function updateTotalAvailableLiquidationAmount(uint256 amount) external;
     function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external;
     function updateTotalCdsDepositedAmount(uint128 _amount) external;
+    function updateTotalCdsDepositedAmountWithOptionFees(uint128 _amount) external;
 }
