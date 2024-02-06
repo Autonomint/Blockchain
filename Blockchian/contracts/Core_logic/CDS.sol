@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.19;
 
 // import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 // import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interface/IAmint.sol";
 import "../interface/IBorrowing.sol";
@@ -14,7 +15,7 @@ import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 
-contract CDS is Ownable{
+contract CDS is Ownable,ReentrancyGuard{
     // using SafeERC20 for IERC20;
 
     IAMINT public immutable amint; // our stablecoin
@@ -39,7 +40,9 @@ contract CDS is Ownable{
     uint8 public amintLimit; // amint limit in percent
     uint64 public usdtLimit; // usdt limit in number
     uint256 public usdtAmountDepositedTillNow; // total usdt deposited till now
+    uint256 public burnedAmintInRedeem;
     uint128 public PRECISION = 1e12;
+    uint128 RATIO_PRECISION = 1e4;
     //uint64 public USDT_PRECISION = 1e6;
 
     struct CdsAccountDetails {
@@ -84,6 +87,7 @@ contract CDS is Ownable{
         multiSign = IMultiSign(_multiSign);
         dataFeed = AggregatorV3Interface(priceFeed);
         lastEthPrice = getLatestData();
+        fallbackEthPrice = lastEthPrice;
         lastCumulativeRate = PRECISION;
     }
 
@@ -125,7 +129,12 @@ contract CDS is Ownable{
      * @param _liquidate whether the user opted for liquidation
      * @param _liquidationAmount If opted for liquidation,the liquidation amount
      */
-    function deposit(uint128 usdtAmount,uint128 amintAmount,bool _liquidate,uint128 _liquidationAmount) public whenNotPaused(IMultiSign.Functions(4)){
+    function deposit(
+        uint128 usdtAmount,
+        uint128 amintAmount,
+        bool _liquidate,
+        uint128 _liquidationAmount
+    ) public nonReentrant whenNotPaused(IMultiSign.Functions(4)){
         // totalDepositingAmount is usdt and amint
         uint128 totalDepositingAmount = usdtAmount + amintAmount;
         require(totalDepositingAmount != 0, "Deposit amount should not be zero"); // check _amount not zero
@@ -201,7 +210,6 @@ contract CDS is Ownable{
         cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = uint64(block.timestamp);
         cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount = ((totalDepositingAmount * PRECISION)/lastCumulativeRate);
        
-        //cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = calculateValue(ethPrice);
         cdsDetails[msg.sender].cdsAccountDetails[index].optedLiquidation = _liquidate;
         //If user opted for liquidation
         if(_liquidate){
@@ -225,14 +233,8 @@ contract CDS is Ownable{
      * @dev withdraw amint
      * @param _index index of the deposit to withdraw
      */
-    function withdraw(uint64 _index) public whenNotPaused(IMultiSign.Functions(5)){
-       // require(_amount != 0, "Amount cannot be zero");
-        // require(
-        //     _to != address(0) && isContract(_to) == false,
-        //     "Invalid address"
-        // );
+    function withdraw(uint64 _index) public nonReentrant whenNotPaused(IMultiSign.Functions(5)){
         require(cdsDetails[msg.sender].index >= _index , "user doesn't have the specified index");
-       // require(totalCdsDepositedAmount >= _amount, "Contract doesnt have sufficient balance");
         require(cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawed == false,"Already withdrawn");
         
         uint64 _withdrawTime = uint64(block.timestamp);
@@ -285,17 +287,25 @@ contract CDS is Ownable{
             //Call transferFrom in amint
             bool success = amint.transferFrom(treasuryAddress,msg.sender, returnAmountWithGains); // transfer amount to msg.sender
             require(success == true, "Transsuccessed in cds withdraw");
+            
+            if(ethAmount != 0){
+                treasury.updateEthProfitsOfLiquidators(ethAmount,false);
+                // Call transferEthToCdsLiquidators to tranfer eth
+                treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
+            }
 
-            // Call transferEthToCdsLiquidators to tranfer eth
-            treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
             emit Withdraw(returnAmountWithGains,ethAmount);
         }else{
             // amint.approve(msg.sender, returnAmount);
+            totalCdsDepositedAmount -= returnAmount;
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
             treasury.approveAmint(address(this),returnAmount);
             bool transfer = amint.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
             require(transfer == true, "Transfer failed in cds withdraw");
             emit Withdraw(returnAmount,0);
+        }
+        if(treasury.totalVolumeOfBorrowersAmountinUSD() != 0){
+            require(borrowing.calculateRatio(0,ethPrice) > (2 * RATIO_PRECISION),"Not enough fund in CDS");
         }
 
         if(ethPrice != lastEthPrice){
@@ -304,12 +314,16 @@ contract CDS is Ownable{
     }
    
 
-   //calculating Ethereum value to return to CDS owner
-   //The function will deduct some amount of ether if it is borrowed
-   //Deduced amount will be calculated using the percentage of CDS a user owns
-   function cdsAmountToReturn(address _user, uint64 index, uint128 _ethPrice) internal view returns(uint128){
+    //calculating Ethereum value to return to CDS owner
+    //The function will deduct some amount of ether if it is borrowed
+    //Deduced amount will be calculated using the percentage of CDS a user owns
+    function cdsAmountToReturn(
+        address _user,
+        uint64 index,
+        uint128 _ethPrice
+    ) public view returns(uint128){
 
-        uint128 withdrawalVal; /*= calculateValue(_ethPrice);*/
+        uint128 withdrawalVal = calculateValue(_ethPrice);
         uint128 depositVal = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
 
         if(withdrawalVal <= depositVal){
@@ -338,12 +352,17 @@ contract CDS is Ownable{
      * @param amintPrice amint price
      * @param usdtPrice usdt price
      */
-    function redeemUSDT(uint128 _amintAmount,uint64 amintPrice,uint64 usdtPrice) public whenNotPaused(IMultiSign.Functions(6)){
+    function redeemUSDT(
+        uint128 _amintAmount,
+        uint64 amintPrice,
+        uint64 usdtPrice
+    ) public nonReentrant whenNotPaused(IMultiSign.Functions(6)){
         require(_amintAmount != 0,"Amount should not be zero");
 
         require(amint.balanceOf(msg.sender) >= _amintAmount,"Insufficient balance");
-        bool transfer = amint.transferFrom(msg.sender,treasuryAddress,_amintAmount);
-        require(transfer == true, "Trinity Transfer failed in redeemUSDT");
+        burnedAmintInRedeem += _amintAmount;
+        bool transfer = amint.burnFromUser(msg.sender,_amintAmount);
+        require(transfer == true, "AMINT Burn failed in redeemUSDT");
 
         uint128 _usdtAmount = (amintPrice * _amintAmount/usdtPrice);  
           
@@ -379,20 +398,24 @@ contract CDS is Ownable{
         usdtLimit = amount;  
     }
 
-    function calculateValue(uint128 _price) internal view returns(uint128) {
+    function calculateValue(uint128 _price) internal view returns(uint128 value) {
         uint128 _amount = 1000;
         uint128 treasuryBal = uint128(amint.balanceOf(treasuryAddress));
         uint128 vaultBal = uint128(treasury.getBalanceInTreasury());
         uint128 priceDiff;
 
-        if(_price != lastEthPrice){
-            priceDiff = _price - lastEthPrice;
-        }
+        if(treasuryBal == 0){
+            value = 0;
+        }else{
+            if(_price != lastEthPrice){
+                priceDiff = _price - lastEthPrice;
+            }
 
-        else{
-            priceDiff = _price - fallbackEthPrice;
+            else{
+                priceDiff = _price - fallbackEthPrice;
+            }
+            value = (_amount * vaultBal * priceDiff) / (PRECISION * treasuryBal);
         }
-        uint128 value = (_amount * vaultBal * priceDiff) / treasuryBal;
         return value;
     }
 
@@ -405,7 +428,6 @@ contract CDS is Ownable{
         uint128 netCDSPoolValue = totalCdsDepositedAmount + fees;
         totalCdsDepositedAmount += fees;
         uint128 percentageChange = (fees * PRECISION)/netCDSPoolValue;
-        // console.log(percentageChange);
         uint128 currentCumulativeRate;
         if(treasury.noOfBorrowers() == 0){
             currentCumulativeRate = (1 * PRECISION) + percentageChange;
