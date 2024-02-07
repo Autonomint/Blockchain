@@ -16,7 +16,6 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 
 contract CDSTest is Ownable,ReentrancyGuard{
-    // using SafeERC20 for IERC20;
 
     IAMINT      public immutable amint; // our stablecoin
     IBorrowing  public borrowing; // Borrowing contract interface
@@ -92,6 +91,7 @@ contract CDSTest is Ownable,ReentrancyGuard{
         lastEthPrice = getLatestData();
         fallbackEthPrice = lastEthPrice;
         lastCumulativeRate = PRECISION;
+        cumulativeValueSign = true;
     }
 
     modifier onlyBorrowingContract() {
@@ -133,7 +133,6 @@ contract CDSTest is Ownable,ReentrancyGuard{
      * @param _liquidationAmount If opted for liquidation,the liquidation amount
      */
     function deposit(
-        uint128 ethPrice,
         uint128 usdtAmount,
         uint128 amintAmount,
         bool _liquidate,
@@ -177,9 +176,9 @@ contract CDSTest is Ownable,ReentrancyGuard{
             require(success == true, "AMINT mint to treasury failed in CDS deposit");
         }
 
-        // uint128 ethPrice = getLatestData();
+        uint128 ethPrice = getLatestData();
 
-        // require(ethPrice != 0,"Oracle Failed");
+        require(ethPrice != 0,"Oracle Failed");
 
         uint64 index;
 
@@ -242,7 +241,7 @@ contract CDSTest is Ownable,ReentrancyGuard{
      * @dev withdraw amint
      * @param _index index of the deposit to withdraw
      */
-    function withdraw(uint128 ethPrice,uint64 _index) public nonReentrant whenNotPaused(IMultiSign.Functions(5)){
+    function withdraw(uint64 _index) public nonReentrant whenNotPaused(IMultiSign.Functions(5)){
         require(cdsDetails[msg.sender].index >= _index , "user doesn't have the specified index");
         require(cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawed == false,"Already withdrawn");
         
@@ -256,12 +255,11 @@ contract CDSTest is Ownable,ReentrancyGuard{
             --cdsCount;
         }
 
-        // uint128 ethPrice = getLatestData();
-        // require(ethPrice != 0,"Oracle Failed");
+        uint128 ethPrice = getLatestData();
+        require(ethPrice != 0,"Oracle Failed");
         // Calculate return amount includes
         // eth Price difference gain or loss
         // option fees
-        console.log(cdsAmountToReturn(msg.sender,_index, ethPrice));
         uint128 returnAmount = 
             cdsAmountToReturn(msg.sender,_index, ethPrice)+
             ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * lastCumulativeRate)/PRECISION)-(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount);
@@ -332,27 +330,28 @@ contract CDSTest is Ownable,ReentrancyGuard{
         address _user,
         uint64 index,
         uint128 _ethPrice
-    ) public returns(uint128){
+    ) internal returns(uint128){
 
         // Calculate current value
         (uint128 currentVal,bool gains) = calculateValue(_ethPrice);
         setCumulativeValue(currentVal,gains);
         uint128 depositedAmount = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
-        uint128 depositVal = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
+        uint128 cumulativeValueAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
         // Get the cumulative value sign at the time of deposit
-        bool depositValSign = cdsDetails[msg.sender].cdsAccountDetails[index].depositValueSign;
+        bool cumulativeValueSignAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[index].depositValueSign;
         uint128 valDiff;
+        uint128 cumulativeValueAtWithdraw = cumulativeValue;
 
         // If the depositVal and cumulativeValue both are in same sign
-        if(depositValSign == cumulativeValueSign){
-            if(depositVal > cumulativeValue){
-                valDiff = depositVal - cumulativeValue;
+        if(cumulativeValueSignAtDeposit == cumulativeValueSign){
+            if(cumulativeValueAtDeposit > cumulativeValueAtWithdraw){
+                valDiff = cumulativeValueAtDeposit - cumulativeValueAtWithdraw;
             }else{
-                valDiff = cumulativeValue - depositVal;
+                valDiff = cumulativeValueAtWithdraw - cumulativeValueAtDeposit;
             }
             // If cumulative value sign at the time of deposit is positive
-            if(depositValSign){
-                if(depositVal > cumulativeValue){
+            if(cumulativeValueSignAtDeposit){
+                if(cumulativeValueAtDeposit > cumulativeValueAtWithdraw){
                     // Its loss since cumulative val is low
                     uint128 loss = (depositedAmount * valDiff) / 1e11;
                     return (depositedAmount - loss);
@@ -362,7 +361,7 @@ contract CDSTest is Ownable,ReentrancyGuard{
                     return (depositedAmount + profit);
                 }
             }else{
-                if(depositVal > cumulativeValue){
+                if(cumulativeValueAtDeposit > cumulativeValueAtWithdraw){
                     uint128 profit = (depositedAmount * valDiff)/1e11;
                     return (depositedAmount + profit);
                 }else{
@@ -371,8 +370,8 @@ contract CDSTest is Ownable,ReentrancyGuard{
                 }
             }
         }else{
-            valDiff = depositVal + cumulativeValue;
-            if(depositValSign){
+            valDiff = cumulativeValueAtDeposit + cumulativeValueAtWithdraw;
+            if(cumulativeValueSignAtDeposit){
                 uint128 loss = (depositedAmount * valDiff) / 1e11;
                 return (depositedAmount - loss);
             }else{
@@ -443,6 +442,7 @@ contract CDSTest is Ownable,ReentrancyGuard{
 
         if(totalCdsDepositedAmount == 0){
             value = 0;
+            gains = true;
         }else{
             if(_price != lastEthPrice){
                 // If the current eth price is higher than last eth price,then it is gains
@@ -466,7 +466,6 @@ contract CDSTest is Ownable,ReentrancyGuard{
             }
             value = uint128((_amount * vaultBal * priceDiff * 1e6) / (PRECISION * totalCdsDepositedAmount));
         }
-        // console.log("VALUE",value);
         return (value,gains);
     }
 
@@ -474,7 +473,7 @@ contract CDSTest is Ownable,ReentrancyGuard{
      * @dev calculate cumulative rate
      * @param fees fees to split
      */
-    function calculateCumulativeRate(uint128 fees) public returns(uint128){
+    function calculateCumulativeRate(uint128 fees) public onlyBorrowingContract returns(uint128) {
         require(fees != 0,"Fees should not be zero");
         totalCdsDepositedAmountWithOptionFees += fees;
         uint128 netCDSPoolValue = uint128(totalCdsDepositedAmountWithOptionFees);
@@ -494,7 +493,7 @@ contract CDSTest is Ownable,ReentrancyGuard{
      * @param value cumulative value to add or subtract
      * @param gains if true,add value else subtract 
      */
-    function setCumulativeValue(uint128 value,bool gains) public{
+    function setCumulativeValue(uint128 value,bool gains) internal{
         if(gains){
             // If the cumulativeValue is positive
             if(cumulativeValueSign){
@@ -533,7 +532,7 @@ contract CDSTest is Ownable,ReentrancyGuard{
         return (cdsDetails[depositor].cdsAccountDetails[index],cdsDetails[depositor].index);
     }
 
-    function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external {
+    function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external onlyBorrowingContract{
         liquidationIndexToInfo[index] = liquidationData;
     }
 
@@ -541,11 +540,11 @@ contract CDSTest is Ownable,ReentrancyGuard{
         totalAvailableLiquidationAmount -= amount;
     }
 
-    function updateTotalCdsDepositedAmount(uint128 _amount) external{
+    function updateTotalCdsDepositedAmount(uint128 _amount) external onlyBorrowingContract{
         totalCdsDepositedAmount -= _amount;
     }
 
-    function updateTotalCdsDepositedAmountWithOptionFees(uint128 _amount) external{
+    function updateTotalCdsDepositedAmountWithOptionFees(uint128 _amount) external onlyBorrowingContract{
         totalCdsDepositedAmountWithOptionFees -= _amount;
     }
 

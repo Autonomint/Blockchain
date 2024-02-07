@@ -768,14 +768,6 @@ contract Treasury is Ownable{
     function depositToAaveByUser(uint256 depositAmount) internal onlyBorrowingContract{
         //Atoken balance before depsoit
         uint256 aTokenBeforeDeposit = aToken.balanceOf(address(this));
-        address poolAddress = aavePoolAddressProvider.getLendingPool();
-
-        if(poolAddress == address(0)){
-            revert Treasury_AavePoolAddressZero();
-        }
-
-        wethGateway.depositETH{value: depositAmount}(poolAddress,address(this),0);
-        uint256 creditedAmount = aToken.balanceOf(address(this));
 
         // If it's the first deposit, set the cumulative rate to precision (i.e., 1 in fixed-point representation).
         if (protocolDeposit[Protocol.Aave].totalCreditedTokens == 0) {
@@ -786,6 +778,14 @@ contract Treasury is Ownable{
             // Update the cumulative rate using the calculated change.
             protocolDeposit[Protocol.Aave].cumulativeRate = ((CUMULATIVE_PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate) / CUMULATIVE_PRECISION;
         }
+        address poolAddress = aavePoolAddressProvider.getLendingPool();
+
+        if(poolAddress == address(0)){
+            revert Treasury_AavePoolAddressZero();
+        }
+
+        wethGateway.depositETH{value: depositAmount}(poolAddress,address(this),0);
+        uint256 creditedAmount = aToken.balanceOf(address(this));
         protocolDeposit[Protocol.Aave].totalCreditedTokens = creditedAmount;
     }
 

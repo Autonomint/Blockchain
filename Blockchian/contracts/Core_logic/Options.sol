@@ -36,13 +36,18 @@ contract Options{
         borrowing = IBorrowing(_borrowingAddress);
     }
 
+    modifier onlyBorrowingContract() {
+        require( msg.sender == address(borrowing), "This function can only called by borrowing contract");
+        _;
+    }
+
     /**
      * calculate eth price gains for user
      * @param depositedAmount eth amount to be deposit
      * @param strikePrice strikePrice,not percent, price
      * @param ethPrice eth price
      */
-    function withdrawOption(uint128 depositedAmount,uint128 strikePrice,uint64 ethPrice) external pure returns(uint128){
+    function withdrawOption(uint128 depositedAmount,uint128 strikePrice,uint64 ethPrice) external view onlyBorrowingContract returns(uint128){
         require(depositedAmount != 0 && strikePrice != 0 && ethPrice != 0,"Zero inputs in options");
         uint64 currentEthPrice = ethPrice;
         uint128 currentEthValue = depositedAmount * currentEthPrice;

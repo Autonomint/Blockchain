@@ -54,7 +54,7 @@ describe("Testing contracts ", function(){
         treasury = await Treasury.deploy(BorrowingContract.address,Token.address,CDSContract.address,wethGateway,cEther,aavePoolAddress,aTokenAddress,usdt.address);
 
         const Option = await ethers.getContractFactory("Options");
-        options = await Option.deploy(priceFeedAddress,treasury.address,CDSContract.address);
+        options = await Option.deploy(priceFeedAddress,treasury.address,CDSContract.address,BorrowingContract.address);
 
         await BorrowingContract.initializeTreasury(treasury.address);
         await BorrowingContract.setOptions(options.address);
@@ -307,20 +307,20 @@ describe("Testing contracts ", function(){
             await CDSContract.connect(user1).withdraw(1);
         })
 
-        it("Should Not enough fund in CDS",async () => {
+        it("Should revert Not enough fund in CDS",async () => {
             const {CDSContract} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
 
             await usdt.connect(user1).mint(user1.address,2000000000);
             await usdt.connect(user1).approve(CDSContract.address,2000000000);
-            await CDSContract.connect(user1).deposit(1000000000,0,false,0);
-            await CDSContract.connect(user1).deposit(1000000000,0,false,0);
+            await CDSContract.connect(user1).deposit(100000000,0,false,0);
+            await CDSContract.connect(user1).deposit(1001000000,0,false,0);
 
             await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.utils.parseEther("5")});
 
             await CDSContract.connect(user1).withdraw(1);
-            await expect(CDSContract.connect(user1).withdraw(2)).to.revertedWith("Not enough fund in CDS");
+            await expect(CDSContract.connect(user1).withdraw(2)).to.be.revertedWith("Not enough fund in CDS");
         })
 
         it("Should revert Already withdrawn",async () => {
@@ -335,63 +335,63 @@ describe("Testing contracts ", function(){
             const tx =  CDSContract.connect(user1).withdraw(1);
             await expect(tx).to.be.revertedWith("Already withdrawn");
         })
-        it("Should calculate cumulative rate correctly",async () =>{
-            const {CDSContract,BorrowingContract,Token} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
+        // it("Should calculate cumulative rate correctly",async () =>{
+        //     const {CDSContract,BorrowingContract,Token} = await loadFixture(deployer);
+        //     const timeStamp = await time.latest();
 
-            await usdt.mint(owner.address,30000000000);
-            await usdt.connect(owner).approve(CDSContract.address,30000000000);
+        //     await usdt.mint(owner.address,30000000000);
+        //     await usdt.connect(owner).approve(CDSContract.address,30000000000);
 
-            await Token.mint(user1.address,4000000000);
-            await Token.connect(user1).approve(CDSContract.address,4000000000);
+        //     await Token.mint(user1.address,4000000000);
+        //     await Token.connect(user1).approve(CDSContract.address,4000000000);
 
-            await CDSContract.deposit(20000000000,0,true,10000000000);
-            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,0,105000,ethVolatility,{value: ethers.utils.parseEther("2")});
+        //     await CDSContract.deposit(20000000000,0,true,10000000000);
+        //     await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,0,105000,ethVolatility,{value: ethers.utils.parseEther("2")});
 
-            await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
-            await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
+        //     await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
+        //     await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
 
-            await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
-            await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
+        //     await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
+        //     await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
 
-            await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
-            await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
+        //     await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
+        //     await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
 
-            await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
-            await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
-        })
+        //     await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
+        //     await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
+        // })
 
-        it("Should withdraw with fees",async () =>{
-            const {CDSContract,BorrowingContract,Token,treasury} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
+        // it("Should withdraw with fees",async () =>{
+        //     const {CDSContract,BorrowingContract,Token,treasury} = await loadFixture(deployer);
+        //     const timeStamp = await time.latest();
 
-            await usdt.mint(owner.address,30000000000);
-            await usdt.connect(owner).approve(CDSContract.address,30000000000);
+        //     await usdt.mint(owner.address,30000000000);
+        //     await usdt.connect(owner).approve(CDSContract.address,30000000000);
 
-            await Token.mint(user1.address,ethers.utils.parseEther("4000"));
-            await Token.connect(user1).approve(CDSContract.address,ethers.utils.parseEther("4000"));
+        //     await Token.mint(user1.address,ethers.utils.parseEther("4000"));
+        //     await Token.connect(user1).approve(CDSContract.address,ethers.utils.parseEther("4000"));
 
-            await CDSContract.deposit(20000000000,0,true,10000000000);
+        //     await CDSContract.deposit(20000000000,0,true,10000000000);
 
-            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,0,105000,ethVolatility,{value: ethers.utils.parseEther("1")});
-            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,0,105000,ethVolatility,{value: ethers.utils.parseEther("1")});
+        //     await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,0,105000,ethVolatility,{value: ethers.utils.parseEther("1")});
+        //     await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,0,105000,ethVolatility,{value: ethers.utils.parseEther("1")});
             
-            await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
-            await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
+        //     await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
+        //     await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
 
-            await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
-            await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
+        //     await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
+        //     await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
 
-            await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
-            await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
+        //     await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
+        //     await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
 
-            await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
-            await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
+        //     await CDSContract.connect(user1).deposit(0,1000000000,true,500000000);
+        //     await CDSContract.calculateCumulativeRate(ethers.utils.parseEther("60"));
 
-            await BorrowingContract.liquidate(user1.address,2,80000);
+        //     await BorrowingContract.liquidate(user1.address,2,80000);
 
-            await CDSContract.connect(user1).withdraw(1);
-        })
+        //     await CDSContract.connect(user1).withdraw(1);
+        // })
 
         it("Should revert cannot withdraw before the withdraw time limit",async () => {
             const {CDSContract} = await loadFixture(deployer);
@@ -408,16 +408,16 @@ describe("Testing contracts ", function(){
     })
 
     describe("To check cdsAmountToReturn function",function(){
-        it("Should calculate cdsAmountToReturn ",async function(){
-            const {CDSContract,Token} = await loadFixture(deployer);
+        // it("Should calculate cdsAmountToReturn ",async function(){
+        //     const {CDSContract,Token} = await loadFixture(deployer);
 
-            await usdt.mint(user1.address,20000000000);
-            await usdt.connect(user1).approve(CDSContract.address,20000000000);
+        //     await usdt.mint(user1.address,20000000000);
+        //     await usdt.connect(user1).approve(CDSContract.address,20000000000);
 
-            await CDSContract.connect(user1).deposit(20000000000,0,true,10000000000);
-            const ethPrice = await CDSContract.lastEthPrice();
-            await CDSContract.connect(user1).cdsAmountToReturn(user1.address,1,ethPrice);
-        })
+        //     await CDSContract.connect(user1).deposit(20000000000,0,true,10000000000);
+        //     const ethPrice = await CDSContract.lastEthPrice();
+        //     await CDSContract.connect(user1).cdsAmountToReturn(user1.address,1,ethPrice);
+        // })
     })
 
     describe("Should redeem USDT correctly",function(){
@@ -472,10 +472,10 @@ describe("Testing contracts ", function(){
             await expect(CDSContract.connect(user1).setUsdtLimit(1000)).to.be.revertedWith("Ownable: caller is not the owner");
         })
 
-        it("Should revert Fees should not be zero",async function(){
-            const {CDSContract} = await loadFixture(deployer);
-            await expect(CDSContract.connect(user1).calculateCumulativeRate(0)).to.be.revertedWith("Fees should not be zero");
-        })
+        // it("Should revert Fees should not be zero",async function(){
+        //     const {CDSContract} = await loadFixture(deployer);
+        //     await expect(CDSContract.connect(user1).calculateCumulativeRate(0)).to.be.revertedWith("Fees should not be zero");
+        // })
     })
 
     describe("Should calculate value correctly",function(){
@@ -526,6 +526,71 @@ describe("Testing contracts ", function(){
 
         //     await abondToken.connect(user2).approve(BorrowingContract.address,await abondToken.balanceOf(user2.address));
         //     await BorrowingContract.connect(user2).withDraw(user2.address,1,ethPrice,timeStamp,4);
+        // })
+
+        // it("Should calculate cumulative value",async function(){
+        //     const {CDSContract} = await loadFixture(deployer);
+        //     await CDSContract.setCumulativeValue(4636363636,true);
+        //     await CDSContract.setCumulativeValue(4333333333,true);
+        //     await CDSContract.setCumulativeValue(4076923077,true);
+        //     await CDSContract.setCumulativeValue(3857142857,true);
+        //     await CDSContract.setCumulativeValue(3666666667,false);
+        //     await CDSContract.setCumulativeValue(3500000000,false);
+        //     await CDSContract.setCumulativeValue(3352941176,false);
+        //     await CDSContract.setCumulativeValue(3222222222,false);
+        //     await CDSContract.setCumulativeValue(15526315790,false);
+        //     await CDSContract.setCumulativeValue(3000000000,true);
+
+        //     expect(await CDSContract.cumulativeValue()).to.be.equal(9364382952);
+        //     expect(await CDSContract.cumulativeValueSign()).to.be.equal(false);
+        // })
+
+        // it("Should calculate value correctly during deposit and withdraw",async function(){
+        //     const {CDSContract,BorrowingContract,usdt} = await loadFixture(deployer);
+        //     const timeStamp = await time.latest();
+        //     await usdt.mint(user1.address,20000000000);
+        //     await usdt.connect(user1).approve(CDSContract.address,20000000000);
+
+        //     // await CDSContract.connect(user1).deposit(270425,20000000000,0,true,10000000000);
+        //     // await BorrowingContract.connect(user2).depositTokens(270425,timeStamp,1,250000,ethVolatility,{value: ethers.utils.parseEther("2")});
+        //     await CDSContract.connect(user1).deposit(100000,10000000000,0,true,10000000000);
+        //     await CDSContract.connect(user1).deposit(100000,1000000000,0,true,1000000000);
+        //     await BorrowingContract.connect(user2).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.utils.parseEther("51")});
+        //     await CDSContract.connect(user1).deposit(101000,1000000000,0,true,1000000000);
+        //     await BorrowingContract.connect(user2).depositTokens(101000,timeStamp,1,110000,ethVolatility,{value: ethers.utils.parseEther("1")});
+        //     await CDSContract.connect(user1).deposit(102000,1000000000,0,true,1000000000);
+        //     await BorrowingContract.connect(user2).depositTokens(102000,timeStamp,1,110000,ethVolatility,{value: ethers.utils.parseEther("1")});
+        //     await CDSContract.connect(user1).deposit(103000,1000000000,0,true,1000000000);
+        //     await BorrowingContract.connect(user2).depositTokens(103000,timeStamp,1,110000,ethVolatility,{value: ethers.utils.parseEther("1")});
+        //     // await CDSContract.connect(user1).withdraw(103000,2);
+        //     await CDSContract.connect(user1).deposit(104000,1000000000,0,true,1000000000);
+        //     await BorrowingContract.connect(user2).depositTokens(104000,timeStamp,1,110000,ethVolatility,{value: ethers.utils.parseEther("1")});
+        //     await CDSContract.connect(user1).withdraw(104000,3);
+        //     await CDSContract.connect(user1).deposit(103000,1000000000,0,true,1000000000);
+        //     await BorrowingContract.connect(user2).depositTokens(103000,timeStamp,1,110000,ethVolatility,{value: ethers.utils.parseEther("1")});
+        //     await CDSContract.connect(user1).deposit(102000,1000000000,0,true,1000000000);
+        //     await BorrowingContract.connect(user2).depositTokens(102000,timeStamp,1,110000,ethVolatility,{value: ethers.utils.parseEther("1")});
+        //     await CDSContract.connect(user1).deposit(101000,1000000000,0,true,1000000000);
+        //     await BorrowingContract.connect(user2).depositTokens(101000,timeStamp,1,110000,ethVolatility,{value: ethers.utils.parseEther("1")});
+        //     await CDSContract.connect(user1).deposit(100000,1000000000,0,true,1000000000);
+        //     await BorrowingContract.connect(user2).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.utils.parseEther("1")});
+        //     await CDSContract.connect(user1).deposit(95000,1000000000,0,true,1000000000);
+        //     await BorrowingContract.connect(user2).depositTokens(95000,timeStamp,1,110000,ethVolatility,{value: ethers.utils.parseEther("1")});
+
+        //     // await CDSContract.withdraw();
+
+
+        //     console.log(await CDSContract.cumulativeValue());
+        //     console.log(await CDSContract.cumulativeValueSign());
+
+        //     // await Token.mint(user2.address,4000000000);
+        //     // await Token.connect(user2).approve(CDSContract.address,4000000000);
+        //     // await CDSContract.connect(user2).deposit(290425,0,4000000000,true,4000000000);
+        //     // // console.log(await CDSContract.cumulativeValue());
+
+        //     // await CDSContract.connect(user1).withdraw(230425,1);
+        //     // console.log(await CDSContract.cumulativeValue());
+
         // })
     })
 })

@@ -60,7 +60,7 @@ describe("Borrowing Contract",function(){
         treasury = await Treasury.deploy(BorrowingContract.address,Token.address,CDSContract.address,wethGateway,cEther,aavePoolAddress,aTokenAddress,usdt.address);
         
         const Option = await ethers.getContractFactory("Options");
-        options = await Option.deploy(priceFeedAddress,treasury.address,CDSContract.address);
+        options = await Option.deploy(priceFeedAddress,treasury.address,CDSContract.address,BorrowingContract.address);
 
         await BorrowingContract.initializeTreasury(treasury.address);
         await BorrowingContract.setOptions(options.address);
@@ -876,7 +876,7 @@ describe("Borrowing Contract",function(){
 
         })
 
-        it.only("Should revert Already liquidated",async function(){
+        it("Should revert Already liquidated",async function(){
             const {BorrowingContract,CDSContract,Token,abondToken,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
             await usdt.connect(user1).mint(user1.address,10000000000)

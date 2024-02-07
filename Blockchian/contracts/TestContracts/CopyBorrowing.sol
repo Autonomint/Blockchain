@@ -517,7 +517,7 @@ contract BorrowingTest is Ownable,ReentrancyGuard {
         // Calculate borrower's debt 
         uint256 borrowerDebt = ((depositDetail.normalizedAmount * lastCumulativeRate)/RATE_PRECISION);
         lastCumulativeRate = calculateCumulativeRate()/RATE_PRECISION;
-        uint128 returnToTreasury = uint128(borrowerDebt) /*+ uint128 fees*/;
+        uint128 returnToTreasury = uint128(borrowerDebt);
         // 20% to abond amint pool
         uint128 returnToAbond = (((((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/AMINT_PRECISION)/100) - returnToTreasury) * 20)/100;
         // CDS profits

@@ -59,7 +59,7 @@ async function main() {
   console.log("TREASURY ADDRESS",deployedTreasury.address);
 
   const options = await ethers.getContractFactory("Options");
-  const deployedOptions = await options.deploy(priceFeedAddressGoerli,deployedTreasury.address,deployedCDS.address);
+  const deployedOptions = await options.deploy(priceFeedAddressGoerli,deployedTreasury.address,deployedCDS.address,deployedBorrowing.address);
   await deployedOptions.deployed();
   console.log("OPTIONS ADDRESS",deployedOptions.address);
 
@@ -113,7 +113,7 @@ async function main() {
   await hre.run("verify:verify", {
     address: deployedOptions.address,
     contract: "contracts/Core_logic/Options.sol:Options",
-    constructorArguments: [priceFeedAddressGoerli,deployedTreasury.address,deployedCDS.address],
+    constructorArguments: [priceFeedAddressGoerli,deployedTreasury.address,deployedCDS.address,deployedBorrowing.address],
   });
 
 
@@ -121,6 +121,7 @@ async function main() {
   await deployedBorrowing.setOptions(deployedOptions.address);
   await deployedBorrowing.setLTV(80);
   await deployedBorrowing.setAdmin(owner1);
+  await deployedBorrowing.setBondRatio(4);
 
   await deployedCDS.setBorrowingContract(deployedBorrowing.address);
   await deployedCDS.setTreasury(deployedTreasury.address);
