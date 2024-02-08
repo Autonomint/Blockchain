@@ -107,7 +107,7 @@ contract Options{
         //uint256 a = calculateStandardDeviation(); 
         uint256 a = _ethVolatility;
         uint256 ethPrice = _ethPrice;/*getLatestPrice();*/
-        uint256 E = treasury.totalVolumeOfBorrowersAmountinUSD();
+        uint256 E = treasury.totalVolumeOfBorrowersAmountinUSD() + (_amount * _ethPrice);
         require(E != 0,"No borrowers in protocol");
         uint256 cdsVault = borrowing.lastCDSPoolValue();
 

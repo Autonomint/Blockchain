@@ -4,7 +4,7 @@ const { it } = require("mocha")
 import { ethers,network } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { describe } from "node:test";
-import { BorrowingTest, CDSTest, AMINTStablecoin, ABONDToken, Treasury,Options,TestUSDT,MultiSign} from "../typechain-types";
+import { BorrowingTest, CDSTest, TestAMINTStablecoin, TestABONDToken, Treasury,Options,TestUSDT,MultiSign} from "../typechain-types";
 import {
     wethGateway,
     priceFeedAddress,
@@ -20,8 +20,8 @@ describe("Borrowing Contract",function(){
 
     let CDSContract : CDSTest;
     let BorrowingContract : BorrowingTest;
-    let Token : AMINTStablecoin;
-    let abondToken : ABONDToken;
+    let Token : TestAMINTStablecoin;
+    let abondToken : TestABONDToken;
     let usdt: TestUSDT;
     let treasury : Treasury;
     let options : Options;
@@ -38,10 +38,10 @@ describe("Borrowing Contract",function(){
     async function deployer(){
         [owner,owner1,owner2,user1,user2,user3] = await ethers.getSigners();
 
-        const AmintStablecoin = await ethers.getContractFactory("AMINTStablecoin");
+        const AmintStablecoin = await ethers.getContractFactory("TestAMINTStablecoin");
         Token = await AmintStablecoin.deploy();
 
-        const ABONDToken = await ethers.getContractFactory("ABONDToken");
+        const ABONDToken = await ethers.getContractFactory("TestABONDToken");
         abondToken = await ABONDToken.deploy();
 
         const MultiSign = await ethers.getContractFactory("MultiSign");
@@ -131,6 +131,14 @@ describe("Borrowing Contract",function(){
             const tx = BorrowingContract.connect(owner).setAPR(0);
 
             await expect(tx).to.be.revertedWith("Rate should not be zero");
+        })
+
+        it("Should revert You do not have sufficient balance to execute this transaction",async function(){
+            const {BorrowingContract,usdt,Token} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            const tx = BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.utils.parseEther("5000")});
+            
+            await expect(tx).to.be.revertedWith("You do not have sufficient balance to execute this transaction");
         })
 
         it("Should revert if set APY without approval",async function(){

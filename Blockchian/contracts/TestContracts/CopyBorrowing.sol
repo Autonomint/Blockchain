@@ -53,14 +53,14 @@ contract BorrowingTest is Ownable,ReentrancyGuard {
     uint8   public APY; 
     uint256 public totalNormalizedAmount; // total normalized amount in protocol
     address public priceFeedAddress; // ETH USD pricefeed address
-    uint128 public lastEthprice; // previous eth price
+    uint128 private lastEthprice; // previous eth price
     uint256 public lastEthVaultValue; // previous eth vault value
     uint256 public lastCDSPoolValue; // previous CDS pool value
-    uint256 public lastTotalCDSPool;
+    uint256 private lastTotalCDSPool;
     uint256 public lastCumulativeRate; // previous cumulative rate
     uint128 private lastEventTime;
     uint128 public noOfLiquidations; // total number of liquidation happened till now
-    uint64  public withdrawTimeLimit; // withdraw time limit
+    uint64  private withdrawTimeLimit; // withdraw time limit
     uint128 public ratePerSec;
     uint64  private bondRatio;
 
@@ -69,11 +69,11 @@ contract BorrowingTest is Ownable,ReentrancyGuard {
     bytes32 public DOMAIN_SEPARATOR;
     bytes32 public constant PERMIT_TYPEHASH = keccak256("Permit(address holder,address spender,uint256 allowedAmount,bool allowed,uint256 expiry)");
 
-    uint128 PRECISION = 1e6; // ETH price precision
-    uint128 CUMULATIVE_PRECISION = 1e7;
-    uint128 RATIO_PRECISION = 1e4;
-    uint128 RATE_PRECISION = 1e27;
-    uint128 AMINT_PRECISION = 1e12;
+    uint128 private PRECISION = 1e6; // ETH price precision
+    uint128 private CUMULATIVE_PRECISION = 1e7;
+    uint128 private RATIO_PRECISION = 1e4;
+    uint128 private RATE_PRECISION = 1e27;
+    uint128 private AMINT_PRECISION = 1e12;
 
     event Deposit(uint64 index,uint256 depositedAmount,uint256 borrowAmount,uint256 normalizedAmount);
     event Withdraw(uint256 borrowDebt,uint128 withdrawAmount,uint128 noOfAbond);
@@ -233,12 +233,12 @@ contract BorrowingTest is Ownable,ReentrancyGuard {
         //Call calculateInverseOfRatio function to find ratio
         uint64 ratio = calculateRatio(msg.value,uint128(_ethPrice));
         require(ratio >= (2 * RATIO_PRECISION),"Not enough fund in CDS");
-        
-        //Call the deposit function in Treasury contract
-        (bool deposited,uint64 index) = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
 
         // Call calculateOptionPrice in options contract to get options fees
         uint256 optionFees = options.calculateOptionPrice(_ethPrice,_volatility,msg.value,_strikePercent);
+        
+        //Call the deposit function in Treasury contract
+        (bool deposited,uint64 index) = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
 
         //Check whether the deposit is successfull
         if(!deposited){
@@ -262,6 +262,7 @@ contract BorrowingTest is Ownable,ReentrancyGuard {
 
         //Call calculateCumulativeRate() to get currentCumulativeRate
         uint256 currentCumulativeRate = calculateCumulativeRate();
+        lastEventTime = uint128(block.timestamp);
 
         // Calculate normalizedAmount
         uint256 normalizedAmount = (borrowAmount * RATE_PRECISION * RATE_PRECISION)/currentCumulativeRate;
@@ -275,7 +276,6 @@ contract BorrowingTest is Ownable,ReentrancyGuard {
         // Calculate normalizedAmount of Protocol
         totalNormalizedAmount += normalizedAmount;
         lastEthprice = uint128(_ethPrice);
-        lastEventTime = uint128(block.timestamp);
         emit Deposit(index,msg.value,borrowAmount,normalizedAmount);
     }
 

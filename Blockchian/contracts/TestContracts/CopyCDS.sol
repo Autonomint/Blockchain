@@ -152,31 +152,8 @@ contract CDSTest is Ownable,ReentrancyGuard{
             require(amintAmount >= (amintLimit * totalDepositingAmount)/100,"Required AMINT amount not met");
             require(amint.balanceOf(msg.sender) >= amintAmount,"Insufficient AMINT balance with msg.sender"); // check if user has sufficient AMINT token
         }
-        if(usdtAmount != 0 && amintAmount != 0){
-            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient USDT balance with msg.sender"); // check if user has sufficient AMINT token
-            bool usdtTransfer = usdt.transferFrom(msg.sender, treasuryAddress, usdtAmount); // transfer amount to this contract
-            require(usdtTransfer == true, "USDT Transfer failed in CDS deposit");
-            //Transfer AMINT tokens from msg.sender to this contract
-            bool amintTransfer = amint.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract       
-            require(amintTransfer == true, "AMINT Transfer failed in CDS deposit");
-        }else if(usdtAmount == 0){
-            bool transfer = amint.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract
-            //check it token have successfully transfer or not
-            require(transfer == true, "AMINT Transfer failed in CDS deposit");
-        }else{
-            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient USDT balance with msg.sender"); // check if user has sufficient AMINT token
-            bool transfer = usdt.transferFrom(msg.sender, treasuryAddress, usdtAmount); // transfer amount to this contract
-            //check it token have successfully transfer or not
-            require(transfer == true, "USDT Transfer failed in CDS deposit");
-        }
-        //increment usdtAmountDepositedTillNow
-        usdtAmountDepositedTillNow += usdtAmount;
-        if(usdtAmount != 0 ){
-            bool success = amint.mint(treasuryAddress,usdtAmount);
-            require(success == true, "AMINT mint to treasury failed in CDS deposit");
-        }
 
-        uint128 ethPrice = getLatestData();
+                uint128 ethPrice = getLatestData();
 
         require(ethPrice != 0,"Oracle Failed");
 
@@ -213,6 +190,8 @@ contract CDSTest is Ownable,ReentrancyGuard{
         //add deposited amount to totalCdsDepositedAmount
         totalCdsDepositedAmount += totalDepositingAmount;
         totalCdsDepositedAmountWithOptionFees += totalDepositingAmount;
+        //increment usdtAmountDepositedTillNow
+        usdtAmountDepositedTillNow += usdtAmount;
         
         //add deposited time of perticular index and amount in cdsAccountDetails
         cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = uint64(block.timestamp);
@@ -234,6 +213,30 @@ contract CDSTest is Ownable,ReentrancyGuard{
         if(ethPrice != lastEthPrice){
             updateLastEthPrice(ethPrice);
         }
+
+        if(usdtAmount != 0 && amintAmount != 0){
+            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient USDT balance with msg.sender"); // check if user has sufficient AMINT token
+            bool usdtTransfer = usdt.transferFrom(msg.sender, treasuryAddress, usdtAmount); // transfer amount to this contract
+            require(usdtTransfer == true, "USDT Transfer failed in CDS deposit");
+            //Transfer AMINT tokens from msg.sender to this contract
+            bool amintTransfer = amint.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract       
+            require(amintTransfer == true, "AMINT Transfer failed in CDS deposit");
+        }else if(usdtAmount == 0){
+            bool transfer = amint.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract
+            //check it token have successfully transfer or not
+            require(transfer == true, "AMINT Transfer failed in CDS deposit");
+        }else{
+            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient USDT balance with msg.sender"); // check if user has sufficient AMINT token
+            bool transfer = usdt.transferFrom(msg.sender, treasuryAddress, usdtAmount); // transfer amount to this contract
+            //check it token have successfully transfer or not
+            require(transfer == true, "USDT Transfer failed in CDS deposit");
+        }
+
+        if(usdtAmount != 0 ){
+            bool success = amint.mint(treasuryAddress,usdtAmount);
+            require(success == true, "AMINT mint to treasury failed in CDS deposit");
+        }
+
         emit Deposit(totalDepositingAmount,index,_liquidationAmount,cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount,cdsDetails[msg.sender].cdsAccountDetails[index].depositValue);
     }
 
@@ -308,18 +311,18 @@ contract CDSTest is Ownable,ReentrancyGuard{
             totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
             totalCdsDepositedAmountWithOptionFees -= returnAmount;
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
+            if(treasury.totalVolumeOfBorrowersAmountinUSD() != 0){
+                require(borrowing.calculateRatio(0,ethPrice) > (2 * RATIO_PRECISION),"Not enough fund in CDS");
+            }
             treasury.approveAmint(address(this),returnAmount);
             bool transfer = amint.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
             require(transfer == true, "Transfer failed in cds withdraw");
-            emit Withdraw(returnAmount,0);
-        }
-        if(treasury.totalVolumeOfBorrowersAmountinUSD() != 0){
-            require(borrowing.calculateRatio(0,ethPrice) > (2 * RATIO_PRECISION),"Not enough fund in CDS");
         }
 
         if(ethPrice != lastEthPrice){
             updateLastEthPrice(ethPrice);
         }
+        emit Withdraw(returnAmount,0);
     }
    
 
@@ -473,7 +476,7 @@ contract CDSTest is Ownable,ReentrancyGuard{
      * @dev calculate cumulative rate
      * @param fees fees to split
      */
-    function calculateCumulativeRate(uint128 fees) public onlyBorrowingContract returns(uint128) {
+    function calculateCumulativeRate(uint128 fees) public onlyBorrowingContract{
         require(fees != 0,"Fees should not be zero");
         totalCdsDepositedAmountWithOptionFees += fees;
         uint128 netCDSPoolValue = uint128(totalCdsDepositedAmountWithOptionFees);
@@ -486,7 +489,6 @@ contract CDSTest is Ownable,ReentrancyGuard{
             currentCumulativeRate = lastCumulativeRate * ((1 * PRECISION) + percentageChange);
             lastCumulativeRate = (currentCumulativeRate/PRECISION);
         }
-        return currentCumulativeRate;
     }
 
     /**
@@ -548,5 +550,4 @@ contract CDSTest is Ownable,ReentrancyGuard{
         totalCdsDepositedAmountWithOptionFees -= _amount;
     }
 
-    receive() external payable{}
 }

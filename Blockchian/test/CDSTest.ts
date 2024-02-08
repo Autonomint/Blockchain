@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { ethers} from "hardhat";
-import {BorrowingTest,Treasury,AMINTStablecoin,ABONDToken,Options,CDSTest,TestUSDT,MultiSign} from "../typechain-types";
+import {BorrowingTest,Treasury,TestAMINTStablecoin,TestABONDToken,Options,CDSTest,TestUSDT,MultiSign} from "../typechain-types";
 import { loadFixture,time } from'@nomicfoundation/hardhat-network-helpers';
 import {
     wethGateway,
@@ -15,8 +15,8 @@ describe("Testing contracts ", function(){
 
     let CDSContract : CDSTest;
     let BorrowingContract : BorrowingTest;
-    let Token : AMINTStablecoin;
-    let abondToken : ABONDToken;
+    let Token : TestAMINTStablecoin;
+    let abondToken : TestABONDToken;
     let usdt: TestUSDT;
     let treasury : Treasury;
     let options : Options;
@@ -32,10 +32,10 @@ describe("Testing contracts ", function(){
     async function deployer(){
         [owner,owner1,owner2,user1,user2,user3] = await ethers.getSigners();
 
-        const AmintStablecoin = await ethers.getContractFactory("AMINTStablecoin");
+        const AmintStablecoin = await ethers.getContractFactory("TestAMINTStablecoin");
         Token = await AmintStablecoin.deploy();
 
-        const ABONDToken = await ethers.getContractFactory("ABONDToken");
+        const ABONDToken = await ethers.getContractFactory("TestABONDToken");
         abondToken = await ABONDToken.deploy();
 
         const MultiSign = await ethers.getContractFactory("MultiSign");
