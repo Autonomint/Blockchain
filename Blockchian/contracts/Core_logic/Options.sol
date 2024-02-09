@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: unlicensed
 
-pragma solidity 0.8.19;
+pragma solidity 0.8.20;
 
 import "../interface/ITreasury.sol";
 import "../interface/CDSInterface.sol";
