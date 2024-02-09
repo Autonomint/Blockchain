@@ -4,8 +4,10 @@ pragma solidity 0.8.20;
 // import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 // import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interface/IAmint.sol";
 import "../interface/IBorrowing.sol";
@@ -15,9 +17,9 @@ import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 
-contract CDSTest is Ownable,ReentrancyGuard{
+contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuard{
 
-    IAMINT      public immutable amint; // our stablecoin
+    IAMINT      public amint; // our stablecoin
     IBorrowing  public borrowing; // Borrowing contract interface
     ITreasury   public treasury; // Treasury contrcat interface
     AggregatorV3Interface internal dataFeed;
@@ -83,7 +85,25 @@ contract CDSTest is Ownable,ReentrancyGuard{
     event Deposit(uint128 depositedAmint,uint64 index,uint128 liquidationAmount,uint128 normalizedAmount,uint128 depositVal);
     event Withdraw(uint128 withdrewAmint,uint128 withdrawETH);
 
-    constructor(address _amint,address priceFeed,address _usdt,address _multiSign) {
+    // constructor(address _amint,address priceFeed,address _usdt,address _multiSign) Ownable(msg.sender) {
+    //     amint = IAMINT(_amint); // amint token contract address
+    //     usdt = IERC20(_usdt);
+    //     multiSign = IMultiSign(_multiSign);
+    //     dataFeed = AggregatorV3Interface(priceFeed);
+    //     lastEthPrice = getLatestData();
+    //     fallbackEthPrice = lastEthPrice;
+    //     lastCumulativeRate = PRECISION;
+    //     cumulativeValueSign = true;
+    // }
+
+    function initialize(
+        address _amint,
+        address priceFeed,
+        address _usdt,
+        address _multiSign
+    ) initializer public{
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
         amint = IAMINT(_amint); // amint token contract address
         usdt = IERC20(_usdt);
         multiSign = IMultiSign(_multiSign);
@@ -93,6 +113,8 @@ contract CDSTest is Ownable,ReentrancyGuard{
         lastCumulativeRate = PRECISION;
         cumulativeValueSign = true;
     }
+
+    function _authorizeUpgrade(address implementation) internal onlyOwner override{}
 
     modifier onlyBorrowingContract() {
         require( msg.sender == borrowingContract, "This function can only called by borrowing contract");

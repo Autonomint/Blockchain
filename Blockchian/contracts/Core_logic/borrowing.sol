@@ -3,7 +3,7 @@
 pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "../interface/CDSInterface.sol";
 import "../interface/IAmint.sol";
 import "../interface/IAbond.sol";
@@ -86,7 +86,7 @@ contract Borrowing is Ownable,ReentrancyGuard {
         address _multiSign,
         address _priceFeedAddress,
         uint64 chainId
-        ){
+        ) Ownable(msg.sender) {
         amint = IAMINT(_tokenAddress);
         cds = CDSInterface(_cds);
         cdsAddress = _cds;

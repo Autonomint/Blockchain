@@ -5,7 +5,7 @@ pragma solidity 0.8.20;
 // import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interface/IAmint.sol";
 import "../interface/IBorrowing.sol";
@@ -83,7 +83,7 @@ contract CDS is Ownable,ReentrancyGuard{
     event Deposit(uint128 depositedAmint,uint64 index,uint128 liquidationAmount,uint128 normalizedAmount,uint128 depositVal);
     event Withdraw(uint128 withdrewAmint,uint128 withdrawETH);
 
-    constructor(address _amint,address priceFeed,address _usdt,address _multiSign) {
+    constructor(address _amint,address priceFeed,address _usdt,address _multiSign) Ownable(msg.sender) {
         amint = IAMINT(_amint); // amint token contract address
         usdt = IERC20(_usdt);
         multiSign = IMultiSign(_multiSign);

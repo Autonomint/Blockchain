@@ -2,10 +2,10 @@
 
 pragma solidity 0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-// import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-// import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "../interface/CDSInterface.sol";
 import "../interface/IAmint.sol";
 import "../interface/IAbond.sol";
@@ -15,7 +15,7 @@ import "../interface/IMultiSign.sol";
 import "hardhat/console.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract BorrowingTest is Ownable,ReentrancyGuard {
+contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuard {
 
     error Borrowing_DepositFailed();
     error Borrowing_GettingETHPriceFailed();
@@ -81,14 +81,41 @@ contract BorrowingTest is Ownable,ReentrancyGuard {
     event Withdraw(uint256 borrowDebt,uint128 withdrawAmount,uint128 noOfAbond);
     event Liquidate(uint64 index,uint128 liquidationAmount,uint128 profits,uint128 ethAmount,uint256 availableLiquidationAmount);
 
-    constructor(
+    // constructor(
+    //     address _tokenAddress,
+    //     address _cds,
+    //     address _abondToken,
+    //     address _multiSign,
+    //     address _priceFeedAddress,
+    //     uint64 chainId
+    //     ) {
+    //     amint = IAMINT(_tokenAddress);
+    //     cds = CDSInterface(_cds);
+    //     cdsAddress = _cds;
+    //     abond = IABONDToken(_abondToken);
+    //     multiSign = IMultiSign(_multiSign);
+    //     priceFeedAddress = _priceFeedAddress;                       //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
+    //     lastEthprice = uint128(getUSDValue());
+    //     lastEventTime = uint128(block.timestamp);
+    //     DOMAIN_SEPARATOR = keccak256(abi.encode(
+    //         keccak256("EIP712Domain(string name,string version,uint64 chainId,address verifyingContract)"),
+    //         keccak256(bytes(name)),
+    //         keccak256(bytes(version)),
+    //         chainId,
+    //         address(this)
+    //     ));
+    // }
+
+    function initialize( 
         address _tokenAddress,
         address _cds,
         address _abondToken,
         address _multiSign,
         address _priceFeedAddress,
         uint64 chainId
-        ){
+        ) initializer public{
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
         amint = IAMINT(_tokenAddress);
         cds = CDSInterface(_cds);
         cdsAddress = _cds;
@@ -105,6 +132,8 @@ contract BorrowingTest is Ownable,ReentrancyGuard {
             address(this)
         ));
     }
+
+    function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
 
     modifier onlyAdmin(){
         require(msg.sender == admin,"Caller is not an admin");

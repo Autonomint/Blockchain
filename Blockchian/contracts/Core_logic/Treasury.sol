@@ -144,7 +144,7 @@ contract Treasury is Ownable{
         address _aavePoolAddressProvider,
         address _aToken,
         address _usdt
-        ) {
+        ) Ownable(msg.sender) {
             borrowingContract = _borrowing;
             cdsContract = _cdsContract;
             borrow = IBorrowing(_borrowing);
