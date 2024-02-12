@@ -3,7 +3,7 @@
 pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "../interface/CDSInterface.sol";
@@ -15,7 +15,7 @@ import "../interface/IMultiSign.sol";
 import "hardhat/console.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuard {
+contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuardUpgradeable {
 
     error Borrowing_DepositFailed();
     error Borrowing_GettingETHPriceFailed();
@@ -71,11 +71,11 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
     bytes32 public DOMAIN_SEPARATOR;
     bytes32 public constant PERMIT_TYPEHASH = keccak256("Permit(address holder,address spender,uint256 allowedAmount,bool allowed,uint256 expiry)");
 
-    uint128 private PRECISION = 1e6; // ETH price precision
-    uint128 private CUMULATIVE_PRECISION = 1e7;
-    uint128 private RATIO_PRECISION = 1e4;
-    uint128 private RATE_PRECISION = 1e27;
-    uint128 private AMINT_PRECISION = 1e12;
+    uint128 private PRECISION; // ETH price precision
+    uint128 private CUMULATIVE_PRECISION;
+    uint128 private RATIO_PRECISION;
+    uint128 private RATE_PRECISION;
+    uint128 private AMINT_PRECISION;
 
     event Deposit(uint64 index,uint256 depositedAmount,uint256 borrowAmount,uint256 normalizedAmount);
     event Withdraw(uint256 borrowDebt,uint128 withdrawAmount,uint128 noOfAbond);
@@ -122,8 +122,6 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
         abond = IABONDToken(_abondToken);
         multiSign = IMultiSign(_multiSign);
         priceFeedAddress = _priceFeedAddress;                       //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
-        lastEthprice = uint128(getUSDValue());
-        lastEventTime = uint128(block.timestamp);
         DOMAIN_SEPARATOR = keccak256(abi.encode(
             keccak256("EIP712Domain(string name,string version,uint64 chainId,address verifyingContract)"),
             keccak256(bytes(name)),
@@ -131,6 +129,13 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
             chainId,
             address(this)
         ));
+        PRECISION = 1e6;
+        CUMULATIVE_PRECISION = 1e7;
+        RATIO_PRECISION = 1e4;
+        RATE_PRECISION = 1e27;
+        AMINT_PRECISION = 1e12;
+        lastEthprice = uint128(getUSDValue());
+        lastEventTime = uint128(block.timestamp);
     }
 
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}

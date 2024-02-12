@@ -2,6 +2,7 @@ import { HardhatUserConfig } from "hardhat/config";
 require("@nomicfoundation/hardhat-chai-matchers");
 import "solidity-coverage";
 import "@nomicfoundation/hardhat-toolbox";
+import "@openzeppelin/hardhat-upgrades";
 import "hardhat-tracer";
 import dotenv from 'dotenv';
 dotenv.config({path:".env"});

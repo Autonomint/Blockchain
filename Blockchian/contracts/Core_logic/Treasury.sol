@@ -2,7 +2,10 @@
 
 pragma solidity 0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/interfaces/IERC20.sol";
 import "../interface/IAmint.sol";
 import "../interface/IBorrowing.sol";
@@ -14,7 +17,7 @@ import "hardhat/console.sol";
 
 interface IATOKEN is IERC20{}
 
-contract Treasury is Ownable{
+contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuardUpgradeable {
 
     error Treasury_ZeroDeposit();
     error Treasury_ZeroWithdraw();
@@ -120,9 +123,9 @@ contract Treasury is Ownable{
     uint256 public interestFromExternalProtocolDuringLiquidation;
 
     //no of times deposited in external protocol(always 1 ahead) 
-    uint64 public externalProtocolDepositCount = 1;
-    uint256 PRECISION = 1e18;
-    uint256 CUMULATIVE_PRECISION = 1e27;
+    uint64 public externalProtocolDepositCount;
+    uint256 PRECISION;
+    uint256 CUMULATIVE_PRECISION;
 
     // Eth depsoited in particular index
     mapping(uint256=>uint256) externalProtocolCountTotalValue;
@@ -135,7 +138,30 @@ contract Treasury is Ownable{
     event WithdrawFromCompound(uint64 count,uint256 amount);
 
 
-    constructor(
+    // constructor(
+    //     address _borrowing,
+    //     address _tokenAddress,
+    //     address _cdsContract,
+    //     address _wethGateway,
+    //     address _cEther,
+    //     address _aavePoolAddressProvider,
+    //     address _aToken,
+    //     address _usdt
+    //     ) Ownable(msg.sender) {
+    //         borrowingContract = _borrowing;
+    //         cdsContract = _cdsContract;
+    //         borrow = IBorrowing(_borrowing);
+    //         amint = IAMINT(_tokenAddress);
+    //         wethGateway = IWrappedTokenGatewayV3(_wethGateway);       //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
+    //         cEther = ICEther(_cEther);                                //0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5
+    //         compoundAddress = _cEther;
+    //         aavePoolAddressProvider = ILendingPoolAddressesProvider(_aavePoolAddressProvider);  //0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
+    //         aToken = IATOKEN(_aToken);                                                   //0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
+    //         aaveWETH = _wethGateway;
+    //         usdt = IERC20(_usdt);
+    // }
+
+    function initialize(
         address _borrowing,
         address _tokenAddress,
         address _cdsContract,
@@ -144,19 +170,26 @@ contract Treasury is Ownable{
         address _aavePoolAddressProvider,
         address _aToken,
         address _usdt
-        ) Ownable(msg.sender) {
-            borrowingContract = _borrowing;
-            cdsContract = _cdsContract;
-            borrow = IBorrowing(_borrowing);
-            amint = IAMINT(_tokenAddress);
-            wethGateway = IWrappedTokenGatewayV3(_wethGateway);       //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
-            cEther = ICEther(_cEther);                                //0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5
-            compoundAddress = _cEther;
-            aavePoolAddressProvider = ILendingPoolAddressesProvider(_aavePoolAddressProvider);  //0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
-            aToken = IATOKEN(_aToken);                                                   //0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
-            aaveWETH = _wethGateway;
-            usdt = IERC20(_usdt);
+        ) initializer public{
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
+        borrowingContract = _borrowing;
+        cdsContract = _cdsContract;
+        borrow = IBorrowing(_borrowing);
+        amint = IAMINT(_tokenAddress);
+        wethGateway = IWrappedTokenGatewayV3(_wethGateway);       //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
+        cEther = ICEther(_cEther);                                //0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5
+        compoundAddress = _cEther;
+        aavePoolAddressProvider = ILendingPoolAddressesProvider(_aavePoolAddressProvider);  //0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
+        aToken = IATOKEN(_aToken);                                                   //0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
+        aaveWETH = _wethGateway;
+        usdt = IERC20(_usdt);
+        externalProtocolDepositCount = 1;
+        PRECISION = 1e18;
+        CUMULATIVE_PRECISION = 1e27;
     }
+
+    function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
 
     modifier onlyBorrowingContract() {
         require( msg.sender == borrowingContract, "This function can only called by borrowing contract");

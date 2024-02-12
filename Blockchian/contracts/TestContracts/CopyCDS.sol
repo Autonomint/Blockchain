@@ -7,7 +7,7 @@ pragma solidity 0.8.20;
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interface/IAmint.sol";
 import "../interface/IBorrowing.sol";
@@ -17,7 +17,7 @@ import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 
-contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuard{
+contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuardUpgradeable{
 
     IAMINT      public amint; // our stablecoin
     IBorrowing  public borrowing; // Borrowing contract interface
@@ -45,8 +45,8 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
     uint256 public burnedAmintInRedeem;
     uint128 public cumulativeValue;
     bool    public cumulativeValueSign;
-    uint128 public PRECISION = 1e12;
-    uint128 RATIO_PRECISION = 1e4;
+    uint128 public PRECISION;
+    uint128 RATIO_PRECISION;
 
     struct CdsAccountDetails {
         uint64 depositedTime;
@@ -110,6 +110,8 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
         dataFeed = AggregatorV3Interface(priceFeed);
         lastEthPrice = getLatestData();
         fallbackEthPrice = lastEthPrice;
+        PRECISION = 1e12;
+        RATIO_PRECISION = 1e4;
         lastCumulativeRate = PRECISION;
         cumulativeValueSign = true;
     }
