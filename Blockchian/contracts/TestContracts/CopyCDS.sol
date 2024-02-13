@@ -16,7 +16,6 @@ import "../interface/IMultiSign.sol";
 import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-
 contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuardUpgradeable{
 
     IAMINT      public amint; // our stablecoin
@@ -26,9 +25,8 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
     IMultiSign  public multiSign;
     IERC20      public usdt; // USDT interface
 
+    address private admin; // admin address
     address public borrowingContract; // borrowing contract address
-
-    address public ethVault; 
     address public treasuryAddress; // treasury contract address
 
     uint128 public lastEthPrice;
@@ -76,6 +74,11 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
         uint128 ethAmount;
         uint256 availableLiquidationAmount;
     }
+    
+    struct CalculateValueResult{
+        uint128 currentValue;
+        bool gains;
+    }
 
     mapping (address => CdsDetails) public cdsDetails;
 
@@ -118,6 +121,11 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
 
     function _authorizeUpgrade(address implementation) internal onlyOwner override{}
 
+    modifier onlyAdmin(){
+        require(msg.sender == admin,"Caller is not an admin");
+        _;
+    }
+
     modifier onlyBorrowingContract() {
         require( msg.sender == borrowingContract, "This function can only called by borrowing contract");
         _;
@@ -150,6 +158,16 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
     }
 
     /**
+     * @dev set admin address
+     * @param _admin  admin address
+     */
+    function setAdmin(address _admin) external onlyOwner{
+        require(_admin != address(0) && isContract(_admin) != true, "Admin can't be contract address & zero address");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(5)));
+        admin = _admin;    
+    }
+
+    /**
      * @dev amint and usdt deposit to cds
      * @param usdtAmount usdt amount to deposit
      * @param amintAmount amint amount to deposit
@@ -177,7 +195,7 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
             require(amint.balanceOf(msg.sender) >= amintAmount,"Insufficient AMINT balance with msg.sender"); // check if user has sufficient AMINT token
         }
 
-                uint128 ethPrice = getLatestData();
+        uint128 ethPrice = getLatestData();
 
         require(ethPrice != 0,"Oracle Failed");
 
@@ -206,8 +224,8 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
 
         //storing current ETH/USD rate
         cdsDetails[msg.sender].cdsAccountDetails[index].depositPrice = ethPrice;
-        (uint128 depositValue,bool gains) = calculateValue(ethPrice);
-        setCumulativeValue(depositValue,gains);
+        CalculateValueResult memory result = calculateValue(ethPrice);
+        setCumulativeValue(result.currentValue,result.gains);
         cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = cumulativeValue;
         cdsDetails[msg.sender].cdsAccountDetails[index].depositValueSign = cumulativeValueSign;
 
@@ -360,8 +378,8 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
     ) internal returns(uint128){
 
         // Calculate current value
-        (uint128 currentVal,bool gains) = calculateValue(_ethPrice);
-        setCumulativeValue(currentVal,gains);
+        CalculateValueResult memory result = calculateValue(_ethPrice);
+        setCumulativeValue(result.currentValue,result.gains);
         uint128 depositedAmount = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
         uint128 cumulativeValueAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
         // Get the cumulative value sign at the time of deposit
@@ -433,34 +451,38 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
         require(success == true, "USDT Transfer failed in redeemUSDT");
     }
 
-    function setWithdrawTimeLimit(uint64 _timeLimit) external onlyOwner {
+    function setWithdrawTimeLimit(uint64 _timeLimit) external onlyAdmin {
         require(_timeLimit != 0, "Withdraw time limit can't be zero");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(3)));
         withdrawTimeLimit = _timeLimit;
     }
 
-    function setBorrowingContract(address _address) external onlyOwner {
+    function setBorrowingContract(address _address) external onlyAdmin {
         require(_address != address(0) && isContract(_address) != false, "Input address is invalid");
         borrowingContract = _address;
         borrowing = IBorrowing(_address);
     }
 
-    function setTreasury(address _treasury) external onlyOwner{
+    function setTreasury(address _treasury) external onlyAdmin{
         require(_treasury != address(0) && isContract(_treasury) != false, "Input address is invalid");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(7)));
         treasuryAddress = _treasury;
         treasury = ITreasury(_treasury);
     }
 
-    function setAmintLimit(uint8 percent) external onlyOwner{
+    function setAmintLimit(uint8 percent) external onlyAdmin{
         require(percent != 0, "Amint limit can't be zero");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(9)));
         amintLimit = percent;  
     }
 
-    function setUsdtLimit(uint64 amount) external onlyOwner{
+    function setUsdtLimit(uint64 amount) external onlyAdmin{
         require(amount != 0, "USDT limit can't be zero");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(10)));
         usdtLimit = amount;  
     }
 
-    function calculateValue(uint128 _price) internal view returns(uint128,bool) {
+    function calculateValue(uint128 _price) internal view returns(CalculateValueResult memory) {
         uint128 _amount = 1000;
         uint256 vaultBal = treasury.totalVolumeOfBorrowersAmountinWei();
         uint128 priceDiff;
@@ -493,7 +515,7 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
             }
             value = uint128((_amount * vaultBal * priceDiff * 1e6) / (PRECISION * totalCdsDepositedAmount));
         }
-        return (value,gains);
+        return CalculateValueResult(value,gains);
     }
 
     /**
@@ -552,10 +574,6 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
                 cumulativeValue += value;
             }
         }
-    }
-
-    function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory,uint64){
-        return (cdsDetails[depositor].cdsAccountDetails[index],cdsDetails[depositor].index);
     }
 
     function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external onlyBorrowingContract{

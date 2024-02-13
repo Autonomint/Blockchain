@@ -81,31 +81,6 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
     event Withdraw(uint256 borrowDebt,uint128 withdrawAmount,uint128 noOfAbond);
     event Liquidate(uint64 index,uint128 liquidationAmount,uint128 profits,uint128 ethAmount,uint256 availableLiquidationAmount);
 
-    // constructor(
-    //     address _tokenAddress,
-    //     address _cds,
-    //     address _abondToken,
-    //     address _multiSign,
-    //     address _priceFeedAddress,
-    //     uint64 chainId
-    //     ) {
-    //     amint = IAMINT(_tokenAddress);
-    //     cds = CDSInterface(_cds);
-    //     cdsAddress = _cds;
-    //     abond = IABONDToken(_abondToken);
-    //     multiSign = IMultiSign(_multiSign);
-    //     priceFeedAddress = _priceFeedAddress;                       //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
-    //     lastEthprice = uint128(getUSDValue());
-    //     lastEventTime = uint128(block.timestamp);
-    //     DOMAIN_SEPARATOR = keccak256(abi.encode(
-    //         keccak256("EIP712Domain(string name,string version,uint64 chainId,address verifyingContract)"),
-    //         keccak256(bytes(name)),
-    //         keccak256(bytes(version)),
-    //         chainId,
-    //         address(this)
-    //     ));
-    // }
-
     function initialize( 
         address _tokenAddress,
         address _cds,
@@ -168,8 +143,9 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
      * @param _treasury treasury contract address
      */
 
-    function initializeTreasury(address _treasury) external onlyOwner{
+    function setTreasury(address _treasury) external onlyAdmin{
         require(_treasury != address(0) && isContract(_treasury) != false, "Treasury must be contract address & can't be zero address");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(6)));
         treasury = ITreasury(_treasury);
         treasuryAddress = _treasury;
     }
@@ -178,7 +154,7 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
      * @dev set Options contract
      * @param _options option contract address
      */
-    function setOptions(address _options) external onlyOwner{
+    function setOptions(address _options) external onlyAdmin{
         require(_options != address(0) && isContract(_options) != false, "Options must be contract address & can't be zero address");
         options = IOptions(_options);
     }
@@ -188,6 +164,7 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
      */
     function setAdmin(address _admin) external onlyOwner{
         require(_admin != address(0) && isContract(_admin) != true, "Admin can't be contract address & zero address");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(4)));
         admin = _admin;    
     }
 
@@ -197,7 +174,7 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
      * @param amount deposited amount of the borrower
      * @param _ethPrice current eth price
      */
-    function _transferToken(address _borrower,uint256 amount,uint128 _ethPrice,uint256 optionFees) internal returns(uint256){
+    function _transferToken(address _borrower,uint256 amount,uint128 _ethPrice,uint256 optionFees) internal {
         require(_borrower != address(0), "Borrower cannot be zero address");
         require(LTV != 0, "LTV must be set to non-zero value before providing loans");
         
@@ -222,7 +199,6 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
         if(!treasuryMint){
             revert Borrowing_amintMintFailed();
         }
-        return tokensToLend - optionFees;
     }
 
     /**
@@ -272,23 +248,27 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
 
         // Call calculateOptionPrice in options contract to get options fees
         uint256 optionFees = options.calculateOptionPrice(_ethPrice,_volatility,msg.value,_strikePercent);
+
+        uint256 tokensToLend = (msg.value * _ethPrice * LTV) / (AMINT_PRECISION * RATIO_PRECISION);
+        uint256 borrowAmount = tokensToLend - optionFees;
         
         //Call the deposit function in Treasury contract
-        (bool deposited,uint64 index) = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
-
+        ITreasury.DepositResult memory depositResult = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
+        uint64 index = depositResult.borrowerIndex;
         //Check whether the deposit is successfull
-        if(!deposited){
+        if(!depositResult.hasDeposited){
             revert Borrowing_DepositFailed();
         }
 
-        // Call the transfer function to mint AMINT and Get the borrowedAmount
-        uint256 borrowAmount = _transferToken(msg.sender,msg.value,_ethPrice,optionFees);
+        // Call the transfer function to mint AMINT
+        _transferToken(msg.sender,msg.value,_ethPrice,optionFees);
 
         // Call calculateCumulativeRate in cds to split fees to cds users
         cds.calculateCumulativeRate(uint128(optionFees));
 
         //Get the deposit details from treasury
-        (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,index);
+        ITreasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(msg.sender,index);
+        ITreasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
         depositDetail.borrowedAmount = uint128(borrowAmount);
         depositDetail.optionFees = uint128(optionFees);
 
@@ -363,10 +343,11 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
 
         lastEthprice = uint128(_ethPrice);
 
-        (uint64 borrowerIndex,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,_index);
+        ITreasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(msg.sender,_index);
+        ITreasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
 
         // check if borrowerIndex in BorrowerDetails of the msg.sender is greater than or equal to Index
-        if(borrowerIndex >= _index ) {
+        if(getBorrowingResult.totalIndex >= _index ) {
             // Check if user amount in the Index is been liquidated or not
             require(!depositDetail.liquidated,"User amount has been liquidated");
             // check if withdrawed in depositDetail in borrowing of msg.seader is false or not
@@ -391,11 +372,11 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
                     // Calculate interest for the borrower's debt
                     //uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
 
-                    uint256 discountedETH = ((((20*((depositDetail.depositedAmount * 50)/100))/100)*_ethPrice)/100)/AMINT_PRECISION; // 0.4
+                    uint256 discountedETH = ((((80*((depositDetail.depositedAmount * 50)/100))/100)*_ethPrice)/100)/AMINT_PRECISION; // 0.4
                     treasury.updateAbondAmintPool(discountedETH,true);
                     // Calculate the amount of AMINT to burn and sent to the treasury
                     // uint256 halfValue = (50 *(depositDetail.borrowedAmount))/100;
-                    uint256 burnValue = ((depositDetail.borrowedAmount * 50)/100) - discountedETH;// 
+                    uint256 burnValue = depositDetail.borrowedAmount - discountedETH;
 
                     // Burn the AMINT from the Borrower
                     bool success = amint.burnFromUser(msg.sender, burnValue);
@@ -485,7 +466,8 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
 
             // Check the user has required pToken
             require(abond.balanceOf(msg.sender) == aBondTokensAmount,"Don't have enough ABOND Tokens");
-            (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,_index);
+            ITreasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(msg.sender,_index);
+            ITreasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
             // Update Borrower's Data
             treasury.updateTotalDepositedAmount(msg.sender,uint128(depositDetail.depositedAmount));
             depositDetail.withdrawed = true;
@@ -493,11 +475,12 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
             treasury.updateTotalAbondTokensDecrease(msg.sender,aBondTokensAmount);
             depositDetail.aBondTokensAmount = 0;
             treasury.updateDepositDetails(msg.sender,_index,depositDetail);
-            treasury.updateAbondAmintPool((((depositDetail.borrowedAmount*50)/100) - depositDetail.burnedAmint),false);
+            uint256 discountedETH = depositDetail.borrowedAmount - depositDetail.burnedAmint;
+            treasury.updateAbondAmintPool(discountedETH,false);
 
             //Burn the amint from treasury
-            treasury.approveAmint(address(this),(depositDetail.borrowedAmount - depositDetail.burnedAmint));
-            bool transfer = amint.burnFromUser(treasuryAddress,(depositDetail.borrowedAmount - depositDetail.burnedAmint));
+            treasury.approveAmint(address(this),discountedETH);
+            bool transfer = amint.burnFromUser(treasuryAddress,discountedETH);
             if(!transfer){
                 revert Borrowing_WithdrawBurnFailed();
             }
@@ -534,7 +517,8 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
         ++noOfLiquidations;
 
         // Get the borrower details
-        (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(borrower,index);
+        ITreasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(borrower,index);
+        ITreasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
         require(!depositDetail.liquidated,"Already Liquidated");
         
         uint256 externalProtocolInterest = treasury.withdrawFromAaveByUser(borrower,index) + treasury.withdrawFromCompoundByUser(borrower,index);
@@ -594,13 +578,15 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
         return (uint256(price) / PRECISION);
     }
 
-    function setLTV(uint8 _LTV) external onlyOwner {
+    function setLTV(uint8 _LTV) external onlyAdmin {
         require(_LTV != 0, "LTV can't be zero");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(0)));
         LTV = _LTV;
     }
 
-    function setBondRatio(uint64 _bondRatio) external onlyOwner {
+    function setBondRatio(uint64 _bondRatio) external onlyAdmin {
         require(_bondRatio != 0, "Bond Ratio can't be zero");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(8)));
         bondRatio = _bondRatio;
     }
 
@@ -612,8 +598,9 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
         return (lastEthVaultValue/100);
     }
 
-    function setWithdrawTimeLimit(uint64 _timeLimit) external onlyOwner {
+    function setWithdrawTimeLimit(uint64 _timeLimit) external onlyAdmin {
         require(_timeLimit != 0, "Withdraw time limit can't be zero");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(2)));
         withdrawTimeLimit = _timeLimit;
     }
 
@@ -662,7 +649,7 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
             currentEthVaultValue = lastEthVaultValue;
 
             // Get the total amount in CDS
-            lastTotalCDSPool = cds.totalCdsDepositedAmount() * AMINT_PRECISION;
+            lastTotalCDSPool = cds.totalCdsDepositedAmount();
 
             if (currentEthPrice >= lastEthprice){
                 lastCDSPoolValue = lastTotalCDSPool + netPLCdsPool;
@@ -671,30 +658,30 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
             }
 
             // Set the currentCDSPoolValue to lastCDSPoolValue for next deposit
-            currentCDSPoolValue = lastCDSPoolValue;
+            currentCDSPoolValue = lastCDSPoolValue * AMINT_PRECISION;
         }else{
 
             currentEthVaultValue = lastEthVaultValue + (_amount * currentEthPrice);
             lastEthVaultValue = currentEthVaultValue;
 
-            uint256 latestTotalCDSPool = cds.totalCdsDepositedAmount() * AMINT_PRECISION;
+            uint256 latestTotalCDSPool = cds.totalCdsDepositedAmount();
 
             if(currentEthPrice >= lastEthprice){
                 if(latestTotalCDSPool > lastTotalCDSPool){
-                    currentCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) + netPLCdsPool;  
+                    lastCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) + netPLCdsPool;  
                 }else{
-                    currentCDSPoolValue = lastCDSPoolValue - (lastTotalCDSPool - latestTotalCDSPool) + netPLCdsPool;
+                    lastCDSPoolValue = lastCDSPoolValue - (lastTotalCDSPool - latestTotalCDSPool) + netPLCdsPool;
                 }
             }else{
                 if(latestTotalCDSPool > lastTotalCDSPool){
-                    currentCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) - netPLCdsPool;  
+                    lastCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) - netPLCdsPool;  
                 }else{
-                    currentCDSPoolValue = lastCDSPoolValue - (lastTotalCDSPool - latestTotalCDSPool) - netPLCdsPool;
+                    lastCDSPoolValue = lastCDSPoolValue - (lastTotalCDSPool - latestTotalCDSPool) - netPLCdsPool;
                 }
             }
 
             lastTotalCDSPool = latestTotalCDSPool;
-            lastCDSPoolValue = currentCDSPoolValue;
+            currentCDSPoolValue = lastCDSPoolValue * AMINT_PRECISION;
         }
 
         // Calculate ratio by dividing currentEthVaultValue by currentCDSPoolValue,
@@ -703,9 +690,9 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
         return ratio;
     }
 
-    function setAPR(uint128 _ratePerSec) external whenNotPaused(IMultiSign.Functions(3)) onlyOwner{
-        require(multiSign.executeSetAPR());
+    function setAPR(uint128 _ratePerSec) external whenNotPaused(IMultiSign.Functions(3)) onlyAdmin{
         require(_ratePerSec != 0,"Rate should not be zero");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(1)));
         ratePerSec = _ratePerSec;
     }
 

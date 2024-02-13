@@ -106,6 +106,16 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         uint256 cumulativeRate;       
     }
 
+    struct DepositResult{
+        bool hasDeposited;
+        uint64 borrowerIndex;
+    }
+
+    struct GetBorrowingResult{
+        uint64 totalIndex;
+        DepositDetails depositDetails;
+    }
+
     enum Protocol{Aave,Compound}
 
     // Get depositor details by address
@@ -219,7 +229,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         address user,
         uint128 _ethPrice,
         uint64 _depositTime
-    ) external payable onlyBorrowingContract returns(bool,uint64) {
+    ) external payable onlyBorrowingContract returns(DepositResult memory) {
 
         uint64 borrowerIndex;
         //check if borrower is depositing for the first time or not
@@ -272,7 +282,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         borrowing[user].depositDetails[borrowerIndex].cTokensCredited = depositToCompoundByUser(externalProtocolDepositEth);
 
         emit Deposit(user,msg.value);
-        return (borrowing[user].hasDeposited,borrowerIndex);
+        return DepositResult(borrowing[user].hasDeposited,borrowerIndex);
     }
 
     /**
@@ -668,12 +678,6 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     //     return interestGainedByUser;
     // }
 
-    function setBorrowingContract(address _address) external onlyOwner {
-        require(_address != address(0) && isContract(_address) != false, "Input address is invalid");
-        borrowingContract = _address;
-        borrow = IBorrowing(_address);
-    }
-
     function getBalanceInTreasury() external view returns(uint256){
         return address(this).balance;
     }
@@ -731,8 +735,8 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         interestFromExternalProtocolDuringLiquidation += amount;
     }
 
-    function getBorrowing(address depositor,uint64 index) external view returns(uint64,DepositDetails memory){
-        return (
+    function getBorrowing(address depositor,uint64 index) external view returns(GetBorrowingResult memory){
+        return GetBorrowingResult(
             borrowing[depositor].borrowerIndex,
             borrowing[depositor].depositDetails[index]);
     }

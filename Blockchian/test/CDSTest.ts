@@ -33,7 +33,7 @@ describe("Testing contracts ", function(){
         const abondToken = await upgrades.deployProxy(ABONDToken, {kind:'uups'});
 
         const MultiSign = await ethers.getContractFactory("MultiSign");
-        const multiSign = await MultiSign.deploy([owner.getAddress(),owner1.getAddress(),owner2.getAddress()],2);
+        const multiSign = await upgrades.deployProxy(MultiSign,[[await owner.getAddress(),await owner1.getAddress(),await owner2.getAddress()],2],{initializer:'initialize'},{kind:'uups'});
 
         const USDTToken = await ethers.getContractFactory("TestUSDT");
         const usdt = await upgrades.deployProxy(USDTToken, {kind:'uups'});
@@ -49,23 +49,46 @@ describe("Testing contracts ", function(){
 
         const Option = await ethers.getContractFactory("Options");
         const options = await upgrades.deployProxy(Option,[priceFeedAddress,await treasury.getAddress(),await CDSContract.getAddress(),await BorrowingContract.getAddress()],{initializer:'initialize'},{kind:'uups'});
+        
+        await multiSign.connect(owner).approveSetterFunction(4);
+        await multiSign.connect(owner1).approveSetterFunction(4);
+        await BorrowingContract.connect(owner).setAdmin(owner.getAddress());
 
-        await BorrowingContract.initializeTreasury(await treasury.getAddress());
-        await BorrowingContract.setOptions(await options.getAddress());
-        await BorrowingContract.setLTV(80);
-        await BorrowingContract.setAdmin(owner.getAddress());
-        await BorrowingContract.setBondRatio(4);
-        await CDSContract.setTreasury(await treasury.getAddress());
-        await CDSContract.setBorrowingContract(await BorrowingContract.getAddress());
-        await CDSContract.setAmintLimit(80);
-        await CDSContract.setUsdtLimit(20000000000);
+        await multiSign.connect(owner).approveSetterFunction(5);
+        await multiSign.connect(owner1).approveSetterFunction(5);
+        await CDSContract.connect(owner).setAdmin(owner.getAddress());
 
-        await multiSign.connect(owner).approveSetAPR();
-        await multiSign.connect(owner1).approveSetAPR();
-        await BorrowingContract.setAPR(BigInt("1000000001547125957863212449"));
+        await multiSign.connect(owner).approveSetterFunction(6);
+        await multiSign.connect(owner1).approveSetterFunction(6);
+        await BorrowingContract.connect(owner).setTreasury(await treasury.getAddress());
+        await BorrowingContract.connect(owner).setOptions(await options.getAddress());
+
+        await multiSign.connect(owner).approveSetterFunction(0);
+        await multiSign.connect(owner1).approveSetterFunction(0);
+        await BorrowingContract.connect(owner).setLTV(80);
+
+        await multiSign.connect(owner).approveSetterFunction(8);
+        await multiSign.connect(owner1).approveSetterFunction(8);
+        await BorrowingContract.connect(owner).setBondRatio(4);
+
+        await multiSign.connect(owner).approveSetterFunction(7);
+        await multiSign.connect(owner1).approveSetterFunction(7);
+        await CDSContract.connect(owner).setTreasury(await treasury.getAddress());
+        await CDSContract.connect(owner).setBorrowingContract(await BorrowingContract.getAddress());
+
+        await multiSign.connect(owner).approveSetterFunction(9);
+        await multiSign.connect(owner1).approveSetterFunction(9);
+        await CDSContract.connect(owner).setAmintLimit(80);
+
+        await multiSign.connect(owner).approveSetterFunction(10);
+        await multiSign.connect(owner1).approveSetterFunction(10);
+        await CDSContract.connect(owner).setUsdtLimit(20000000000);
+
+        await multiSign.connect(owner).approveSetterFunction(1);
+        await multiSign.connect(owner1).approveSetterFunction(1);
+        await BorrowingContract.connect(owner).setAPR(BigInt("1000000001547125957863212449"));
         await BorrowingContract.calculateCumulativeRate();
         
-        await BorrowingContract.setAdmin(owner.getAddress());
         return {Token,abondToken,usdt,CDSContract,BorrowingContract,treasury,options,multiSign,owner,user1,user2,user3}
     }
     
@@ -215,12 +238,12 @@ describe("Testing contracts ", function(){
 
         it("Should revert if the caller is not owner for setTreasury",async function(){
             const {CDSContract,treasury} = await loadFixture(deployer);
-            await expect(CDSContract.connect(user1).setTreasury(treasury.getAddress())).to.be.revertedWith("Ownable: caller is not the owner");
+            await expect(CDSContract.connect(user1).setTreasury(treasury.getAddress())).to.be.revertedWith("Caller is not an admin");
         })
 
         it("Should revert if the caller is not owner for setWithdrawTimeLimit",async function(){
             const {CDSContract} = await loadFixture(deployer);
-            await expect(CDSContract.connect(user1).setWithdrawTimeLimit(1000)).to.be.revertedWith("Ownable: caller is not the owner");
+            await expect(CDSContract.connect(user1).setWithdrawTimeLimit(1000)).to.be.revertedWith("Caller is not an admin");
         })
 
         // it("Should revert if the caller is not owner for approval",async function(){
@@ -230,7 +253,7 @@ describe("Testing contracts ", function(){
 
         it("Should revert if the caller is not owner for setBorrowingContract",async function(){
             const {BorrowingContract,CDSContract} = await loadFixture(deployer);
-            await expect(CDSContract.connect(user1).setBorrowingContract(BorrowingContract.getAddress())).to.be.revertedWith("Ownable: caller is not the owner");
+            await expect(CDSContract.connect(user1).setBorrowingContract(BorrowingContract.getAddress())).to.be.revertedWith("Caller is not an admin");
         })
 
         it("Should revert if the Treasury address is zero",async function(){
@@ -262,12 +285,16 @@ describe("Testing contracts ", function(){
             expect (await CDSContract.borrowingContract()).to.be.equal(await BorrowingContract.getAddress());     
         })
         it("Should update treasury correctly",async function(){
-            const {treasury,CDSContract} = await loadFixture(deployer);
+            const {treasury,CDSContract,multiSign} = await loadFixture(deployer);
+            await multiSign.connect(owner).approveSetterFunction(7);
+            await multiSign.connect(owner1).approveSetterFunction(7);
             await CDSContract.connect(owner).setTreasury(treasury.getAddress());
             expect (await CDSContract.treasuryAddress()).to.be.equal(await treasury.getAddress());     
         })
         it("Should update withdrawTime correctly",async function(){
-            const {CDSContract} = await loadFixture(deployer);
+            const {CDSContract,multiSign} = await loadFixture(deployer);
+            await multiSign.connect(owner).approveSetterFunction(3);
+            await multiSign.connect(owner1).approveSetterFunction(3);
             await CDSContract.connect(owner).setWithdrawTimeLimit(1500);
             expect (await CDSContract.withdrawTimeLimit()).to.be.equal(1500);     
         })
@@ -389,8 +416,9 @@ describe("Testing contracts ", function(){
         // })
 
         it("Should revert cannot withdraw before the withdraw time limit",async () => {
-            const {CDSContract,usdt} = await loadFixture(deployer);
-
+            const {CDSContract,usdt,multiSign} = await loadFixture(deployer);
+            await multiSign.connect(owner).approveSetterFunction(3);
+            await multiSign.connect(owner1).approveSetterFunction(3);
             await CDSContract.connect(owner).setWithdrawTimeLimit(1000);
             await usdt.connect(user1).mint(user1.getAddress(),30000000000);
             await usdt.connect(user1).approve(CDSContract.getAddress(),30000000000);
@@ -454,7 +482,7 @@ describe("Testing contracts ", function(){
 
         it("Should revert if the caller is not owner for setAmintLImit",async function(){
             const {CDSContract} = await loadFixture(deployer);
-            await expect(CDSContract.connect(user1).setAmintLimit(10)).to.be.revertedWith("Ownable: caller is not the owner");
+            await expect(CDSContract.connect(user1).setAmintLimit(10)).to.be.revertedWith("Caller is not an admin");
         })
 
         it("Should revert if USDT limit can't be zero",async () => {
@@ -464,7 +492,7 @@ describe("Testing contracts ", function(){
 
         it("Should revert if the caller is not owner for setUsdtLImit",async function(){
             const {CDSContract} = await loadFixture(deployer);
-            await expect(CDSContract.connect(user1).setUsdtLimit(1000)).to.be.revertedWith("Ownable: caller is not the owner");
+            await expect(CDSContract.connect(user1).setUsdtLimit(1000)).to.be.revertedWith("Caller is not an admin");
         })
 
         // it("Should revert Fees should not be zero",async function(){

@@ -1,4 +1,4 @@
-import { ethers } from "hardhat";
+import { ethers,upgrades } from "hardhat";
 import hre = require("hardhat");
 
 import {
@@ -23,46 +23,46 @@ import {
 } from"./index"
 
 async function main() {
-  const AMINTStablecoin = await ethers.getContractFactory("AMINTStablecoin");
-  const deployedAMINTStablecoin = await AMINTStablecoin.deploy();
-  await deployedAMINTStablecoin.deployed();
-  console.log("AMINT ADDRESS",deployedAMINTStablecoin.address);
 
-  const ABONDToken = await ethers.getContractFactory("ABONDToken");
-  const deployedABONDToken = await ABONDToken.deploy();
-  await deployedABONDToken.deployed();
-  console.log("ABOND ADDRESS",deployedABONDToken.address);
+  const AMINTStablecoin = await ethers.getContractFactory("TestAMINTStablecoin");
+  const deployedAMINTStablecoin = await upgrades.deployProxy(AMINTStablecoin, {kind:'uups'});
+  await deployedAMINTStablecoin.waitForDeployment();
+  console.log("PROXY ABOND ADDRESS",deployedAMINTStablecoin.address);
+
+  const ABONDToken = await ethers.getContractFactory("TestABONDToken");
+  const deployedABONDToken = await upgrades.deployProxy(ABONDToken, {kind:'uups'});
+  await deployedABONDToken.waitForDeployment();
+  console.log("PROXY ABOND ADDRESS",deployedABONDToken.address);
 
   const TestUSDT = await ethers.getContractFactory("TestUSDT");
-  const deployedTestUSDT = await TestUSDT.deploy();
-  await deployedTestUSDT.deployed();
-  console.log("TEST USDT ADDRESS",deployedTestUSDT.address);
+  const deployedTestUSDT = await upgrades.deployProxy(TestUSDT, {kind:'uups'});
+  await deployedTestUSDT.waitForDeployment();
+  console.log("PROXY TEST USDT ADDRESS",deployedTestUSDT.address);
 
   const multiSign = await ethers.getContractFactory("MultiSign");
-  const deployedMultisign = await multiSign.deploy([owner1,owner2,owner3],2);
-  await deployedMultisign.deployed();
-  console.log("MULTISIGN ADDRESS",deployedMultisign.address);
+  const deployedMultisign = await upgrades.deployProxy(multiSign,[[owner1,owner2,owner3],2],{initializer:'initialize'},{kind:'uups'});
+  await deployedMultisign.waitForDeployment();
+  console.log("PROXY MULTISIGN ADDRESS",deployedMultisign.address);
 
-  const CDS = await ethers.getContractFactory("CDS");
-  const deployedCDS = await CDS.deploy(deployedAMINTStablecoin.address,priceFeedAddressGoerli,deployedTestUSDT.address,deployedMultisign.address);
-  await deployedCDS.deployed();
-  console.log("CDS ADDRESS",deployedCDS.address);
+  const CDS = await ethers.getContractFactory("CDSTest");
+  const deployedCDS = await upgrades.deployProxy(CDS,[await deployedAMINTStablecoin.getAddress(),priceFeedAddressGoerli,await deployedTestUSDT.getAddress(),await deployedMultisign.getAddress()],{initializer:'initialize'},{kind:'uups'})
+  await deployedCDS.waitForDeployment();
+  console.log("PROXY CDS ADDRESS",deployedCDS.address);
 
-  const Borrowing = await ethers.getContractFactory("Borrowing");
-  const deployedBorrowing = await Borrowing.deploy(deployedAMINTStablecoin.address,deployedCDS.address,deployedABONDToken.address,deployedMultisign.address,priceFeedAddressGoerli,5);
-  await deployedBorrowing.deployed();
-  console.log("BORROWING ADDRESS",deployedBorrowing.address);
+  const Borrowing = await ethers.getContractFactory("BorrowingTest");
+  const deployedBorrowing = await upgrades.deployProxy(Borrowing,[await deployedAMINTStablecoin.getAddress(),await deployedCDS.getAddress(),await deployedABONDToken.getAddress(),await deployedMultisign.getAddress(),priceFeedAddressGoerli,1],{initializer:'initialize'},{kind:'uups'});
+  await deployedBorrowing.waitForDeployment();
+  console.log("PROXY BORROWING ADDRESS",deployedBorrowing.address);
 
   const Treasury = await ethers.getContractFactory("Treasury");
-  const deployedTreasury = await Treasury.deploy(deployedBorrowing.address,deployedAMINTStablecoin.address,deployedCDS.address,wethGatewayGoerli,cEtherGoerli,aavePoolAddressGoerli,aTokenAddressGoerli,deployedTestUSDT.address);
-  await deployedTreasury.deployed();
-  console.log("TREASURY ADDRESS",deployedTreasury.address);
+  const deployedTreasury = await upgrades.deployProxy(Treasury,[await deployedBorrowing.getAddress(),await deployedAMINTStablecoin.getAddress(),await deployedCDS.getAddress(),wethGatewayGoerli,cEtherGoerli,aavePoolAddressGoerli,aTokenAddressGoerli,await deployedTestUSDT.getAddress()],{initializer:'initialize'},{kind:'uups'});
+  await deployedTreasury.waitForDeployment();
+  console.log("PROXY TREASURY ADDRESS",deployedTreasury.address);
 
-  const options = await ethers.getContractFactory("Options");
-  const deployedOptions = await options.deploy(priceFeedAddressGoerli,deployedTreasury.address,deployedCDS.address,deployedBorrowing.address);
+  const Option = await ethers.getContractFactory("Options");
+  const deployedOptions = await upgrades.deployProxy(Option,[priceFeedAddressGoerli,await deployedTreasury.getAddress(),await deployedCDS.getAddress(),await deployedBorrowing.getAddress()],{initializer:'initialize'},{kind:'uups'});
   await deployedOptions.deployed();
-  console.log("OPTIONS ADDRESS",deployedOptions.address);
-
+  console.log("PROXY OPTIONS ADDRESS",deployedOptions.address);
 
 
   async function sleep(ms:number) {
@@ -116,17 +116,28 @@ async function main() {
     constructorArguments: [priceFeedAddressGoerli,deployedTreasury.address,deployedCDS.address,deployedBorrowing.address],
   });
 
+  await deployedMultisign.approveSetterFunction(4);
+  await deployedMultisign.approveSetterFunction(5);
+  await deployedMultisign.approveSetterFunction(6);
+  await deployedMultisign.approveSetterFunction(0);
+  await deployedMultisign.approveSetterFunction(8);
+  await deployedMultisign.approveSetterFunction(7);
+  await deployedMultisign.approveSetterFunction(9);
+  await deployedMultisign.approveSetterFunction(10);
+  await deployedMultisign.approveSetterFunction(1);
 
-  await deployedBorrowing.initializeTreasury(deployedTreasury.address);
-  await deployedBorrowing.setOptions(deployedOptions.address);
-  await deployedBorrowing.setLTV(80);
-  await deployedBorrowing.setAdmin(owner1);
-  await deployedBorrowing.setBondRatio(4);
 
-  await deployedCDS.setBorrowingContract(deployedBorrowing.address);
-  await deployedCDS.setTreasury(deployedTreasury.address);
-  await deployedCDS.setAmintLimit(80);
-  await deployedCDS.setUsdtLimit(20000000000);
+  // await deployedBorrowing.setAdmin(owner1);
+  // await deployedBorrowing.setTreasury(deployedTreasury.address);
+  // await deployedBorrowing.setOptions(deployedOptions.address);
+  // await deployedBorrowing.setLTV(80);
+  // await deployedBorrowing.setBondRatio(4);
+
+  // await deployedCDS.setAdmin(owner1);
+  // await deployedCDS.setBorrowingContract(deployedBorrowing.address);
+  // await deployedCDS.setTreasury(deployedTreasury.address);
+  // await deployedCDS.setAmintLimit(80);
+  // await deployedCDS.setUsdtLimit(20000000000);
 
   await deployedTestUSDT.mint(owner1,10000000000);
   await deployedTestUSDT.approve(deployedCDS.address,10000000000);
