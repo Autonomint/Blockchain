@@ -4,8 +4,10 @@ pragma solidity 0.8.20;
 // import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 // import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interface/IAmint.sol";
 import "../interface/IBorrowing.sol";
@@ -14,19 +16,17 @@ import "../interface/IMultiSign.sol";
 import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
+contract CDS is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuardUpgradeable{
 
-contract CDS is Ownable,ReentrancyGuard{
-
-    IAMINT      public immutable amint; // our stablecoin
+    IAMINT      public amint; // our stablecoin
     IBorrowing  public borrowing; // Borrowing contract interface
     ITreasury   public treasury; // Treasury contrcat interface
     AggregatorV3Interface internal dataFeed;
     IMultiSign  public multiSign;
     IERC20      public usdt; // USDT interface
 
+    address private admin; // admin address
     address public borrowingContract; // borrowing contract address
-
-    address public ethVault; 
     address public treasuryAddress; // treasury contract address
 
     uint128 public lastEthPrice;
@@ -43,8 +43,8 @@ contract CDS is Ownable,ReentrancyGuard{
     uint256 public burnedAmintInRedeem;
     uint128 public cumulativeValue;
     bool    public cumulativeValueSign;
-    uint128 public PRECISION = 1e12;
-    uint128 RATIO_PRECISION = 1e4;
+    uint128 public PRECISION;
+    uint128 RATIO_PRECISION;
 
     struct CdsAccountDetails {
         uint64 depositedTime;
@@ -74,6 +74,11 @@ contract CDS is Ownable,ReentrancyGuard{
         uint128 ethAmount;
         uint256 availableLiquidationAmount;
     }
+    
+    struct CalculateValueResult{
+        uint128 currentValue;
+        bool gains;
+    }
 
     mapping (address => CdsDetails) public cdsDetails;
 
@@ -83,15 +88,31 @@ contract CDS is Ownable,ReentrancyGuard{
     event Deposit(uint128 depositedAmint,uint64 index,uint128 liquidationAmount,uint128 normalizedAmount,uint128 depositVal);
     event Withdraw(uint128 withdrewAmint,uint128 withdrawETH);
 
-    constructor(address _amint,address priceFeed,address _usdt,address _multiSign) Ownable(msg.sender) {
+    function initialize(
+        address _amint,
+        address priceFeed,
+        address _usdt,
+        address _multiSign
+    ) initializer public{
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
         amint = IAMINT(_amint); // amint token contract address
         usdt = IERC20(_usdt);
         multiSign = IMultiSign(_multiSign);
         dataFeed = AggregatorV3Interface(priceFeed);
         lastEthPrice = getLatestData();
         fallbackEthPrice = lastEthPrice;
+        PRECISION = 1e12;
+        RATIO_PRECISION = 1e4;
         lastCumulativeRate = PRECISION;
         cumulativeValueSign = true;
+    }
+
+    function _authorizeUpgrade(address implementation) internal onlyOwner override{}
+
+    modifier onlyAdmin(){
+        require(msg.sender == admin,"Caller is not an admin");
+        _;
     }
 
     modifier onlyBorrowingContract() {
@@ -126,6 +147,16 @@ contract CDS is Ownable,ReentrancyGuard{
     }
 
     /**
+     * @dev set admin address
+     * @param _admin  admin address
+     */
+    function setAdmin(address _admin) external onlyOwner{
+        require(_admin != address(0) && isContract(_admin) != true, "Admin can't be contract address & zero address");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(5)));
+        admin = _admin;    
+    }
+
+    /**
      * @dev amint and usdt deposit to cds
      * @param usdtAmount usdt amount to deposit
      * @param amintAmount amint amount to deposit
@@ -151,29 +182,6 @@ contract CDS is Ownable,ReentrancyGuard{
         }else{
             require(amintAmount >= (amintLimit * totalDepositingAmount)/100,"Required AMINT amount not met");
             require(amint.balanceOf(msg.sender) >= amintAmount,"Insufficient AMINT balance with msg.sender"); // check if user has sufficient AMINT token
-        }
-        if(usdtAmount != 0 && amintAmount != 0){
-            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient USDT balance with msg.sender"); // check if user has sufficient AMINT token
-            bool usdtTransfer = usdt.transferFrom(msg.sender, treasuryAddress, usdtAmount); // transfer amount to this contract
-            require(usdtTransfer == true, "USDT Transfer failed in CDS deposit");
-            //Transfer AMINT tokens from msg.sender to this contract
-            bool amintTransfer = amint.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract       
-            require(amintTransfer == true, "AMINT Transfer failed in CDS deposit");
-        }else if(usdtAmount == 0){
-            bool transfer = amint.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract
-            //check it token have successfully transfer or not
-            require(transfer == true, "AMINT Transfer failed in CDS deposit");
-        }else{
-            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient USDT balance with msg.sender"); // check if user has sufficient AMINT token
-            bool transfer = usdt.transferFrom(msg.sender, treasuryAddress, usdtAmount); // transfer amount to this contract
-            //check it token have successfully transfer or not
-            require(transfer == true, "USDT Transfer failed in CDS deposit");
-        }
-        //increment usdtAmountDepositedTillNow
-        usdtAmountDepositedTillNow += usdtAmount;
-        if(usdtAmount != 0 ){
-            bool success = amint.mint(treasuryAddress,usdtAmount);
-            require(success == true, "AMINT mint to treasury failed in CDS deposit");
         }
 
         uint128 ethPrice = getLatestData();
@@ -205,14 +213,16 @@ contract CDS is Ownable,ReentrancyGuard{
 
         //storing current ETH/USD rate
         cdsDetails[msg.sender].cdsAccountDetails[index].depositPrice = ethPrice;
-        (uint128 depositValue,bool gains) = calculateValue(ethPrice);
-        setCumulativeValue(depositValue,gains);
+        CalculateValueResult memory result = calculateValue(ethPrice);
+        setCumulativeValue(result.currentValue,result.gains);
         cdsDetails[msg.sender].cdsAccountDetails[index].depositValue = cumulativeValue;
         cdsDetails[msg.sender].cdsAccountDetails[index].depositValueSign = cumulativeValueSign;
 
         //add deposited amount to totalCdsDepositedAmount
         totalCdsDepositedAmount += totalDepositingAmount;
         totalCdsDepositedAmountWithOptionFees += totalDepositingAmount;
+        //increment usdtAmountDepositedTillNow
+        usdtAmountDepositedTillNow += usdtAmount;
         
         //add deposited time of perticular index and amount in cdsAccountDetails
         cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = uint64(block.timestamp);
@@ -234,6 +244,30 @@ contract CDS is Ownable,ReentrancyGuard{
         if(ethPrice != lastEthPrice){
             updateLastEthPrice(ethPrice);
         }
+
+        if(usdtAmount != 0 && amintAmount != 0){
+            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient USDT balance with msg.sender"); // check if user has sufficient AMINT token
+            bool usdtTransfer = usdt.transferFrom(msg.sender, treasuryAddress, usdtAmount); // transfer amount to this contract
+            require(usdtTransfer == true, "USDT Transfer failed in CDS deposit");
+            //Transfer AMINT tokens from msg.sender to this contract
+            bool amintTransfer = amint.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract       
+            require(amintTransfer == true, "AMINT Transfer failed in CDS deposit");
+        }else if(usdtAmount == 0){
+            bool transfer = amint.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract
+            //check it token have successfully transfer or not
+            require(transfer == true, "AMINT Transfer failed in CDS deposit");
+        }else{
+            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient USDT balance with msg.sender"); // check if user has sufficient AMINT token
+            bool transfer = usdt.transferFrom(msg.sender, treasuryAddress, usdtAmount); // transfer amount to this contract
+            //check it token have successfully transfer or not
+            require(transfer == true, "USDT Transfer failed in CDS deposit");
+        }
+
+        if(usdtAmount != 0 ){
+            bool success = amint.mint(treasuryAddress,usdtAmount);
+            require(success == true, "AMINT mint to treasury failed in CDS deposit");
+        }
+
         emit Deposit(totalDepositingAmount,index,_liquidationAmount,cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount,cdsDetails[msg.sender].cdsAccountDetails[index].depositValue);
     }
 
@@ -263,7 +297,6 @@ contract CDS is Ownable,ReentrancyGuard{
         uint128 returnAmount = 
             cdsAmountToReturn(msg.sender,_index, ethPrice)+
             ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * lastCumulativeRate)/PRECISION)-(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount);
-        
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedTime =  _withdrawTime;
 
@@ -309,18 +342,18 @@ contract CDS is Ownable,ReentrancyGuard{
             totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
             totalCdsDepositedAmountWithOptionFees -= returnAmount;
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
+            if(treasury.totalVolumeOfBorrowersAmountinUSD() != 0){
+                require(borrowing.calculateRatio(0,ethPrice) > (2 * RATIO_PRECISION),"Not enough fund in CDS");
+            }
             treasury.approveAmint(address(this),returnAmount);
             bool transfer = amint.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
             require(transfer == true, "Transfer failed in cds withdraw");
-            emit Withdraw(returnAmount,0);
-        }
-        if(treasury.totalVolumeOfBorrowersAmountinUSD() != 0){
-            require(borrowing.calculateRatio(0,ethPrice) > (2 * RATIO_PRECISION),"Not enough fund in CDS");
         }
 
         if(ethPrice != lastEthPrice){
             updateLastEthPrice(ethPrice);
         }
+        emit Withdraw(returnAmount,0);
     }
    
 
@@ -334,8 +367,8 @@ contract CDS is Ownable,ReentrancyGuard{
     ) internal returns(uint128){
 
         // Calculate current value
-        (uint128 currentVal,bool gains) = calculateValue(_ethPrice);
-        setCumulativeValue(currentVal,gains);
+        CalculateValueResult memory result = calculateValue(_ethPrice);
+        setCumulativeValue(result.currentValue,result.gains);
         uint128 depositedAmount = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
         uint128 cumulativeValueAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
         // Get the cumulative value sign at the time of deposit
@@ -407,34 +440,38 @@ contract CDS is Ownable,ReentrancyGuard{
         require(success == true, "USDT Transfer failed in redeemUSDT");
     }
 
-    function setWithdrawTimeLimit(uint64 _timeLimit) external onlyOwner {
+    function setWithdrawTimeLimit(uint64 _timeLimit) external onlyAdmin {
         require(_timeLimit != 0, "Withdraw time limit can't be zero");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(3)));
         withdrawTimeLimit = _timeLimit;
     }
 
-    function setBorrowingContract(address _address) external onlyOwner {
+    function setBorrowingContract(address _address) external onlyAdmin {
         require(_address != address(0) && isContract(_address) != false, "Input address is invalid");
         borrowingContract = _address;
         borrowing = IBorrowing(_address);
     }
 
-    function setTreasury(address _treasury) external onlyOwner{
+    function setTreasury(address _treasury) external onlyAdmin{
         require(_treasury != address(0) && isContract(_treasury) != false, "Input address is invalid");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(7)));
         treasuryAddress = _treasury;
         treasury = ITreasury(_treasury);
     }
 
-    function setAmintLimit(uint8 percent) external onlyOwner{
+    function setAmintLimit(uint8 percent) external onlyAdmin{
         require(percent != 0, "Amint limit can't be zero");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(9)));
         amintLimit = percent;  
     }
 
-    function setUsdtLimit(uint64 amount) external onlyOwner{
+    function setUsdtLimit(uint64 amount) external onlyAdmin{
         require(amount != 0, "USDT limit can't be zero");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(10)));
         usdtLimit = amount;  
     }
 
-    function calculateValue(uint128 _price) internal view returns(uint128,bool) {
+    function calculateValue(uint128 _price) internal view returns(CalculateValueResult memory) {
         uint128 _amount = 1000;
         uint256 vaultBal = treasury.totalVolumeOfBorrowersAmountinWei();
         uint128 priceDiff;
@@ -467,15 +504,14 @@ contract CDS is Ownable,ReentrancyGuard{
             }
             value = uint128((_amount * vaultBal * priceDiff * 1e6) / (PRECISION * totalCdsDepositedAmount));
         }
-
-        return (value,gains);
+        return CalculateValueResult(value,gains);
     }
 
     /**
      * @dev calculate cumulative rate
      * @param fees fees to split
      */
-    function calculateCumulativeRate(uint128 fees) public onlyBorrowingContract returns(uint128) {
+    function calculateCumulativeRate(uint128 fees) public onlyBorrowingContract{
         require(fees != 0,"Fees should not be zero");
         totalCdsDepositedAmountWithOptionFees += fees;
         uint128 netCDSPoolValue = uint128(totalCdsDepositedAmountWithOptionFees);
@@ -488,7 +524,6 @@ contract CDS is Ownable,ReentrancyGuard{
             currentCumulativeRate = lastCumulativeRate * ((1 * PRECISION) + percentageChange);
             lastCumulativeRate = (currentCumulativeRate/PRECISION);
         }
-        return currentCumulativeRate;
     }
 
     /**
@@ -530,10 +565,6 @@ contract CDS is Ownable,ReentrancyGuard{
         }
     }
 
-    function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory,uint64){
-        return (cdsDetails[depositor].cdsAccountDetails[index],cdsDetails[depositor].index);
-    }
-
     function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external onlyBorrowingContract{
         liquidationIndexToInfo[index] = liquidationData;
     }
@@ -550,5 +581,4 @@ contract CDS is Ownable,ReentrancyGuard{
         totalCdsDepositedAmountWithOptionFees -= _amount;
     }
 
-    receive() external payable{}
 }

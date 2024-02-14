@@ -31,22 +31,13 @@ contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
     CDSInterface cds;
     IBorrowing borrowing;
 
-    // constructor(address _priceFeed, address _treasuryAddress, address _cdsAddress,address _borrowingAddress) {
-    //     priceFeed = AggregatorV3Interface(_priceFeed);
-    //     treasury = ITreasury(_treasuryAddress);
-    //     cds = CDSInterface(_cdsAddress);
-    //     borrowing = IBorrowing(_borrowingAddress);
-    // }
-
     function initialize(
-        address _priceFeed,
         address _treasuryAddress,
         address _cdsAddress,
         address _borrowingAddress
     ) initializer public{
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
-        // priceFeed = AggregatorV3Interface(_priceFeed);
         treasury = ITreasury(_treasuryAddress);
         cds = CDSInterface(_cdsAddress);
         borrowing = IBorrowing(_borrowingAddress);

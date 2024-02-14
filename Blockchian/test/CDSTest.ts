@@ -48,7 +48,7 @@ describe("Testing contracts ", function(){
         const treasury = await upgrades.deployProxy(Treasury,[await BorrowingContract.getAddress(),await Token.getAddress(),await CDSContract.getAddress(),wethGateway,cEther,aavePoolAddress,aTokenAddress,await usdt.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
         const Option = await ethers.getContractFactory("Options");
-        const options = await upgrades.deployProxy(Option,[priceFeedAddress,await treasury.getAddress(),await CDSContract.getAddress(),await BorrowingContract.getAddress()],{initializer:'initialize'},{kind:'uups'});
+        const options = await upgrades.deployProxy(Option,[await treasury.getAddress(),await CDSContract.getAddress(),await BorrowingContract.getAddress()],{initializer:'initialize'},{kind:'uups'});
         
         await multiSign.connect(owner).approveSetterFunction(4);
         await multiSign.connect(owner1).approveSetterFunction(4);
