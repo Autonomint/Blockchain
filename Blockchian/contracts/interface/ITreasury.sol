@@ -52,7 +52,7 @@ interface ITreasury{
         function transferEthToCdsLiquidators(address borrower,uint128 amount) external;
 
 
-        function noOfBorrowers() external returns(uint128);
+        function noOfBorrowers() external view returns(uint128);
         function ethProfitsOfLiquidators() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinWei() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinUSD() external view returns(uint256);

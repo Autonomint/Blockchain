@@ -65,66 +65,73 @@ async function main() {
   console.log("PROXY OPTIONS ADDRESS",await deployedOptions.getAddress());
 
 
-  async function sleep(ms:number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
+  // async function sleep(ms:number) {
+  //   return new Promise((resolve) => setTimeout(resolve, ms));
+  // }
 
-  await sleep(30 * 1000);
+  // await sleep(30 * 1000);
 
-  await hre.run("verify:verify", {
-    address: "0x4897424de78994b0d449c3253befee9206c6f082",
-    contract: "contracts/Token/Amint.sol:AMINTStablecoin"
-  });
+  // await hre.run("verify:verify", {
+  //   address: "0x4897424de78994b0d449c3253befee9206c6f082",
+  //   contract: "contracts/Token/Amint.sol:AMINTStablecoin"
+  // });
 
-  await hre.run("verify:verify", {
-    address: "0x9f08efc729afd95df9b8e4c7afda29e4d22c6435",
-    contract: "contracts/Token/Abond_Token.sol:ABONDToken"
-  });
+  // await hre.run("verify:verify", {
+  //   address: "0x9f08efc729afd95df9b8e4c7afda29e4d22c6435",
+  //   contract: "contracts/Token/Abond_Token.sol:ABONDToken"
+  // });
 
-  await hre.run("verify:verify", {
-    address: "0xfae4eabe26d6d2b8685404813afd939de3fc49da",
-    contract: "contracts/TestContracts/CopyUsdt.sol:TestUSDT"
-  });
+  // await hre.run("verify:verify", {
+  //   address: "0xfae4eabe26d6d2b8685404813afd939de3fc49da",
+  //   contract: "contracts/TestContracts/CopyUsdt.sol:TestUSDT"
+  // });
 
-  await hre.run("verify:verify", {
-    address: "0x5e4b8421e25fb7430a0c3896e2a02ccb6e977ab2",
-    contract: "contracts/Core_logic/multiSign.sol:MultiSign",
-    //constructorArguments: [[owner1,owner2,owner3],2],
-  });
+  // await hre.run("verify:verify", {
+  //   address: "0x5e4b8421e25fb7430a0c3896e2a02ccb6e977ab2",
+  //   contract: "contracts/Core_logic/multiSign.sol:MultiSign",
+  //   //constructorArguments: [[owner1,owner2,owner3],2],
+  // });
 
-  await hre.run("verify:verify", {
-    address: "0x4f730f6f2e56274d707308e2609c1473b4b518c5",
-    contract: "contracts/Core_logic/CDS.sol:CDS",
-    //constructorArguments: [deployedAMINTStablecoin.address,priceFeedAddressGoerli,deployedTestUSDT.address,deployedMultisign.address],
-  });
+  // await hre.run("verify:verify", {
+  //   address: "0x4f730f6f2e56274d707308e2609c1473b4b518c5",
+  //   contract: "contracts/Core_logic/CDS.sol:CDS",
+  //   //constructorArguments: [deployedAMINTStablecoin.address,priceFeedAddressGoerli,deployedTestUSDT.address,deployedMultisign.address],
+  // });
 
-  await hre.run("verify:verify", {
-    address: "0xc128502ef270b2ad214bf5e31095a01049561018",
-    contract: "contracts/Core_logic/borrowing.sol:Borrowing",
-    //constructorArguments: [deployedAMINTStablecoin.address,deployedCDS.address,deployedABONDToken.address,deployedMultisign.address,priceFeedAddressGoerli,5],
-  });
+  // await hre.run("verify:verify", {
+  //   address: "0xc128502ef270b2ad214bf5e31095a01049561018",
+  //   contract: "contracts/Core_logic/borrowing.sol:Borrowing",
+  //   //constructorArguments: [deployedAMINTStablecoin.address,deployedCDS.address,deployedABONDToken.address,deployedMultisign.address,priceFeedAddressGoerli,5],
+  // });
 
-  await hre.run("verify:verify", {
-    address: "0xae5740aad7bfafca94caff2deb6916cd39afcd98",
-    contract: "contracts/Core_logic/Treasury.sol:Treasury",
-    //constructorArguments: [deployedBorrowing.address,deployedAMINTStablecoin.address,deployedCDS.address,wethGatewayGoerli,cEtherGoerli,aavePoolAddressGoerli,aTokenAddressGoerli,deployedTestUSDT.address],
-  });
+  // await hre.run("verify:verify", {
+  //   address: "0xae5740aad7bfafca94caff2deb6916cd39afcd98",
+  //   contract: "contracts/Core_logic/Treasury.sol:Treasury",
+  //   //constructorArguments: [deployedBorrowing.address,deployedAMINTStablecoin.address,deployedCDS.address,wethGatewayGoerli,cEtherGoerli,aavePoolAddressGoerli,aTokenAddressGoerli,deployedTestUSDT.address],
+  // });
 
-  await hre.run("verify:verify", {
-    address: "0x6E79F4A84a14BC84b5D88E4ce15B0D47B03D55f9",
-    contract: "contracts/Core_logic/Options.sol:Options",
-    //constructorArguments: [priceFeedAddressGoerli,deployedTreasury.address,deployedCDS.address,deployedBorrowing.address],
-  });
+  // await hre.run("verify:verify", {
+  //   address: "0x6E79F4A84a14BC84b5D88E4ce15B0D47B03D55f9",
+  //   contract: "contracts/Core_logic/Options.sol:Options",
+  //   //constructorArguments: [priceFeedAddressGoerli,deployedTreasury.address,deployedCDS.address,deployedBorrowing.address],
+  // });
 
-  // await deployedMultisign.approveSetterFunction(4);
-  // await deployedMultisign.approveSetterFunction(5);
-  // await deployedMultisign.approveSetterFunction(6);
-  // await deployedMultisign.approveSetterFunction(0);
-  // await deployedMultisign.approveSetterFunction(8);
-  // await deployedMultisign.approveSetterFunction(7);
-  // await deployedMultisign.approveSetterFunction(9);
-  // await deployedMultisign.approveSetterFunction(10);
-  // await deployedMultisign.approveSetterFunction(1);
+  await deployedMultisign.approveSetterFunction(4);
+  await deployedMultisign.approveSetterFunction(5);
+  await deployedMultisign.approveSetterFunction(6);
+  await deployedMultisign.approveSetterFunction(0);
+  await deployedMultisign.approveSetterFunction(8);
+  await deployedMultisign.approveSetterFunction(7);
+  await deployedMultisign.approveSetterFunction(9);
+  await deployedMultisign.approveSetterFunction(10);
+  await deployedMultisign.approveSetterFunction(1);
+  await deployedMultisign.approveSetterFunction(2);
+  await deployedMultisign.approveSetterFunction(3);
+
+  await deployedAMINTStablecoin.setBorrowingContract(await deployedBorrowing.getAddress());
+  await deployedAMINTStablecoin.setCdsContract(await deployedCDS.getAddress());
+
+  await deployedABONDToken.setBorrowingContract(await deployedBorrowing.getAddress());
 
 
   // await deployedBorrowing.setAdmin(owner1);
@@ -139,8 +146,8 @@ async function main() {
   // await deployedCDS.setAmintLimit(80);
   // await deployedCDS.setUsdtLimit(20000000000);
 
-  await deployedTestUSDT.mint(owner1,10000000000);
-  await deployedTestUSDT.approve(deployedCDS.address,10000000000);
+  // await deployedTestUSDT.mint(owner1,10000000000);
+  // await deployedTestUSDT.approve(deployedCDS.address,10000000000);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

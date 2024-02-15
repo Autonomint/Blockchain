@@ -122,7 +122,12 @@ contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
         uint256 ethPrice = _ethPrice;/*getLatestPrice();*/
         uint256 E = treasury.totalVolumeOfBorrowersAmountinUSD() + (_amount * _ethPrice);
         require(E != 0,"No borrowers in protocol");
-        uint256 cdsVault = borrowing.lastCDSPoolValue() * AMINT_PRECISION;
+        uint256 cdsVault;
+        if(treasury.noOfBorrowers() == 0){
+            cdsVault = cds.totalCdsDepositedAmount() * AMINT_PRECISION;
+        }else{
+            cdsVault = borrowing.lastCDSPoolValue() * AMINT_PRECISION;
+        }
 
         require(E != 0, "Treasury balance is zero");
         require(cdsVault != 0, "CDS Vault is zero");

@@ -2519,7 +2519,7 @@
             "label": "treasury",
             "offset": 0,
             "slot": "4",
-            "type": "t_contract(ITreasury)9685",
+            "type": "t_contract(ITreasury)18035",
             "contract": "Options",
             "src": "contracts\\Core_logic\\Options.sol:30"
           },
@@ -2527,7 +2527,7 @@
             "label": "cds",
             "offset": 0,
             "slot": "5",
-            "type": "t_contract(CDSInterface)8981",
+            "type": "t_contract(CDSInterface)17331",
             "contract": "Options",
             "src": "contracts\\Core_logic\\Options.sol:31"
           },
@@ -2535,7 +2535,7 @@
             "label": "borrowing",
             "offset": 0,
             "slot": "6",
-            "type": "t_contract(IBorrowing)9219",
+            "type": "t_contract(IBorrowing)17569",
             "contract": "Options",
             "src": "contracts\\Core_logic\\Options.sol:32"
           }
@@ -2583,15 +2583,15 @@
             "label": "uint64",
             "numberOfBytes": "8"
           },
-          "t_contract(CDSInterface)8981": {
+          "t_contract(CDSInterface)17331": {
             "label": "contract CDSInterface",
             "numberOfBytes": "20"
           },
-          "t_contract(IBorrowing)9219": {
+          "t_contract(IBorrowing)17569": {
             "label": "contract IBorrowing",
             "numberOfBytes": "20"
           },
-          "t_contract(ITreasury)9685": {
+          "t_contract(ITreasury)18035": {
             "label": "contract ITreasury",
             "numberOfBytes": "20"
           },
@@ -2990,6 +2990,165 @@
               "slot": "0"
             }
           ],
+          "erc7201:openzeppelin.storage.Ownable": [
+            {
+              "contract": "OwnableUpgradeable",
+              "label": "_owner",
+              "type": "t_address",
+              "src": "@openzeppelin\\contracts-upgradeable\\access\\OwnableUpgradeable.sol:24",
+              "offset": 0,
+              "slot": "0"
+            }
+          ],
+          "erc7201:openzeppelin.storage.Initializable": [
+            {
+              "contract": "Initializable",
+              "label": "_initialized",
+              "type": "t_uint64",
+              "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:69",
+              "offset": 0,
+              "slot": "0"
+            },
+            {
+              "contract": "Initializable",
+              "label": "_initializing",
+              "type": "t_bool",
+              "src": "@openzeppelin\\contracts-upgradeable\\proxy\\utils\\Initializable.sol:73",
+              "offset": 8,
+              "slot": "0"
+            }
+          ]
+        }
+      }
+    },
+    "38b7a533e955fbc8b57f4fbd4b7660d9eef66d4b2b83b114c551b190a7936983": {
+      "address": "0x3a0249Db5c2137ec31899495dC49a6568325d8b1",
+      "txHash": "0xa7d30a1f6beeb5968f05ccdfd8567a5d631c21574c0477912308163ead098345",
+      "layout": {
+        "solcVersion": "0.8.20",
+        "storage": [
+          {
+            "label": "PRECISION",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_uint256",
+            "contract": "Options",
+            "src": "contracts\\Core_logic\\Options.sol:22"
+          },
+          {
+            "label": "ETH_PRICE_PRECISION",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_uint256",
+            "contract": "Options",
+            "src": "contracts\\Core_logic\\Options.sol:23"
+          },
+          {
+            "label": "OPTION_PRICE_PRECISION",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_uint256",
+            "contract": "Options",
+            "src": "contracts\\Core_logic\\Options.sol:24"
+          },
+          {
+            "label": "AMINT_PRECISION",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_uint128",
+            "contract": "Options",
+            "src": "contracts\\Core_logic\\Options.sol:25"
+          },
+          {
+            "label": "treasury",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_contract(ITreasury)11447",
+            "contract": "Options",
+            "src": "contracts\\Core_logic\\Options.sol:30"
+          },
+          {
+            "label": "cds",
+            "offset": 0,
+            "slot": "5",
+            "type": "t_contract(CDSInterface)10888",
+            "contract": "Options",
+            "src": "contracts\\Core_logic\\Options.sol:31"
+          },
+          {
+            "label": "borrowing",
+            "offset": 0,
+            "slot": "6",
+            "type": "t_contract(IBorrowing)11126",
+            "contract": "Options",
+            "src": "contracts\\Core_logic\\Options.sol:32"
+          }
+        ],
+        "types": {
+          "t_address": {
+            "label": "address",
+            "numberOfBytes": "20"
+          },
+          "t_bool": {
+            "label": "bool",
+            "numberOfBytes": "1"
+          },
+          "t_struct(InitializableStorage)77_storage": {
+            "label": "struct Initializable.InitializableStorage",
+            "members": [
+              {
+                "label": "_initialized",
+                "type": "t_uint64",
+                "offset": 0,
+                "slot": "0"
+              },
+              {
+                "label": "_initializing",
+                "type": "t_bool",
+                "offset": 8,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_struct(OwnableStorage)27_storage": {
+            "label": "struct OwnableUpgradeable.OwnableStorage",
+            "members": [
+              {
+                "label": "_owner",
+                "type": "t_address",
+                "offset": 0,
+                "slot": "0"
+              }
+            ],
+            "numberOfBytes": "32"
+          },
+          "t_uint64": {
+            "label": "uint64",
+            "numberOfBytes": "8"
+          },
+          "t_contract(CDSInterface)10888": {
+            "label": "contract CDSInterface",
+            "numberOfBytes": "20"
+          },
+          "t_contract(IBorrowing)11126": {
+            "label": "contract IBorrowing",
+            "numberOfBytes": "20"
+          },
+          "t_contract(ITreasury)11447": {
+            "label": "contract ITreasury",
+            "numberOfBytes": "20"
+          },
+          "t_uint128": {
+            "label": "uint128",
+            "numberOfBytes": "16"
+          },
+          "t_uint256": {
+            "label": "uint256",
+            "numberOfBytes": "32"
+          }
+        },
+        "namespaces": {
           "erc7201:openzeppelin.storage.Ownable": [
             {
               "contract": "OwnableUpgradeable",

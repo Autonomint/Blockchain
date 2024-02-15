@@ -19,7 +19,7 @@ import {
   aavePoolAddressSepolia,
   owner1,owner2,owner3,
   PROXY_AMINT_ADDRESS,PROXY_ABOND_ADDRESS,PROXY_BORROWING_ADDRESS,
-  PROXY_CDS_ADDRESS,PROXY_MULTISIGN_ADDRESS,PROXY_TESTUSDT_ADDRESS,PROXY_TREASURY_ADDRESS
+  PROXY_CDS_ADDRESS,PROXY_MULTISIGN_ADDRESS,PROXY_TESTUSDT_ADDRESS,PROXY_TREASURY_ADDRESS, PROXY_OPTIONS_ADDRESS
 } from"./index"
 
 async function main() {
@@ -49,10 +49,10 @@ async function main() {
   // await deployedCDS.waitForDeployment();
   // console.log("NEW IMP CDS ADDRESS",deployedCDS.address);
 
-  const Borrowing = await ethers.getContractFactory("Borrowing");
-  const deployedBorrowing = await upgrades.upgradeProxy(PROXY_BORROWING_ADDRESS,Borrowing,{kind:'uups'});
-  await deployedBorrowing.waitForDeployment();
-  console.log("NEW IMP BORROWING ADDRESS",await deployedBorrowing.getAddress());
+  // const Borrowing = await ethers.getContractFactory("Borrowing");
+  // const deployedBorrowing = await upgrades.upgradeProxy(PROXY_BORROWING_ADDRESS,Borrowing,{kind:'uups'});
+  // await deployedBorrowing.waitForDeployment();
+  // console.log("NEW IMP BORROWING ADDRESS",await deployedBorrowing.getAddress());
 
   // const Treasury = await ethers.getContractFactory("Treasury");
   // const deployedTreasury = await upgrades.upgradeProxy(Treasury,[await deployedBorrowing.getAddress(),await deployedAMINTStablecoin.getAddress(),await deployedCDS.getAddress(),wethGatewayGoerli,cEtherGoerli,aavePoolAddressGoerli,aTokenAddressGoerli,await deployedTestUSDT.getAddress()],{initializer:'initialize'},{kind:'uups'});
@@ -60,14 +60,9 @@ async function main() {
   // console.log("NEW IMP TREASURY ADDRESS",deployedTreasury.address);
 
   // const Option = await ethers.getContractFactory("Options");
-  // const deployedOptions = await upgrades.upgradeProxy(Option,[priceFeedAddressGoerli,await deployedTreasury.getAddress(),await deployedCDS.getAddress(),await deployedBorrowing.getAddress()],{initializer:'initialize'},{kind:'uups'});
-  // await deployedOptions.deployed();
-  // console.log("NEW IMP OPTIONS ADDRESS",deployedOptions.address);
-  await hre.run("verify:verify", {
-    address: "0xf349148a601d27fe13115025503f34451d4bf2a5",
-    contract: "contracts/Core_logic/borrowing.sol:Borrowing",
-    //constructorArguments: [deployedAMINTStablecoin.address,deployedCDS.address,deployedABONDToken.address,deployedMultisign.address,priceFeedAddressGoerli,5],
-  });
+  // const deployedOptions = await upgrades.upgradeProxy(PROXY_OPTIONS_ADDRESS,Option,{kind:'uups'});
+  // await deployedOptions.waitForDeployment();
+  // console.log("NEW IMP OPTIONS ADDRESS",await deployedOptions.getAddress());
 
   // async function sleep(ms:number) {
   //   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -115,9 +110,9 @@ async function main() {
   // });
 
   // await hre.run("verify:verify", {
-  //   address: deployedOptions.address,
+  //   address: "0x3a0249Db5c2137ec31899495dC49a6568325d8b1",
   //   contract: "contracts/Core_logic/Options.sol:Options",
-  //   constructorArguments: [priceFeedAddressGoerli,deployedTreasury.address,deployedCDS.address,deployedBorrowing.address],
+  //   // constructorArguments: [priceFeedAddressGoerli,deployedTreasury.address,deployedCDS.address,deployedBorrowing.address],
   // });
 
 
