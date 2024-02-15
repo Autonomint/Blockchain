@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: unlicensed
-pragma solidity 0.8.19;
+pragma solidity 0.8.20;
 
 interface CDSInterface {
 
@@ -33,7 +33,7 @@ interface CDSInterface {
     function cdsCount() external returns(uint256);
     function totalAvailableLiquidationAmount() external returns(uint256);
 
-    function calculateCumulativeRate(uint128 fees) external returns(uint128);
+    function calculateCumulativeRate(uint128 fees) external;
 
     function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory);
     function updateTotalAvailableLiquidationAmount(uint256 amount) external;

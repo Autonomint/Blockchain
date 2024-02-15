@@ -1,24 +1,60 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.19;
+pragma solidity 0.8.20;
 
-contract MultiSign {
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+
+contract MultiSign is Initializable,OwnableUpgradeable,UUPSUpgradeable {
 
     address[] public owners; // Owners array
+    uint8 private maxOwners;
+    uint8 private noOfOwners;
     mapping(address => bool) public isOwner; // To check the address is owner
     uint64 public requiredApprovals; // Required number of approvals to execute the function
-    mapping(address => bool) public approvedSetAPR; // Check which owners were approved
-    enum Functions{BorrowingDeposit,BorrowingWithdraw,Liquidation,SetAPR,CDSDeposit,CDSWithdraw,RedeemUSDT}
+    enum SetterFunctions{
+        SetLTV,
+        SetAPR,
+        SetWithdrawTimeLimitBorrow,
+        SetWithdrawTimeLimitCDS,
+        SetAdminBorrow,
+        SetAdminCDS,
+        SetTreasuryBorrow,
+        SetTreasuryCDS,
+        SetBondRatio,
+        SetAmintLimit,
+        SetUsdtLimit
+    }
+    enum Functions{
+        BorrowingDeposit,
+        BorrowingWithdraw,
+        Liquidation,
+        SetAPR,
+        CDSDeposit,
+        CDSWithdraw,
+        RedeemUSDT
+    }
+
+    mapping(SetterFunctions => mapping(address owner => bool approved)) public approvedToUpdate; // Check which owners were approved
 
     mapping (Functions => mapping(address owner => bool paused)) pauseApproved; // Store what functions are approved for pause by owners
     mapping (Functions => mapping(address owner => bool unpaused)) unpauseApproved; // Store what functions are approved for unpause by owners
 
     mapping (Functions => bool paused) public functionState; // Returns true if function is in pause state
 
-    constructor(address[] memory _owners,uint64 _requiredApprovals){
-        require(_owners.length > 0,'Owners required');
-        require(_requiredApprovals > 0 && _requiredApprovals <= _owners.length,'Invalid number of required approvals');
+    function initialize(
+        address[] memory _owners,
+        uint64 _requiredApprovals
+    ) initializer public{
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
+        uint8 _noOfOwners = uint8(_owners.length);
+        require(_noOfOwners > 0,'Owners required');
+        maxOwners = 10;
+        require (_noOfOwners <= maxOwners,"Number of owners should be below maximum owners limit");
+        require(_requiredApprovals > 0 && _requiredApprovals <= _noOfOwners,'Invalid number of required approvals');
 
-        for(uint64 i; i < _owners.length;i++){
+        for(uint64 i; i < _noOfOwners;i++){
             address owner = _owners[i];
 
             require(owner != address(0),'Invalid owner');
@@ -29,7 +65,10 @@ contract MultiSign {
         }
 
         requiredApprovals = _requiredApprovals;
+        noOfOwners = _noOfOwners;
     }
+
+    function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
 
     modifier onlyOwners(){
         require(isOwner[msg.sender],'Not an owner');
@@ -43,9 +82,9 @@ contract MultiSign {
     }
 
     // Function to approve set apr
-    function approveSetAPR() external onlyOwners{
-        require(!approvedSetAPR[msg.sender],'Already approved');
-        approvedSetAPR[msg.sender] = true;
+    function approveSetterFunction(SetterFunctions _function) external onlyOwners{
+        require(!approvedToUpdate[_function][msg.sender],'Already approved');
+        approvedToUpdate[_function][msg.sender] = true;
     }
 
     // Function to approve unpause takes enum for which function to pause
@@ -105,7 +144,7 @@ contract MultiSign {
     // Gets the pause approval count
     function getApprovalPauseCount(Functions _function) private view returns (uint64){
         uint64 count;
-        for(uint64 i; i < owners.length;i++){
+        for(uint64 i; i < noOfOwners;i++){
             if(pauseApproved[_function][owners[i]]){
                 count += 1;
             }
@@ -116,7 +155,7 @@ contract MultiSign {
     // Gets the unpause approval count
     function getApprovalUnPauseCount(Functions _function) private view returns (uint64){
         uint64 count;
-        for(uint64 i; i < owners.length;i++){
+        for(uint64 i; i < noOfOwners;i++){
             if(unpauseApproved[_function][owners[i]]){
                 count += 1;
             }
@@ -125,10 +164,10 @@ contract MultiSign {
     }
 
     // Gets the set APR approval count
-    function getSetAPRApproval() private view returns (uint64){
+    function getSetterFunctionApproval(SetterFunctions _function) private view returns (uint64){
         uint64 count;
-        for(uint64 i; i < owners.length;i++){
-            if(approvedSetAPR[owners[i]]){
+        for(uint64 i; i < noOfOwners;i++){
+            if(approvedToUpdate[_function][owners[i]]){
                 count += 1;
             }
         }
@@ -138,7 +177,7 @@ contract MultiSign {
     // Returns true if the function is eligible to pause
     function executePause(Functions _function) private returns (bool){
         require(getApprovalPauseCount(_function) >= requiredApprovals,'Required approvals not met');
-        for(uint64 i; i < owners.length;i++){
+        for(uint64 i; i < noOfOwners;i++){
             pauseApproved[_function][owners[i]] = false;
         }
         return true;
@@ -147,17 +186,17 @@ contract MultiSign {
     // Returns true if the function is eligible to unpause
     function executeUnPause(Functions _function) private returns (bool){
         require(getApprovalUnPauseCount(_function) >= requiredApprovals,'Required approvals not met');
-        for(uint64 i; i < owners.length;i++){
+        for(uint64 i; i < noOfOwners;i++){
             unpauseApproved[_function][owners[i]] = false;
         }
         return true;
     }
 
     // Returns true if eligible to set APR
-    function executeSetAPR() external returns (bool){
-        require(getSetAPRApproval() >= requiredApprovals,'Required approvals not met');
-        for(uint64 i; i < owners.length;i++){
-            approvedSetAPR[owners[i]] = false;
+    function executeSetterFunction(SetterFunctions _function) external returns (bool){
+        require(getSetterFunctionApproval(_function) >= requiredApprovals,'Required approvals not met');
+        for(uint64 i; i < noOfOwners;i++){
+            approvedToUpdate[_function][owners[i]] = false;
         }
         return true;
     }

@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: unlicensed
 
-pragma solidity 0.8.19;
+pragma solidity 0.8.20;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "../interface/CDSInterface.sol";
 import "../interface/IAmint.sol";
 import "../interface/IAbond.sol";
@@ -13,7 +15,7 @@ import "../interface/IMultiSign.sol";
 import "hardhat/console.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract Borrowing is Ownable,ReentrancyGuard {
+contract Borrowing is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuardUpgradeable {
 
     error Borrowing_DepositFailed();
     error Borrowing_GettingETHPriceFailed();
@@ -53,14 +55,14 @@ contract Borrowing is Ownable,ReentrancyGuard {
     uint8   public APY; 
     uint256 public totalNormalizedAmount; // total normalized amount in protocol
     address public priceFeedAddress; // ETH USD pricefeed address
-    uint128 public lastEthprice; // previous eth price
+    uint128 private lastEthprice; // previous eth price
     uint256 public lastEthVaultValue; // previous eth vault value
     uint256 public lastCDSPoolValue; // previous CDS pool value
-    uint256 public lastTotalCDSPool;
+    uint256 private lastTotalCDSPool;
     uint256 public lastCumulativeRate; // previous cumulative rate
     uint128 private lastEventTime;
     uint128 public noOfLiquidations; // total number of liquidation happened till now
-    uint64  public withdrawTimeLimit; // withdraw time limit
+    uint64  private withdrawTimeLimit; // withdraw time limit
     uint128 public ratePerSec;
     uint64  private bondRatio;
 
@@ -69,32 +71,32 @@ contract Borrowing is Ownable,ReentrancyGuard {
     bytes32 public DOMAIN_SEPARATOR;
     bytes32 public constant PERMIT_TYPEHASH = keccak256("Permit(address holder,address spender,uint256 allowedAmount,bool allowed,uint256 expiry)");
 
-    uint128 PRECISION = 1e6; // ETH price precision
-    uint128 CUMULATIVE_PRECISION = 1e7;
-    uint128 RATIO_PRECISION = 1e4;
-    uint128 RATE_PRECISION = 1e27;
-    uint128 AMINT_PRECISION = 1e12;
+    uint128 private PRECISION; // ETH price precision
+    uint128 private CUMULATIVE_PRECISION;
+    uint128 private RATIO_PRECISION;
+    uint128 private RATE_PRECISION;
+    uint128 private AMINT_PRECISION;
 
     event Deposit(uint64 index,uint256 depositedAmount,uint256 borrowAmount,uint256 normalizedAmount);
     event Withdraw(uint256 borrowDebt,uint128 withdrawAmount,uint128 noOfAbond);
     event Liquidate(uint64 index,uint128 liquidationAmount,uint128 profits,uint128 ethAmount,uint256 availableLiquidationAmount);
 
-    constructor(
+    function initialize( 
         address _tokenAddress,
         address _cds,
         address _abondToken,
         address _multiSign,
         address _priceFeedAddress,
         uint64 chainId
-        ){
+        ) initializer public{
+        __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
         amint = IAMINT(_tokenAddress);
         cds = CDSInterface(_cds);
         cdsAddress = _cds;
         abond = IABONDToken(_abondToken);
         multiSign = IMultiSign(_multiSign);
         priceFeedAddress = _priceFeedAddress;                       //0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419
-        lastEthprice = uint128(getUSDValue());
-        lastEventTime = uint128(block.timestamp);
         DOMAIN_SEPARATOR = keccak256(abi.encode(
             keccak256("EIP712Domain(string name,string version,uint64 chainId,address verifyingContract)"),
             keccak256(bytes(name)),
@@ -102,7 +104,16 @@ contract Borrowing is Ownable,ReentrancyGuard {
             chainId,
             address(this)
         ));
+        PRECISION = 1e6;
+        CUMULATIVE_PRECISION = 1e7;
+        RATIO_PRECISION = 1e4;
+        RATE_PRECISION = 1e27;
+        AMINT_PRECISION = 1e12;
+        lastEthprice = uint128(getUSDValue());
+        lastEventTime = uint128(block.timestamp);
     }
+
+    function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
 
     modifier onlyAdmin(){
         require(msg.sender == admin,"Caller is not an admin");
@@ -132,8 +143,9 @@ contract Borrowing is Ownable,ReentrancyGuard {
      * @param _treasury treasury contract address
      */
 
-    function initializeTreasury(address _treasury) external onlyOwner{
+    function setTreasury(address _treasury) external onlyAdmin{
         require(_treasury != address(0) && isContract(_treasury) != false, "Treasury must be contract address & can't be zero address");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(6)));
         treasury = ITreasury(_treasury);
         treasuryAddress = _treasury;
     }
@@ -142,7 +154,7 @@ contract Borrowing is Ownable,ReentrancyGuard {
      * @dev set Options contract
      * @param _options option contract address
      */
-    function setOptions(address _options) external onlyOwner{
+    function setOptions(address _options) external onlyAdmin{
         require(_options != address(0) && isContract(_options) != false, "Options must be contract address & can't be zero address");
         options = IOptions(_options);
     }
@@ -152,6 +164,7 @@ contract Borrowing is Ownable,ReentrancyGuard {
      */
     function setAdmin(address _admin) external onlyOwner{
         require(_admin != address(0) && isContract(_admin) != true, "Admin can't be contract address & zero address");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(4)));
         admin = _admin;    
     }
 
@@ -161,7 +174,7 @@ contract Borrowing is Ownable,ReentrancyGuard {
      * @param amount deposited amount of the borrower
      * @param _ethPrice current eth price
      */
-    function _transferToken(address _borrower,uint256 amount,uint128 _ethPrice,uint256 optionFees) internal returns(uint256){
+    function _transferToken(address _borrower,uint256 amount,uint128 _ethPrice,uint256 optionFees) internal {
         require(_borrower != address(0), "Borrower cannot be zero address");
         require(LTV != 0, "LTV must be set to non-zero value before providing loans");
         
@@ -186,7 +199,6 @@ contract Borrowing is Ownable,ReentrancyGuard {
         if(!treasuryMint){
             revert Borrowing_amintMintFailed();
         }
-        return tokensToLend - optionFees;
     }
 
     /**
@@ -233,26 +245,30 @@ contract Borrowing is Ownable,ReentrancyGuard {
         //Call calculateInverseOfRatio function to find ratio
         uint64 ratio = calculateRatio(msg.value,uint128(_ethPrice));
         require(ratio >= (2 * RATIO_PRECISION),"Not enough fund in CDS");
-        
-        //Call the deposit function in Treasury contract
-        (bool deposited,uint64 index) = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
 
         // Call calculateOptionPrice in options contract to get options fees
         uint256 optionFees = options.calculateOptionPrice(_ethPrice,_volatility,msg.value,_strikePercent);
 
+        uint256 tokensToLend = (msg.value * _ethPrice * LTV) / (AMINT_PRECISION * RATIO_PRECISION);
+        uint256 borrowAmount = tokensToLend - optionFees;
+        
+        //Call the deposit function in Treasury contract
+        ITreasury.DepositResult memory depositResult = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
+        uint64 index = depositResult.borrowerIndex;
         //Check whether the deposit is successfull
-        if(!deposited){
+        if(!depositResult.hasDeposited){
             revert Borrowing_DepositFailed();
         }
 
-        // Call the transfer function to mint AMINT and Get the borrowedAmount
-        uint256 borrowAmount = _transferToken(msg.sender,msg.value,_ethPrice,optionFees);
+        // Call the transfer function to mint AMINT
+        _transferToken(msg.sender,msg.value,_ethPrice,optionFees);
 
         // Call calculateCumulativeRate in cds to split fees to cds users
         cds.calculateCumulativeRate(uint128(optionFees));
 
         //Get the deposit details from treasury
-        (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,index);
+        ITreasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(msg.sender,index);
+        ITreasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
         depositDetail.borrowedAmount = uint128(borrowAmount);
         depositDetail.optionFees = uint128(optionFees);
 
@@ -262,6 +278,7 @@ contract Borrowing is Ownable,ReentrancyGuard {
 
         //Call calculateCumulativeRate() to get currentCumulativeRate
         uint256 currentCumulativeRate = calculateCumulativeRate();
+        lastEventTime = uint128(block.timestamp);
 
         // Calculate normalizedAmount
         uint256 normalizedAmount = (borrowAmount * RATE_PRECISION * RATE_PRECISION)/currentCumulativeRate;
@@ -275,7 +292,6 @@ contract Borrowing is Ownable,ReentrancyGuard {
         // Calculate normalizedAmount of Protocol
         totalNormalizedAmount += normalizedAmount;
         lastEthprice = uint128(_ethPrice);
-        lastEventTime = uint128(block.timestamp);
         emit Deposit(index,msg.value,borrowAmount,normalizedAmount);
     }
 
@@ -327,10 +343,11 @@ contract Borrowing is Ownable,ReentrancyGuard {
 
         lastEthprice = uint128(_ethPrice);
 
-        (uint64 borrowerIndex,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,_index);
+        ITreasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(msg.sender,_index);
+        ITreasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
 
         // check if borrowerIndex in BorrowerDetails of the msg.sender is greater than or equal to Index
-        if(borrowerIndex >= _index ) {
+        if(getBorrowingResult.totalIndex >= _index ) {
             // Check if user amount in the Index is been liquidated or not
             require(!depositDetail.liquidated,"User amount has been liquidated");
             // check if withdrawed in depositDetail in borrowing of msg.seader is false or not
@@ -355,11 +372,11 @@ contract Borrowing is Ownable,ReentrancyGuard {
                     // Calculate interest for the borrower's debt
                     //uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
 
-                    uint256 discountedETH = ((((20*((depositDetail.depositedAmount * 50)/100))/100)*_ethPrice)/100)/AMINT_PRECISION; // 0.4
+                    uint256 discountedETH = ((((80*((depositDetail.depositedAmount * 50)/100))/100)*_ethPrice)/100)/AMINT_PRECISION; // 0.4
                     treasury.updateAbondAmintPool(discountedETH,true);
                     // Calculate the amount of AMINT to burn and sent to the treasury
                     // uint256 halfValue = (50 *(depositDetail.borrowedAmount))/100;
-                    uint256 burnValue = ((depositDetail.borrowedAmount * 50)/100) - discountedETH;// 
+                    uint256 burnValue = depositDetail.borrowedAmount - discountedETH;
 
                     // Burn the AMINT from the Borrower
                     bool success = amint.burnFromUser(msg.sender, burnValue);
@@ -449,7 +466,8 @@ contract Borrowing is Ownable,ReentrancyGuard {
 
             // Check the user has required pToken
             require(abond.balanceOf(msg.sender) == aBondTokensAmount,"Don't have enough ABOND Tokens");
-            (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(msg.sender,_index);
+            ITreasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(msg.sender,_index);
+            ITreasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
             // Update Borrower's Data
             treasury.updateTotalDepositedAmount(msg.sender,uint128(depositDetail.depositedAmount));
             depositDetail.withdrawed = true;
@@ -457,11 +475,12 @@ contract Borrowing is Ownable,ReentrancyGuard {
             treasury.updateTotalAbondTokensDecrease(msg.sender,aBondTokensAmount);
             depositDetail.aBondTokensAmount = 0;
             treasury.updateDepositDetails(msg.sender,_index,depositDetail);
-            treasury.updateAbondAmintPool((((depositDetail.borrowedAmount*50)/100) - depositDetail.burnedAmint),false);
+            uint256 discountedETH = depositDetail.borrowedAmount - depositDetail.burnedAmint;
+            treasury.updateAbondAmintPool(discountedETH,false);
 
             //Burn the amint from treasury
-            treasury.approveAmint(address(this),(depositDetail.borrowedAmount - depositDetail.burnedAmint));
-            bool transfer = amint.burnFromUser(treasuryAddress,(depositDetail.borrowedAmount - depositDetail.burnedAmint));
+            treasury.approveAmint(address(this),discountedETH);
+            bool transfer = amint.burnFromUser(treasuryAddress,discountedETH);
             if(!transfer){
                 revert Borrowing_WithdrawBurnFailed();
             }
@@ -498,7 +517,8 @@ contract Borrowing is Ownable,ReentrancyGuard {
         ++noOfLiquidations;
 
         // Get the borrower details
-        (,ITreasury.DepositDetails memory depositDetail) = treasury.getBorrowing(borrower,index);
+        ITreasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(borrower,index);
+        ITreasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
         require(!depositDetail.liquidated,"Already Liquidated");
         
         uint256 externalProtocolInterest = treasury.withdrawFromAaveByUser(borrower,index) + treasury.withdrawFromCompoundByUser(borrower,index);
@@ -558,13 +578,15 @@ contract Borrowing is Ownable,ReentrancyGuard {
         return (uint256(price) / PRECISION);
     }
 
-    function setLTV(uint8 _LTV) external onlyOwner {
+    function setLTV(uint8 _LTV) external onlyAdmin {
         require(_LTV != 0, "LTV can't be zero");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(0)));
         LTV = _LTV;
     }
 
-    function setBondRatio(uint64 _bondRatio) external onlyOwner {
+    function setBondRatio(uint64 _bondRatio) external onlyAdmin {
         require(_bondRatio != 0, "Bond Ratio can't be zero");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(8)));
         bondRatio = _bondRatio;
     }
 
@@ -576,8 +598,9 @@ contract Borrowing is Ownable,ReentrancyGuard {
         return (lastEthVaultValue/100);
     }
 
-    function setWithdrawTimeLimit(uint64 _timeLimit) external onlyOwner {
+    function setWithdrawTimeLimit(uint64 _timeLimit) external onlyAdmin {
         require(_timeLimit != 0, "Withdraw time limit can't be zero");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(2)));
         withdrawTimeLimit = _timeLimit;
     }
 
@@ -626,7 +649,7 @@ contract Borrowing is Ownable,ReentrancyGuard {
             currentEthVaultValue = lastEthVaultValue;
 
             // Get the total amount in CDS
-            lastTotalCDSPool = cds.totalCdsDepositedAmount() * AMINT_PRECISION;
+            lastTotalCDSPool = cds.totalCdsDepositedAmount();
 
             if (currentEthPrice >= lastEthprice){
                 lastCDSPoolValue = lastTotalCDSPool + netPLCdsPool;
@@ -635,30 +658,30 @@ contract Borrowing is Ownable,ReentrancyGuard {
             }
 
             // Set the currentCDSPoolValue to lastCDSPoolValue for next deposit
-            currentCDSPoolValue = lastCDSPoolValue;
+            currentCDSPoolValue = lastCDSPoolValue * AMINT_PRECISION;
         }else{
 
             currentEthVaultValue = lastEthVaultValue + (_amount * currentEthPrice);
             lastEthVaultValue = currentEthVaultValue;
 
-            uint256 latestTotalCDSPool = cds.totalCdsDepositedAmount() * AMINT_PRECISION;
+            uint256 latestTotalCDSPool = cds.totalCdsDepositedAmount();
 
             if(currentEthPrice >= lastEthprice){
                 if(latestTotalCDSPool > lastTotalCDSPool){
-                    currentCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) + netPLCdsPool;  
+                    lastCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) + netPLCdsPool;  
                 }else{
-                    currentCDSPoolValue = lastCDSPoolValue - (lastTotalCDSPool - latestTotalCDSPool) + netPLCdsPool;
+                    lastCDSPoolValue = lastCDSPoolValue - (lastTotalCDSPool - latestTotalCDSPool) + netPLCdsPool;
                 }
             }else{
                 if(latestTotalCDSPool > lastTotalCDSPool){
-                    currentCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) - netPLCdsPool;  
+                    lastCDSPoolValue = lastCDSPoolValue + (latestTotalCDSPool - lastTotalCDSPool) - netPLCdsPool;  
                 }else{
-                    currentCDSPoolValue = lastCDSPoolValue - (lastTotalCDSPool - latestTotalCDSPool) - netPLCdsPool;
+                    lastCDSPoolValue = lastCDSPoolValue - (lastTotalCDSPool - latestTotalCDSPool) - netPLCdsPool;
                 }
             }
 
             lastTotalCDSPool = latestTotalCDSPool;
-            lastCDSPoolValue = currentCDSPoolValue;
+            currentCDSPoolValue = lastCDSPoolValue * AMINT_PRECISION;
         }
 
         // Calculate ratio by dividing currentEthVaultValue by currentCDSPoolValue,
@@ -667,9 +690,9 @@ contract Borrowing is Ownable,ReentrancyGuard {
         return ratio;
     }
 
-    function setAPR(uint128 _ratePerSec) external whenNotPaused(IMultiSign.Functions(3)) onlyOwner{
-        require(multiSign.executeSetAPR());
+    function setAPR(uint128 _ratePerSec) external whenNotPaused(IMultiSign.Functions(3)) onlyAdmin{
         require(_ratePerSec != 0,"Rate should not be zero");
+        require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(1)));
         ratePerSec = _ratePerSec;
     }
 

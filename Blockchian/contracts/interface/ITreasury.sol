@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: unlicensed
 
-pragma solidity 0.8.19;
+pragma solidity 0.8.20;
 
 interface ITreasury{
 
@@ -27,7 +27,17 @@ interface ITreasury{
         uint128 cTokensCredited;
     }
 
-        function deposit(address user,uint128 _ethPrice,uint64 _depositTime) external payable returns(bool,uint64);
+    struct DepositResult{
+        bool hasDeposited;
+        uint64 borrowerIndex;
+    }
+
+    struct GetBorrowingResult{
+        uint64 totalIndex;
+        DepositDetails depositDetails;
+    }
+
+        function deposit(address user,uint128 _ethPrice,uint64 _depositTime) external payable returns(DepositResult memory);
         function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index) external returns(bool);
         // function depositToAave() external;
         // function withdrawFromAave(uint64 index) external;
@@ -42,7 +52,7 @@ interface ITreasury{
         function transferEthToCdsLiquidators(address borrower,uint128 amount) external;
 
 
-        function noOfBorrowers() external returns(uint128);
+        function noOfBorrowers() external view returns(uint128);
         function ethProfitsOfLiquidators() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinWei() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinUSD() external view returns(uint256);
@@ -53,7 +63,7 @@ interface ITreasury{
         function updateTotalAbondTokensIncrease(address borrower,uint128 amount) external;
         function updateTotalAbondTokensDecrease(address borrower,uint128 amount) external;
 
-        function getBorrowing(address depositor,uint64 index) external view returns(uint64,DepositDetails memory);
+        function getBorrowing(address depositor,uint64 index) external view returns(GetBorrowingResult memory);
         function updateDepositDetails(address depositor,uint64 index,DepositDetails memory depositDetail) external;
         function updateTotalInterest(uint256 _amount) external;
         function updateTotalInterestFromLiquidation(uint256 _amount) external;

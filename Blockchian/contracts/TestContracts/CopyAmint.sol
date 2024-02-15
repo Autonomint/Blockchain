@@ -10,10 +10,10 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
-contract TestUSDT is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
+contract TestAMINTStablecoin is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
 
     function initialize() initializer public {
-        __ERC20_init("Test Tether", "TUSDT");
+        __ERC20_init("Test AMINT TOKEN", "TAMINT");
         __ERC20Burnable_init();
         __ERC20Pausable_init();
         __Ownable_init(msg.sender);
@@ -24,12 +24,16 @@ contract TestUSDT is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, 
 
     mapping(address => bool) public whitelist;
 
-    function pause() public onlyOwner {
-        _pause();
+    function isContract(address account) internal view returns (bool) {
+        return account.code.length > 0;
     }
 
-    function decimals() public pure override returns (uint8) {
+    function decimals() public view override returns (uint8) {
         return 6;
+    }
+
+    function pause() public onlyOwner {
+        _pause();
     }
 
     function unpause() public onlyOwner {
@@ -40,6 +44,7 @@ contract TestUSDT is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, 
         _mint(to, amount);
         return true;
     }
+    
     function burnFromUser(address to, uint256 amount) public returns(bool){
         burnFrom(to, amount);
         return true;
@@ -59,4 +64,5 @@ contract TestUSDT is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, 
     {
         super._update(from, to, value);
     }
+
 }
