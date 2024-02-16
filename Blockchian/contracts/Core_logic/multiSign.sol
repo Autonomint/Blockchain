@@ -7,11 +7,11 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 contract MultiSign is Initializable,OwnableUpgradeable,UUPSUpgradeable {
 
-    address[] public owners; // Owners array
+    address[] private owners; // Owners array
     uint8 private maxOwners;
     uint8 private noOfOwners;
     mapping(address => bool) public isOwner; // To check the address is owner
-    uint64 public requiredApprovals; // Required number of approvals to execute the function
+    uint64 private requiredApprovals; // Required number of approvals to execute the function
     enum SetterFunctions{
         SetLTV,
         SetAPR,

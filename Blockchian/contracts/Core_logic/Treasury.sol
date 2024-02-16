@@ -130,12 +130,12 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     uint256 public totalInterestFromLiquidation;
     uint256 public abondAmintPool;
     uint256 public ethProfitsOfLiquidators;
-    uint256 public interestFromExternalProtocolDuringLiquidation;
+    uint256 private interestFromExternalProtocolDuringLiquidation;
 
     //no of times deposited in external protocol(always 1 ahead) 
     uint64 public externalProtocolDepositCount;
-    uint256 PRECISION;
-    uint256 CUMULATIVE_PRECISION;
+    uint256 private PRECISION;
+    uint256 private CUMULATIVE_PRECISION;
 
     // Eth depsoited in particular index
     mapping(uint256=>uint256) externalProtocolCountTotalValue;

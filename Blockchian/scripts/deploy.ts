@@ -18,8 +18,8 @@ import {
   aavePoolAddressGoerli,
   aavePoolAddressSepolia,
   owner1,owner2,owner3,
-  PROXY_AMINT_ADDRESS,PROXY_ABOND_ADDRESS,PROXY_BORROWING_ADDRESS,
-  PROXY_CDS_ADDRESS,PROXY_MULTISIGN_ADDRESS,PROXY_TESTUSDT_ADDRESS,PROXY_TREASURY_ADDRESS
+  // PROXY_AMINT_ADDRESS,PROXY_ABOND_ADDRESS,PROXY_BORROWING_ADDRESS,
+  // PROXY_CDS_ADDRESS,PROXY_MULTISIGN_ADDRESS,PROXY_TESTUSDT_ADDRESS,PROXY_TREASURY_ADDRESS
 } from"./index"
 
 async function main() {
@@ -50,7 +50,7 @@ async function main() {
   console.log("PROXY CDS ADDRESS",await deployedCDS.getAddress());
 
   const Borrowing = await ethers.getContractFactory("Borrowing");
-  const deployedBorrowing = await upgrades.deployProxy(Borrowing,[await deployedAMINTStablecoin.getAddress(),await deployedCDS.getAddress(),await deployedABONDToken.getAddress(),await deployedMultisign.getAddress(),priceFeedAddressGoerli,1],{initializer:'initialize'},{kind:'uups'});
+  const deployedBorrowing = await upgrades.deployProxy(Borrowing,[await deployedAMINTStablecoin.getAddress(),await deployedCDS.getAddress(),await deployedABONDToken.getAddress(),await deployedMultisign.getAddress(),priceFeedAddressGoerli,5],{initializer:'initialize'},{kind:'uups'});
   await deployedBorrowing.waitForDeployment();
   console.log("PROXY BORROWING ADDRESS",await deployedBorrowing.getAddress());
 

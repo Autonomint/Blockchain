@@ -22,7 +22,7 @@ contract AMINTStablecoin is Initializable, ERC20Upgradeable, ERC20BurnableUpgrad
 
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
 
-    mapping(address => bool) public whitelist;
+    mapping(address => bool) private whitelist;
     address private borrowingContract;
     address private cdsContract;
 

@@ -14,15 +14,14 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
 
-    // AggregatorV3Interface internal priceFeed; //ETH USD pricefeed address
     // uint256 private currentEMA;
     // uint256 private constant smoothingFactor = 2;
     // uint256 private index = 0; // To track the oldest variance
     // uint256[30] private variances;
-    uint256 PRECISION;
-    uint256 ETH_PRICE_PRECISION;
-    uint256 OPTION_PRICE_PRECISION;
-    uint128 AMINT_PRECISION;
+    uint256 private PRECISION;
+    uint256 private ETH_PRICE_PRECISION;
+    uint256 private OPTION_PRICE_PRECISION;
+    uint128 private AMINT_PRECISION;
 
     // enum for different strike price percentages
     enum StrikePrice{FIVE,TEN,FIFTEEN,TWENTY,TWENTY_FIVE}
@@ -30,6 +29,7 @@ contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
     ITreasury treasury;
     CDSInterface cds;
     IBorrowing borrowing;
+    AggregatorV3Interface internal priceFeed; //ETH USD pricefeed address
 
     function initialize(
         address _treasuryAddress,

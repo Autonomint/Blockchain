@@ -23,7 +23,7 @@ contract ABONDToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable
 
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
 
-    mapping(address => bool) public whitelist;
+    mapping(address => bool) private whitelist;
     address private borrowingContract;
 
     modifier onlyBorrowingContract() {
