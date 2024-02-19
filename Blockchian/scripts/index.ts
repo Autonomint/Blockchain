@@ -18,9 +18,9 @@ export const aavePoolAddressGoerli = "0x5E52dEc931FFb32f609681B8438A51c675cc232d
 export const aTokenAddressGoerli = "0x22404B0e2a7067068AcdaDd8f9D586F834cCe2c5";
 
 
-export const owner1 = "0xc2858E82b388e4E5e8644Ca89D3f1b03D9047181";
-export const owner2 = "0x876b4dE42e35A37E6D0eaf8762836CAD860C0c18";
-export const owner3 = "0x14dadA759016a617bc491c9337F196Ade6cE9921";
+export const owner1 = "";
+export const owner2 = "";
+export const owner3 = "";
 
 
 // export const PROXY_AMINT_ADDRESS = "0x4eF259cECbE159Aabf1969e027ab4bd7Eadd033E"

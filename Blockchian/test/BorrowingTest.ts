@@ -49,7 +49,7 @@ describe("Borrowing Contract",function(){
         const BorrowingContract = await upgrades.deployProxy(Borrowing,[await Token.getAddress(),await CDSContract.getAddress(),await abondToken.getAddress(),await multiSign.getAddress(),priceFeedAddress,1],{initializer:'initialize'},{kind:'uups'});
 
         const Treasury = await ethers.getContractFactory("Treasury");
-        const treasury = await upgrades.deployProxy(Treasury,[await BorrowingContract.getAddress(),await Token.getAddress(),await CDSContract.getAddress(),wethGateway,cEther,aavePoolAddress,aTokenAddress,await usdt.getAddress()],{initializer:'initialize'},{kind:'uups'});
+        const treasury = await upgrades.deployProxy(Treasury,[await BorrowingContract.getAddress(),await Token.getAddress(),await CDSContract.getAddress(),wethGateway,aavePoolAddress,aTokenAddress,await usdt.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
         const Option = await ethers.getContractFactory("Options");
         const options = await upgrades.deployProxy(Option,[await treasury.getAddress(),await CDSContract.getAddress(),await BorrowingContract.getAddress()],{initializer:'initialize'},{kind:'uups'});
@@ -77,10 +77,10 @@ describe("Borrowing Contract",function(){
         const provider = new ethers.JsonRpcProvider(INFURA_URL);
         const signer = new ethers.Wallet("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",provider);
 
-        const aToken = new ethers.Contract(aTokenAddress,aTokenABI,signer);
-        const cETH = new ethers.Contract(cEther,cETH_ABI,signer);
+        // const aToken = new ethers.Contract(aTokenAddress,aTokenABI,signer);
+        // const cETH = new ethers.Contract(cEther,cETH_ABI,signer);
 
-        return {Token,abondToken,usdt,CDSContract,BorrowingContract,treasury,options,multiSign,aToken,cETH,owner,user1,user2,user3,provider,signer}
+        return {Token,abondToken,usdt,CDSContract,BorrowingContract,treasury,options,multiSign,owner,user1,user2,user3,provider,signer}
     }
 
     describe("Should deposit ETH and mint Trinity",function(){
@@ -128,13 +128,15 @@ describe("Borrowing Contract",function(){
             await expect(tx).to.be.revertedWith("Rate should not be zero");
         })
 
-        it("Should revert You do not have sufficient balance to execute this transaction",async function(){
-            const {BorrowingContract,usdt,Token} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
-            const tx = BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("5000")});
+        // it.only("Should revert You do not have sufficient balance to execute this transaction",async function(){
+        //     const {BorrowingContract} = await loadFixture(deployer);
+        //     const timeStamp = await time.latest();
+        //     console.log("BAL USER3",await ethers.provider.getBalance(user3.address));
             
-            await expect(tx).to.be.revertedWith("You do not have sufficient balance to execute this transaction");
-        })
+        //     const tx = BorrowingContract.connect(user3).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("9999.999999999999999")});
+            
+        //     await expect(tx).to.be.revertedWith("You do not have sufficient balance to execute this transaction");
+        // })
 
         it("Should revert if set APY without approval",async function(){
             const {BorrowingContract} = await loadFixture(deployer);

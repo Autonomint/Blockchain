@@ -45,17 +45,17 @@ async function main() {
   console.log("PROXY MULTISIGN ADDRESS",await deployedMultisign.getAddress());
 
   const CDS = await ethers.getContractFactory("CDS");
-  const deployedCDS = await upgrades.deployProxy(CDS,[await deployedAMINTStablecoin.getAddress(),priceFeedAddressGoerli,await deployedTestUSDT.getAddress(),await deployedMultisign.getAddress()],{initializer:'initialize'},{kind:'uups'})
+  const deployedCDS = await upgrades.deployProxy(CDS,[await deployedAMINTStablecoin.getAddress(),priceFeedAddressSepolia,await deployedTestUSDT.getAddress(),await deployedMultisign.getAddress()],{initializer:'initialize'},{kind:'uups'})
   await deployedCDS.waitForDeployment();
   console.log("PROXY CDS ADDRESS",await deployedCDS.getAddress());
 
   const Borrowing = await ethers.getContractFactory("Borrowing");
-  const deployedBorrowing = await upgrades.deployProxy(Borrowing,[await deployedAMINTStablecoin.getAddress(),await deployedCDS.getAddress(),await deployedABONDToken.getAddress(),await deployedMultisign.getAddress(),priceFeedAddressGoerli,5],{initializer:'initialize'},{kind:'uups'});
+  const deployedBorrowing = await upgrades.deployProxy(Borrowing,[await deployedAMINTStablecoin.getAddress(),await deployedCDS.getAddress(),await deployedABONDToken.getAddress(),await deployedMultisign.getAddress(),priceFeedAddressSepolia,11155111],{initializer:'initialize'},{kind:'uups'});
   await deployedBorrowing.waitForDeployment();
   console.log("PROXY BORROWING ADDRESS",await deployedBorrowing.getAddress());
 
   const Treasury = await ethers.getContractFactory("Treasury");
-  const deployedTreasury = await upgrades.deployProxy(Treasury,[await deployedBorrowing.getAddress(),await deployedAMINTStablecoin.getAddress(),await deployedCDS.getAddress(),wethGatewayGoerli,cEtherGoerli,aavePoolAddressGoerli,aTokenAddressGoerli,await deployedTestUSDT.getAddress()],{initializer:'initialize'},{kind:'uups'});
+  const deployedTreasury = await upgrades.deployProxy(Treasury,[await deployedBorrowing.getAddress(),await deployedAMINTStablecoin.getAddress(),await deployedCDS.getAddress(),wethGatewaySepolia,aavePoolAddressSepolia,aTokenAddressSepolia,await deployedTestUSDT.getAddress()],{initializer:'initialize'},{kind:'uups'});
   await deployedTreasury.waitForDeployment();
   console.log("PROXY TREASURY ADDRESS",await deployedTreasury.getAddress());
 
@@ -65,11 +65,11 @@ async function main() {
   console.log("PROXY OPTIONS ADDRESS",await deployedOptions.getAddress());
 
 
-  // async function sleep(ms:number) {
-  //   return new Promise((resolve) => setTimeout(resolve, ms));
-  // }
+  async function sleep(ms:number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
 
-  // await sleep(30 * 1000);
+  await sleep(30 * 1000);
 
   // await hre.run("verify:verify", {
   //   address: "0x4897424de78994b0d449c3253befee9206c6f082",
@@ -116,17 +116,7 @@ async function main() {
   //   //constructorArguments: [priceFeedAddressGoerli,deployedTreasury.address,deployedCDS.address,deployedBorrowing.address],
   // });
 
-  await deployedMultisign.approveSetterFunction(4);
-  await deployedMultisign.approveSetterFunction(5);
-  await deployedMultisign.approveSetterFunction(6);
-  await deployedMultisign.approveSetterFunction(0);
-  await deployedMultisign.approveSetterFunction(8);
-  await deployedMultisign.approveSetterFunction(7);
-  await deployedMultisign.approveSetterFunction(9);
-  await deployedMultisign.approveSetterFunction(10);
-  await deployedMultisign.approveSetterFunction(1);
-  await deployedMultisign.approveSetterFunction(2);
-  await deployedMultisign.approveSetterFunction(3);
+  await deployedMultisign.approveSetterFunction([0,1,2,3,4,5,6,7,8,9,10]);
 
   await deployedAMINTStablecoin.setBorrowingContract(await deployedBorrowing.getAddress());
   await deployedAMINTStablecoin.setCdsContract(await deployedCDS.getAddress());

@@ -44,7 +44,7 @@ interface ITreasury{
         // function depositToCompound() external;
         // function withdrawFromCompound(uint64 index) external;
         function withdrawFromAaveByUser(address depositor,uint64 index) external returns(uint256);
-        function withdrawFromCompoundByUser(address depositor,uint64 index) external returns(uint256);
+        // function withdrawFromCompoundByUser(address depositor,uint64 index) external returns(uint256);
 
         function getBalanceInTreasury() external view returns(uint256);
         function approveAmint(address _address, uint _amount) external;
