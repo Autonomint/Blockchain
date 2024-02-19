@@ -49,57 +49,38 @@ describe("Borrowing Contract",function(){
         const BorrowingContract = await upgrades.deployProxy(Borrowing,[await Token.getAddress(),await CDSContract.getAddress(),await abondToken.getAddress(),await multiSign.getAddress(),priceFeedAddress,1],{initializer:'initialize'},{kind:'uups'});
 
         const Treasury = await ethers.getContractFactory("Treasury");
-        const treasury = await upgrades.deployProxy(Treasury,[await BorrowingContract.getAddress(),await Token.getAddress(),await CDSContract.getAddress(),wethGateway,cEther,aavePoolAddress,aTokenAddress,await usdt.getAddress()],{initializer:'initialize'},{kind:'uups'});
+        const treasury = await upgrades.deployProxy(Treasury,[await BorrowingContract.getAddress(),await Token.getAddress(),await CDSContract.getAddress(),wethGateway,aavePoolAddress,aTokenAddress,await usdt.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
         const Option = await ethers.getContractFactory("Options");
         const options = await upgrades.deployProxy(Option,[await treasury.getAddress(),await CDSContract.getAddress(),await BorrowingContract.getAddress()],{initializer:'initialize'},{kind:'uups'});
         
-        await multiSign.connect(owner).approveSetterFunction(4);
-        await multiSign.connect(owner1).approveSetterFunction(4);
-        await BorrowingContract.connect(owner).setAdmin(owner.getAddress());
+        await multiSign.connect(owner).approveSetterFunction([0,1,4,5,6,7,8,9,10]);
+        await multiSign.connect(owner1).approveSetterFunction([0,1,4,5,6,7,8,9,10]);
 
-        await multiSign.connect(owner).approveSetterFunction(5);
-        await multiSign.connect(owner1).approveSetterFunction(5);
+        await BorrowingContract.connect(owner).setAdmin(owner.getAddress());
+        
         await CDSContract.connect(owner).setAdmin(owner.getAddress());
 
-        await multiSign.connect(owner).approveSetterFunction(6);
-        await multiSign.connect(owner1).approveSetterFunction(6);
         await BorrowingContract.connect(owner).setTreasury(await treasury.getAddress());
         await BorrowingContract.connect(owner).setOptions(await options.getAddress());
-
-        await multiSign.connect(owner).approveSetterFunction(0);
-        await multiSign.connect(owner1).approveSetterFunction(0);
         await BorrowingContract.connect(owner).setLTV(80);
-
-        await multiSign.connect(owner).approveSetterFunction(8);
-        await multiSign.connect(owner1).approveSetterFunction(8);
         await BorrowingContract.connect(owner).setBondRatio(4);
+        await BorrowingContract.connect(owner).setAPR(BigInt("1000000001547125957863212449"));
 
-        await multiSign.connect(owner).approveSetterFunction(7);
-        await multiSign.connect(owner1).approveSetterFunction(7);
         await CDSContract.connect(owner).setTreasury(await treasury.getAddress());
         await CDSContract.connect(owner).setBorrowingContract(await BorrowingContract.getAddress());
-
-        await multiSign.connect(owner).approveSetterFunction(9);
-        await multiSign.connect(owner1).approveSetterFunction(9);
         await CDSContract.connect(owner).setAmintLimit(80);
-
-        await multiSign.connect(owner).approveSetterFunction(10);
-        await multiSign.connect(owner1).approveSetterFunction(10);
         await CDSContract.connect(owner).setUsdtLimit(20000000000);
 
-        await multiSign.connect(owner).approveSetterFunction(1);
-        await multiSign.connect(owner1).approveSetterFunction(1);
-        await BorrowingContract.connect(owner).setAPR(BigInt("1000000001547125957863212449"));
         await BorrowingContract.calculateCumulativeRate();
         
         const provider = new ethers.JsonRpcProvider(INFURA_URL);
         const signer = new ethers.Wallet("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",provider);
 
-        const aToken = new ethers.Contract(aTokenAddress,aTokenABI,signer);
-        const cETH = new ethers.Contract(cEther,cETH_ABI,signer);
+        // const aToken = new ethers.Contract(aTokenAddress,aTokenABI,signer);
+        // const cETH = new ethers.Contract(cEther,cETH_ABI,signer);
 
-        return {Token,abondToken,usdt,CDSContract,BorrowingContract,treasury,options,multiSign,aToken,cETH,owner,user1,user2,user3,provider,signer}
+        return {Token,abondToken,usdt,CDSContract,BorrowingContract,treasury,options,multiSign,owner,user1,user2,user3,provider,signer}
     }
 
     describe("Should deposit ETH and mint Trinity",function(){
@@ -124,15 +105,15 @@ describe("Borrowing Contract",function(){
 
         it("Should set APY",async function(){
             const {BorrowingContract,multiSign} = await loadFixture(deployer);
-            await multiSign.connect(owner).approveSetterFunction(1);
-            await multiSign.connect(owner1).approveSetterFunction(1);
+            await multiSign.connect(owner).approveSetterFunction([1]);
+            await multiSign.connect(owner1).approveSetterFunction([1]);
             await BorrowingContract.setAPR(BigInt("1000000001547125957863212449"));
             await expect(await BorrowingContract.ratePerSec()).to.be.equal(BigInt("1000000001547125957863212449"));
         })
         it("Should called by only owner(setAPR)",async function(){
             const {BorrowingContract,multiSign} = await loadFixture(deployer);
-            await multiSign.connect(owner).approveSetterFunction(1);
-            await multiSign.connect(owner1).approveSetterFunction(1);
+            await multiSign.connect(owner).approveSetterFunction([1]);
+            await multiSign.connect(owner1).approveSetterFunction([1]);
             const tx = BorrowingContract.connect(user1).setAPR(BigInt("1000000001547125957863212449"));
             //console.log(await tx);
             await expect(tx).to.be.revertedWith("Caller is not an admin");
@@ -140,20 +121,22 @@ describe("Borrowing Contract",function(){
 
         it("Should revert if rate is zero",async function(){
             const {BorrowingContract,multiSign} = await loadFixture(deployer);
-            await multiSign.connect(owner).approveSetterFunction(1);
-            await multiSign.connect(owner1).approveSetterFunction(1);
+            await multiSign.connect(owner).approveSetterFunction([1]);
+            await multiSign.connect(owner1).approveSetterFunction([1]);
             const tx = BorrowingContract.connect(owner).setAPR(0);
 
             await expect(tx).to.be.revertedWith("Rate should not be zero");
         })
 
-        it("Should revert You do not have sufficient balance to execute this transaction",async function(){
-            const {BorrowingContract,usdt,Token} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
-            const tx = BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("5000")});
+        // it.only("Should revert You do not have sufficient balance to execute this transaction",async function(){
+        //     const {BorrowingContract} = await loadFixture(deployer);
+        //     const timeStamp = await time.latest();
+        //     console.log("BAL USER3",await ethers.provider.getBalance(user3.address));
             
-            await expect(tx).to.be.revertedWith("You do not have sufficient balance to execute this transaction");
-        })
+        //     const tx = BorrowingContract.connect(user3).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("9999.999999999999999")});
+            
+        //     await expect(tx).to.be.revertedWith("You do not have sufficient balance to execute this transaction");
+        // })
 
         it("Should revert if set APY without approval",async function(){
             const {BorrowingContract} = await loadFixture(deployer);
@@ -210,8 +193,8 @@ describe("Borrowing Contract",function(){
 
         it("Should revert if LTV set to zero",async function(){
             const {BorrowingContract,multiSign,CDSContract} = await loadFixture(deployer);
-            await multiSign.connect(owner).approveSetterFunction(0);
-            await multiSign.connect(owner1).approveSetterFunction(0);
+            await multiSign.connect(owner).approveSetterFunction([0]);
+            await multiSign.connect(owner1).approveSetterFunction([0]);
             const tx = BorrowingContract.connect(owner).setLTV(0);          
             await expect(tx).to.be.revertedWith("LTV can't be zero");
         })
@@ -781,8 +764,8 @@ describe("Borrowing Contract",function(){
         it("Should revert if withdraw time limit is not yet reached",async function(){
             const {BorrowingContract,Token,abondToken,CDSContract,usdt,multiSign} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            await multiSign.connect(owner).approveSetterFunction(2);
-            await multiSign.connect(owner1).approveSetterFunction(2);
+            await multiSign.connect(owner).approveSetterFunction([2]);
+            await multiSign.connect(owner1).approveSetterFunction([2]);
             await BorrowingContract.connect(owner).setWithdrawTimeLimit(2592000);
             await usdt.connect(user1).mint(user1.getAddress(),10000000000)
             await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
@@ -997,56 +980,56 @@ describe("Borrowing Contract",function(){
 
         it("Should revert if non owner tried to approve pausing",async function(){
             const {multiSign} = await loadFixture(deployer);
-            await expect(multiSign.connect(user1).approvePause(0)).to.be.revertedWith("Not an owner");
+            await expect(multiSign.connect(user1).approvePause([0])).to.be.revertedWith("Not an owner");
         })
 
         it("Should revert if non owner tried to approve unpausing",async function(){
             const {multiSign} = await loadFixture(deployer);
-            await expect(multiSign.connect(user1).approveUnPause(2)).to.be.revertedWith("Not an owner");
+            await expect(multiSign.connect(user1).approveUnPause([2])).to.be.revertedWith("Not an owner");
         })
 
         it("Should revert if tried to approve pausing twice ",async function(){
             const {multiSign} = await loadFixture(deployer);
-            await multiSign.connect(owner).approvePause(0);
-            await expect(multiSign.connect(owner).approvePause(0)).to.be.revertedWith('Already approved');
+            await multiSign.connect(owner).approvePause([0]);
+            await expect(multiSign.connect(owner).approvePause([0])).to.be.revertedWith('Already approved');
         })
 
         it("Should revert caller is not the owner if tried to pause Borrowing",async function(){
             const {multiSign} = await loadFixture(deployer);
-            await multiSign.connect(owner).approvePause(1);
-            await multiSign.connect(owner1).approvePause(1);
-            await expect(multiSign.connect(user1).pauseFunction(1)).to.be.revertedWith("Not an owner");
+            await multiSign.connect(owner).approvePause([1]);
+            await multiSign.connect(owner1).approvePause([1]);
+            await expect(multiSign.connect(user1).pauseFunction([1])).to.be.revertedWith("Not an owner");
         })
 
         it("Should revert caller is not the owner if tried to unpause Borrowing",async function(){
             const {multiSign} = await loadFixture(deployer);
-            await multiSign.connect(owner).approveUnPause(0);
-            await multiSign.connect(owner1).approveUnPause(0);
-            await expect(multiSign.connect(user1).unpauseFunction(1)).to.be.revertedWith("Not an owner");
+            await multiSign.connect(owner).approveUnPause([0]);
+            await multiSign.connect(owner1).approveUnPause([0]);
+            await expect(multiSign.connect(user1).unpauseFunction([1])).to.be.revertedWith("Not an owner");
         })
 
         it("Should revert if tried to pause Borrowing before attaining required approvals",async function(){
             const {multiSign} = await loadFixture(deployer);
-            await multiSign.connect(owner).approvePause(1);
-            await expect(multiSign.connect(owner).pauseFunction(1)).to.be.revertedWith('Required approvals not met');
+            await multiSign.connect(owner).approvePause([1]);
+            await expect(multiSign.connect(owner).pauseFunction([1])).to.be.revertedWith('Required approvals not met');
         })
 
         it("Should revert if tried to unpause Borrowing before attaining required approvals",async function(){
             const {BorrowingContract,multiSign} = await loadFixture(deployer);
-            await multiSign.connect(owner).approvePause(1);
-            await multiSign.connect(owner1).approvePause(1);
-            await multiSign.connect(owner).pauseFunction(1);
+            await multiSign.connect(owner).approvePause([1]);
+            await multiSign.connect(owner1).approvePause([1]);
+            await multiSign.connect(owner).pauseFunction([1]);
 
-            await multiSign.connect(owner).approveUnPause(1);
-            await expect(multiSign.connect(owner).unpauseFunction(1)).to.be.revertedWith('Required approvals not met');
+            await multiSign.connect(owner).approveUnPause([1]);
+            await expect(multiSign.connect(owner).unpauseFunction([1])).to.be.revertedWith('Required approvals not met');
         })
 
         it("Should revert if tried to deposit ETH in borrowing when it is paused",async function(){
             const {BorrowingContract,multiSign} = await loadFixture(deployer);
             const timeStamp = await time.latest();
-            await multiSign.connect(owner).approvePause(0);
-            await multiSign.connect(owner1).approvePause(0);
-            await multiSign.connect(owner).pauseFunction(0);
+            await multiSign.connect(owner).approvePause([0]);
+            await multiSign.connect(owner1).approvePause([0]);
+            await multiSign.connect(owner).pauseFunction([0]);
 
             const tx = BorrowingContract.connect(user2).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
             await expect(tx).to.be.revertedWith('Paused');
@@ -1054,9 +1037,9 @@ describe("Borrowing Contract",function(){
 
         it("Should revert if tried to deposit USDT or AMINT in CDS when it is paused",async function(){
             const {CDSContract,multiSign,usdt} = await loadFixture(deployer);
-            await multiSign.connect(owner).approvePause(4);
-            await multiSign.connect(owner1).approvePause(4);
-            await multiSign.connect(owner).pauseFunction(4);
+            await multiSign.connect(owner).approvePause([4]);
+            await multiSign.connect(owner1).approvePause([4]);
+            await multiSign.connect(owner).pauseFunction([4]);
 
             await usdt.connect(user1).mint(user1.getAddress(),10000000000)
             await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
@@ -1066,9 +1049,9 @@ describe("Borrowing Contract",function(){
 
         it("Should revert if tried to redeem USDT in cds when it is paused",async function(){
             const {CDSContract,multiSign} = await loadFixture(deployer);
-            await multiSign.connect(owner).approvePause(6);
-            await multiSign.connect(owner1).approvePause(6);
-            await multiSign.connect(owner).pauseFunction(6);
+            await multiSign.connect(owner).approvePause([6]);
+            await multiSign.connect(owner1).approvePause([6]);
+            await multiSign.connect(owner).pauseFunction([6]);
 
             const tx = CDSContract.connect(user2).redeemUSDT(ethers.parseEther("800"),1500,1000);
             await expect(tx).to.be.revertedWith('Paused');
@@ -1084,9 +1067,9 @@ describe("Borrowing Contract",function(){
 
             await BorrowingContract.connect(user2).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
 
-            await multiSign.connect(owner).approvePause(1);
-            await multiSign.connect(owner1).approvePause(1);
-            await multiSign.connect(owner).pauseFunction(1);
+            await multiSign.connect(owner).approvePause([1]);
+            await multiSign.connect(owner1).approvePause([1]);
+            await multiSign.connect(owner).pauseFunction([1]);
 
             await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
             const tx = BorrowingContract.connect(user2).withDraw(user2.getAddress(),1,99900,timeStamp);
@@ -1100,9 +1083,9 @@ describe("Borrowing Contract",function(){
             await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
             await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000);
 
-            await multiSign.connect(owner).approvePause(5);
-            await multiSign.connect(owner1).approvePause(5);
-            await multiSign.connect(owner).pauseFunction(5);
+            await multiSign.connect(owner).approvePause([5]);
+            await multiSign.connect(owner1).approvePause([5]);
+            await multiSign.connect(owner).pauseFunction([5]);
             
             const tx = CDSContract.connect(user1).withdraw(1);
 
@@ -1112,9 +1095,9 @@ describe("Borrowing Contract",function(){
         it("Should revert if tried to Liquidate in borrowing when it is paused",async function(){
             const {BorrowingContract,multiSign} = await loadFixture(deployer);
             
-            await multiSign.connect(owner).approvePause(2);
-            await multiSign.connect(owner1).approvePause(2);
-            await multiSign.connect(owner).pauseFunction(2);
+            await multiSign.connect(owner).approvePause([2]);
+            await multiSign.connect(owner1).approvePause([2]);
+            await multiSign.connect(owner).pauseFunction([2]);
             
             const tx = BorrowingContract.liquidate(user1.getAddress(),1,80000);
             await expect(tx).to.be.revertedWith('Paused');

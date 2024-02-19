@@ -45,48 +45,29 @@ describe("Testing contracts ", function(){
         const BorrowingContract = await upgrades.deployProxy(Borrowing,[await Token.getAddress(),await CDSContract.getAddress(),await abondToken.getAddress(),await multiSign.getAddress(),priceFeedAddress,1],{initializer:'initialize'},{kind:'uups'});
 
         const Treasury = await ethers.getContractFactory("Treasury");
-        const treasury = await upgrades.deployProxy(Treasury,[await BorrowingContract.getAddress(),await Token.getAddress(),await CDSContract.getAddress(),wethGateway,cEther,aavePoolAddress,aTokenAddress,await usdt.getAddress()],{initializer:'initialize'},{kind:'uups'});
+        const treasury = await upgrades.deployProxy(Treasury,[await BorrowingContract.getAddress(),await Token.getAddress(),await CDSContract.getAddress(),wethGateway,aavePoolAddress,aTokenAddress,await usdt.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
         const Option = await ethers.getContractFactory("Options");
         const options = await upgrades.deployProxy(Option,[await treasury.getAddress(),await CDSContract.getAddress(),await BorrowingContract.getAddress()],{initializer:'initialize'},{kind:'uups'});
         
-        await multiSign.connect(owner).approveSetterFunction(4);
-        await multiSign.connect(owner1).approveSetterFunction(4);
-        await BorrowingContract.connect(owner).setAdmin(owner.getAddress());
+        await multiSign.connect(owner).approveSetterFunction([0,1,4,5,6,7,8,9,10]);
+        await multiSign.connect(owner1).approveSetterFunction([0,1,4,5,6,7,8,9,10]);
 
-        await multiSign.connect(owner).approveSetterFunction(5);
-        await multiSign.connect(owner1).approveSetterFunction(5);
+        await BorrowingContract.connect(owner).setAdmin(owner.getAddress());
+        
         await CDSContract.connect(owner).setAdmin(owner.getAddress());
 
-        await multiSign.connect(owner).approveSetterFunction(6);
-        await multiSign.connect(owner1).approveSetterFunction(6);
         await BorrowingContract.connect(owner).setTreasury(await treasury.getAddress());
         await BorrowingContract.connect(owner).setOptions(await options.getAddress());
-
-        await multiSign.connect(owner).approveSetterFunction(0);
-        await multiSign.connect(owner1).approveSetterFunction(0);
         await BorrowingContract.connect(owner).setLTV(80);
-
-        await multiSign.connect(owner).approveSetterFunction(8);
-        await multiSign.connect(owner1).approveSetterFunction(8);
         await BorrowingContract.connect(owner).setBondRatio(4);
+        await BorrowingContract.connect(owner).setAPR(BigInt("1000000001547125957863212449"));
 
-        await multiSign.connect(owner).approveSetterFunction(7);
-        await multiSign.connect(owner1).approveSetterFunction(7);
         await CDSContract.connect(owner).setTreasury(await treasury.getAddress());
         await CDSContract.connect(owner).setBorrowingContract(await BorrowingContract.getAddress());
-
-        await multiSign.connect(owner).approveSetterFunction(9);
-        await multiSign.connect(owner1).approveSetterFunction(9);
         await CDSContract.connect(owner).setAmintLimit(80);
-
-        await multiSign.connect(owner).approveSetterFunction(10);
-        await multiSign.connect(owner1).approveSetterFunction(10);
         await CDSContract.connect(owner).setUsdtLimit(20000000000);
 
-        await multiSign.connect(owner).approveSetterFunction(1);
-        await multiSign.connect(owner1).approveSetterFunction(1);
-        await BorrowingContract.connect(owner).setAPR(BigInt("1000000001547125957863212449"));
         await BorrowingContract.calculateCumulativeRate();
         
         return {Token,abondToken,usdt,CDSContract,BorrowingContract,treasury,options,multiSign,owner,user1,user2,user3}
@@ -286,15 +267,15 @@ describe("Testing contracts ", function(){
         })
         it("Should update treasury correctly",async function(){
             const {treasury,CDSContract,multiSign} = await loadFixture(deployer);
-            await multiSign.connect(owner).approveSetterFunction(7);
-            await multiSign.connect(owner1).approveSetterFunction(7);
+            await multiSign.connect(owner).approveSetterFunction([7]);
+            await multiSign.connect(owner1).approveSetterFunction([7]);
             await CDSContract.connect(owner).setTreasury(treasury.getAddress());
             expect (await CDSContract.treasuryAddress()).to.be.equal(await treasury.getAddress());     
         })
         it("Should update withdrawTime correctly",async function(){
             const {CDSContract,multiSign} = await loadFixture(deployer);
-            await multiSign.connect(owner).approveSetterFunction(3);
-            await multiSign.connect(owner1).approveSetterFunction(3);
+            await multiSign.connect(owner).approveSetterFunction([3]);
+            await multiSign.connect(owner1).approveSetterFunction([3]);
             await CDSContract.connect(owner).setWithdrawTimeLimit(1500);
             expect (await CDSContract.withdrawTimeLimit()).to.be.equal(1500);     
         })
@@ -417,8 +398,8 @@ describe("Testing contracts ", function(){
 
         it("Should revert cannot withdraw before the withdraw time limit",async () => {
             const {CDSContract,usdt,multiSign} = await loadFixture(deployer);
-            await multiSign.connect(owner).approveSetterFunction(3);
-            await multiSign.connect(owner1).approveSetterFunction(3);
+            await multiSign.connect(owner).approveSetterFunction([3]);
+            await multiSign.connect(owner1).approveSetterFunction([3]);
             await CDSContract.connect(owner).setWithdrawTimeLimit(1000);
             await usdt.connect(user1).mint(user1.getAddress(),30000000000);
             await usdt.connect(user1).approve(CDSContract.getAddress(),30000000000);

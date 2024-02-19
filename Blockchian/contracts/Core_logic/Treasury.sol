@@ -10,12 +10,9 @@ import "@openzeppelin/contracts/interfaces/IERC20.sol";
 import "../interface/IAmint.sol";
 import "../interface/IBorrowing.sol";
 import "../interface/AaveInterfaces/IWETHGateway.sol";
-import "../interface/AaveInterfaces/ILendingPoolAddressesProvider.sol";
-import "../interface/AaveInterfaces/IPool.sol";
+import "../interface/AaveInterfaces/IPoolAddressesProvider.sol";
 import "../interface/ICEther.sol";
 import "hardhat/console.sol";
-
-interface IATOKEN is IERC20{}
 
 contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuardUpgradeable {
 
@@ -32,9 +29,9 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     IBorrowing  public borrow;
     IAMINT      public amint;
     IWrappedTokenGatewayV3          public wethGateway; // Weth gateway is used to deposit eth in  and withdraw from aave
-    ILendingPoolAddressesProvider   public aavePoolAddressProvider; // To get the current pool  address in Aave
+    IPoolAddressesProvider   public aavePoolAddressProvider; // To get the current pool  address in Aave
     IERC20  public usdt;
-    IATOKEN public aToken; // aave token contract
+    IERC20 public aToken; // aave token contract
     ICEther public cEther; // To deposit in and withdraw eth from compound
 
     address public borrowingContract;
@@ -152,7 +149,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         address _tokenAddress,
         address _cdsContract,
         address _wethGateway,
-        address _cEther,
+        // address _cEther,
         address _aavePoolAddressProvider,
         address _aToken,
         address _usdt
@@ -164,10 +161,10 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         borrow = IBorrowing(_borrowing);
         amint = IAMINT(_tokenAddress);
         wethGateway = IWrappedTokenGatewayV3(_wethGateway);       //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
-        cEther = ICEther(_cEther);                                //0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5
-        compoundAddress = _cEther;
-        aavePoolAddressProvider = ILendingPoolAddressesProvider(_aavePoolAddressProvider);  //0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
-        aToken = IATOKEN(_aToken);                                                   //0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
+        // cEther = ICEther(_cEther);                                //0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5
+        // compoundAddress = _cEther;
+        aavePoolAddressProvider = IPoolAddressesProvider(_aavePoolAddressProvider);  //0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
+        aToken = IERC20(_aToken);                                                   //0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
         aaveWETH = _wethGateway;
         usdt = IERC20(_usdt);
         externalProtocolDepositCount = 1;
@@ -255,7 +252,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         // Compute the discounted price of the deposit using the cumulative rate.
         borrowing[user].depositDetails[borrowerIndex].discountedPrice = externalProtocolDepositEth * CUMULATIVE_PRECISION / protocolDeposit[Protocol.Aave].cumulativeRate;
 
-        borrowing[user].depositDetails[borrowerIndex].cTokensCredited = depositToCompoundByUser(externalProtocolDepositEth);
+        //borrowing[user].depositDetails[borrowerIndex].cTokensCredited = depositToCompoundByUser(externalProtocolDepositEth);
 
         emit Deposit(user,msg.value);
         return DepositResult(borrowing[user].hasDeposited,borrowerIndex);
@@ -293,7 +290,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
             require(borrowing[borrower].depositDetails[index].withdrawNo == 2,"Invalid Withdraw");
             // Withdraw from external protocol
             // Get interest
-            uint256 externalProtocolInterest = withdrawFromAaveByUser(borrower,index) + withdrawFromCompoundByUser(borrower,index);
+            uint256 externalProtocolInterest = withdrawFromAaveByUser(borrower,index); // + withdrawFromCompoundByUser(borrower,index)
             // Add the external protocol interest to the withdraw amount
             amount += externalProtocolInterest;
             borrowing[borrower].depositDetails[index].depositedAmount = 0;
@@ -791,7 +788,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
             // Update the cumulative rate using the calculated change.
             protocolDeposit[Protocol.Aave].cumulativeRate = ((CUMULATIVE_PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate) / CUMULATIVE_PRECISION;
         }
-        address poolAddress = aavePoolAddressProvider.getLendingPool();
+        address poolAddress = aavePoolAddressProvider.getPool();
 
         if(poolAddress == address(0)){
             revert Treasury_AavePoolAddressZero();
@@ -828,7 +825,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         protocolDeposit[Protocol.Aave].cumulativeRate = currentCumulativeRate;
         //withdraw amount
         uint256 amount = (currentCumulativeRate * depositDetails.discountedPrice)/CUMULATIVE_PRECISION;
-        address poolAddress = aavePoolAddressProvider.getLendingPool();
+        address poolAddress = aavePoolAddressProvider.getPool();
 
         if(poolAddress == address(0)){
             revert Treasury_AavePoolAddressZero();

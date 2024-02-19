@@ -240,7 +240,6 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
         uint256 _volatility
     ) external payable nonReentrant whenNotPaused(IMultiSign.Functions(0)){
         require(msg.value > 0, "Cannot deposit zero tokens");
-        require(msg.sender.balance > msg.value, "You do not have sufficient balance to execute this transaction");
 
         //Call calculateInverseOfRatio function to find ratio
         uint64 ratio = calculateRatio(msg.value,uint128(_ethPrice));
@@ -521,7 +520,7 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
         ITreasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
         require(!depositDetail.liquidated,"Already Liquidated");
         
-        uint256 externalProtocolInterest = treasury.withdrawFromAaveByUser(borrower,index) + treasury.withdrawFromCompoundByUser(borrower,index);
+        uint256 externalProtocolInterest = treasury.withdrawFromAaveByUser(borrower,index); // + treasury.withdrawFromCompoundByUser(borrower,index);
 
         require(
             depositDetail.depositedAmount <= (treasury.totalVolumeOfBorrowersAmountinWei() - treasury.ethProfitsOfLiquidators())

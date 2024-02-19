@@ -76,21 +76,34 @@ contract MultiSign is Initializable,OwnableUpgradeable,UUPSUpgradeable {
     }
 
     // Function to approve pause takes enum for which function to pause
-    function approvePause(Functions _function) external onlyOwners{
-        require(!pauseApproved[_function][msg.sender],'Already approved');
-        pauseApproved[_function][msg.sender] = true;
+    function approvePause(uint8[] memory functions) external onlyOwners{
+        uint8 noOfFunctions = uint8(functions.length);
+        require(noOfFunctions > 0,"Empty array");
+        for(uint8 i = 0;i < noOfFunctions;i++){
+            require(!pauseApproved[Functions(functions[i])][msg.sender],'Already approved');
+            pauseApproved[Functions(functions[i])][msg.sender] = true;
+        }
     }
 
     // Function to approve set apr
-    function approveSetterFunction(SetterFunctions _function) external onlyOwners{
-        require(!approvedToUpdate[_function][msg.sender],'Already approved');
-        approvedToUpdate[_function][msg.sender] = true;
+    function approveSetterFunction(uint8[] memory functions) external onlyOwners{
+        uint8 noOfFunctions = uint8(functions.length); 
+        require(noOfFunctions > 0,"Empty array");
+        for(uint8 i = 0;i < noOfFunctions;i++){
+            require(!approvedToUpdate[SetterFunctions(functions[i])][msg.sender],'Already approved');
+            approvedToUpdate[SetterFunctions(functions[i])][msg.sender] = true;
+        }
     }
 
     // Function to approve unpause takes enum for which function to pause
-    function approveUnPause(Functions _function) external onlyOwners{
-        require(!unpauseApproved[_function][msg.sender],'Already approved');
-        unpauseApproved[_function][msg.sender] = true;
+    function approveUnPause(uint8[] memory functions) external onlyOwners{
+        uint8 noOfFunctions = uint8(functions.length);
+        require(noOfFunctions > 0,"Empty array");
+        for(uint8 i = 0;i < noOfFunctions;i++){
+            require(!unpauseApproved[Functions(functions[i])][msg.sender],'Already approved');
+            unpauseApproved[Functions(functions[i])][msg.sender] = true;
+        }
+
     }
 
     // Function to approve pause the borrowing contract
@@ -202,15 +215,25 @@ contract MultiSign is Initializable,OwnableUpgradeable,UUPSUpgradeable {
     }
 
     // Pause the given function
-    function pauseFunction(Functions _function) external onlyOwners{
-        require(executePause(_function));
-        functionState[_function] = true;
+    function pauseFunction(uint8[] memory functions) external onlyOwners{
+        uint8 noOfFunctions = uint8(functions.length);
+        require(noOfFunctions > 0,"Empty array");
+        for(uint8 i = 0;i < noOfFunctions;i++){
+            require(executePause(Functions(functions[i])));
+            functionState[Functions(functions[i])] = true;
+        }
+
     }
 
     // Unpause the given function
-    function unpauseFunction(Functions _function) external onlyOwners{
-        require(executeUnPause(_function));
-        functionState[_function] = false;
+    function unpauseFunction(uint8[] memory functions) external onlyOwners{
+        uint8 noOfFunctions = uint8(functions.length);
+        require(noOfFunctions > 0,"Empty array");
+        for(uint8 i = 0;i < noOfFunctions;i++){
+            require(executeUnPause(Functions(functions[i])));
+            functionState[Functions(functions[i])] = false;
+        }
+
     }
 
     // Pause Borrowing
