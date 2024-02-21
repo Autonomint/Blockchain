@@ -245,7 +245,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
 
         externalProtocolCountTotalValue[externalProtocolDepositCount] += ((msg.value * 50)/100);
 
-        uint256 externalProtocolDepositEth = ((msg.value * 25)/100);
+        uint256 externalProtocolDepositEth = ((msg.value * 50)/100);
 
         depositToAaveByUser(externalProtocolDepositEth);
 
@@ -837,7 +837,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         wethGateway.withdrawETH(poolAddress,amount,address(this));
 
         protocolDeposit[Protocol.Aave].totalCreditedTokens = aToken.balanceOf(address(this));
-        return (amount - ((depositDetails.depositedAmount * 25)/100));
+        return (amount - ((depositDetails.depositedAmount * 50)/100));
     }
 
     function withdrawFromCompoundByUser(address depositor,uint64 index) public onlyBorrowingContract returns(uint256){

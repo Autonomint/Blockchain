@@ -65,7 +65,6 @@ contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
         uint64 currentEthPrice = ethPrice;
         uint128 currentEthValue = depositedAmount * currentEthPrice;
         uint128 ethToReturn;
-        require(currentEthValue >= strikePrice);
         if(currentEthValue > strikePrice){
             ethToReturn = (currentEthValue - strikePrice)/currentEthPrice;
         }else{
