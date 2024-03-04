@@ -339,7 +339,8 @@ contract Borrowing is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     ) external nonReentrant whenNotPaused(IMultiSign.Functions(1)){
         // check is _toAddress in not a zero address and isContract address
         require(_toAddress != address(0) && isContract(_toAddress) != true, "To address cannot be a zero and contract address");
-
+        
+        calculateRatio(0,_ethPrice);
         lastEthprice = uint128(_ethPrice);
 
         ITreasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(msg.sender,_index);
@@ -408,7 +409,7 @@ contract Borrowing is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
 
                     if(borrowingHealth > 10000){
                         // If the ethPrice is higher than deposit ethPrice,call withdrawOption in options contract
-                        ethToReturn = (depositedAmountvalue + (options.withdrawOption(depositDetail.depositedAmount,depositDetail.strikePrice,_ethPrice)));
+                        ethToReturn = (depositedAmountvalue + (options.calculateStrikePriceGains(depositDetail.depositedAmount,depositDetail.strikePrice,_ethPrice)));
                     }else if(borrowingHealth == 10000){
                         ethToReturn = depositedAmountvalue;
                     }else if(8000 < borrowingHealth && borrowingHealth < 10000) {

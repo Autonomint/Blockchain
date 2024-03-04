@@ -60,7 +60,7 @@ contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
      * @param strikePrice strikePrice,not percent, price
      * @param ethPrice eth price
      */
-    function withdrawOption(uint128 depositedAmount,uint128 strikePrice,uint64 ethPrice) external view onlyBorrowingContract returns(uint128){
+    function calculateStrikePriceGains(uint128 depositedAmount,uint128 strikePrice,uint64 ethPrice) external view onlyBorrowingContract returns(uint128){
         require(depositedAmount != 0 && strikePrice != 0 && ethPrice != 0,"Zero inputs in options");
         uint64 currentEthPrice = ethPrice;
         uint128 currentEthValue = depositedAmount * currentEthPrice;
