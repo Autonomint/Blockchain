@@ -5,26 +5,22 @@ pragma solidity 0.8.20;
 interface ITreasury{
 
     struct DepositDetails{
-        uint64 depositedTime;
+        uint64  depositedTime;
         uint128 depositedAmount;
         uint128 depositedAmountUsdValue;
-        uint64 downsidePercentage;
+        uint64  downsidePercentage;
         uint128 ethPriceAtDeposit;
         uint128 borrowedAmount;
         uint128 normalizedAmount;
-        uint8 withdrawNo;
-        bool withdrawed;
+        bool    withdrawed;
         uint128 withdrawAmount;
-        bool liquidated;
-        uint64 ethPriceAtWithdraw;
-        uint64 withdrawTime;
+        bool    liquidated;
+        uint64  ethPriceAtWithdraw;
+        uint64  withdrawTime;
         uint128 aBondTokensAmount;
         uint128 strikePrice;
         uint128 optionFees;
-        uint256 burnedAmint;
-        uint64 externalProtocolCount;
-        uint256 discountedPrice;
-        uint128 cTokensCredited;
+        uint64  externalProtocolCount;
     }
 
     struct DepositResult{
@@ -39,11 +35,12 @@ interface ITreasury{
 
         function deposit(address user,uint128 _ethPrice,uint64 _depositTime) external payable returns(DepositResult memory);
         function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index) external returns(bool);
+        function withdrawFromExternalProtocol(address user, uint64 aBondAmount) external;
+
         // function depositToAave() external;
         // function withdrawFromAave(uint64 index) external;
         // function depositToCompound() external;
         // function withdrawFromCompound(uint64 index) external;
-        function withdrawFromAaveByUser(address depositor,uint64 index) external returns(uint256);
         // function withdrawFromCompoundByUser(address depositor,uint64 index) external returns(uint256);
 
         function getBalanceInTreasury() external view returns(uint256);
@@ -54,16 +51,16 @@ interface ITreasury{
 
         function noOfBorrowers() external view returns(uint128);
         function ethProfitsOfLiquidators() external view returns(uint256);
+        function abondAmintPool() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinWei() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinUSD() external view returns(uint256);
 
         function updateHasBorrowed(address borrower,bool _bool) external;
         function updateTotalDepositedAmount(address borrower,uint128 amount) external;
         function updateTotalBorrowedAmount(address borrower,uint256 amount) external;
-        function updateTotalAbondTokensIncrease(address borrower,uint128 amount) external;
-        function updateTotalAbondTokensDecrease(address borrower,uint128 amount) external;
 
         function getBorrowing(address depositor,uint64 index) external view returns(GetBorrowingResult memory);
+        function getExternalProtocolCumulativeRate() external view  returns(uint128);
         function updateDepositDetails(address depositor,uint64 index,DepositDetails memory depositDetail) external;
         function updateTotalInterest(uint256 _amount) external;
         function updateTotalInterestFromLiquidation(uint256 _amount) external;

@@ -1,9 +1,15 @@
 // SPDX-License-Identifier: unlicensed
 pragma solidity 0.8.20;
 
+struct State {
+    uint128 cumulativeRate;
+    uint128 ethBacked;
+    uint64 aBondBalance;
+}
+
 interface IABONDToken {
     function balanceOf(address account) external view returns (uint256);
-    function mint(address to, uint256 amount) external returns(bool);
+    function mint(address to, uint64 index, uint256 amount) external returns(bool);
     function burnFromUser(address to, uint256 amount) external returns(bool);
     function burnFrom(address account, uint256 amount) external;
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
@@ -12,6 +18,10 @@ interface IABONDToken {
     function allowance(address owner, address spender) external view returns (uint256);
 
     function totalSupply() external view returns (uint256);
+
+    function setAbondData(address user, uint128 ethBacked, uint128 cumulativeRate) external;
+    function userStates(address user) external returns(State memory);
+
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
