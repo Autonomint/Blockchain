@@ -6,6 +6,7 @@
 pragma solidity ^0.8.0;
 
 import {State} from "../interface/IAbond.sol";
+import "hardhat/console.sol";
 
 library Colors {
 
@@ -18,7 +19,7 @@ library Colors {
     function _credit(
         State memory _fromState,
         State memory _toState,
-        uint64 _amount
+        uint128 _amount
     ) internal pure returns(State memory){
 
         // increment the balance
@@ -31,12 +32,12 @@ library Colors {
 
     function _debit(
         State memory _fromState,
-        uint64 _amount
+        uint128 _amount
     ) internal pure returns(State memory) {
 
-        uint64 balance = _fromState.aBondBalance;
+        uint128 balance = _fromState.aBondBalance;
         
-        require(balance < _amount,"InsufficientBalance");
+        require(balance >= _amount,"InsufficientBalance");
  
         _fromState.aBondBalance = balance - _amount;
 
@@ -47,17 +48,15 @@ library Colors {
         return _fromState;
     }
 
-    function _calculateCumulativeRate(uint64 _balanceA, uint64 _balanceB, uint128 _crA, uint128 _crB) internal pure returns(uint128){
+    function _calculateCumulativeRate(uint128 _balanceA, uint128 _balanceB, uint256 _crA, uint256 _crB) internal pure returns(uint256){
         if (_balanceA == 0) revert InsufficientBalance();
-        if (_crA == 0) revert InvalidCumulativeRate();
-        uint128 currentCumulativeRate;
+        uint256 currentCumulativeRate;
         currentCumulativeRate = ((_balanceA * _crA)+(_balanceB * _crB))/(_balanceA + _balanceB); 
         return currentCumulativeRate;
     }
 
-    function _calculateEthBacked(uint64 _balanceA, uint64 _balanceB, uint128 _ethBackedA, uint128 _ethBackedB) internal pure returns(uint128){
+    function _calculateEthBacked(uint128 _balanceA, uint128 _balanceB, uint128 _ethBackedA, uint128 _ethBackedB) internal pure returns(uint128){
         if (_balanceA == 0) revert InsufficientBalance();
-        if (_ethBackedA == 0) revert InvalidEthBacked();
         uint128 currentEthBacked;
         currentEthBacked = ((_balanceA * _ethBackedA)+(_balanceB * _ethBackedB))/(_balanceA + _balanceB); 
         return currentEthBacked;

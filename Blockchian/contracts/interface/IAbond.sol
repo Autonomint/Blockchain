@@ -2,9 +2,9 @@
 pragma solidity 0.8.20;
 
 struct State {
-    uint128 cumulativeRate;
+    uint256 cumulativeRate;
     uint128 ethBacked;
-    uint64 aBondBalance;
+    uint128 aBondBalance;
 }
 
 interface IABONDToken {
@@ -19,7 +19,7 @@ interface IABONDToken {
 
     function totalSupply() external view returns (uint256);
 
-    function setAbondData(address user, uint128 ethBacked, uint128 cumulativeRate) external;
+    function setAbondData(address user, uint64 index, uint128 ethBacked, uint128 cumulativeRate) external;
     function userStates(address user) external returns(State memory);
 
 

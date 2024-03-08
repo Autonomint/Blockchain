@@ -48,9 +48,9 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
 
     struct CdsAccountDetails {
         uint64 depositedTime;
-        uint128 depositedAmount;
+        uint256 depositedAmount;
         uint64 withdrawedTime;
-        uint128 withdrawedAmount;
+        uint256 withdrawedAmount;
         bool withdrawed;
         uint128 depositPrice;
         uint128 depositValue;
@@ -59,7 +59,7 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
         uint128 InitialLiquidationAmount;
         uint128 liquidationAmount;
         uint128 liquidationindex;
-        uint128 normalizedAmount;
+        uint256 normalizedAmount;
     }
 
     struct CdsDetails {
@@ -85,8 +85,8 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
     // liquidations info based on liquidation numbers
     mapping (uint128 liquidationIndex => LiquidationInfo) public liquidationIndexToInfo;
 
-    event Deposit(uint128 depositedAmint,uint64 index,uint128 liquidationAmount,uint128 normalizedAmount,uint128 depositVal);
-    event Withdraw(uint128 withdrewAmint,uint128 withdrawETH);
+    event Deposit(uint256 depositedAmint,uint64 index,uint128 liquidationAmount,uint256 normalizedAmount,uint128 depositVal);
+    event Withdraw(uint256 withdrewAmint,uint128 withdrawETH);
 
     // constructor(address _amint,address priceFeed,address _usdt,address _multiSign) Ownable(msg.sender) {
     //     amint = IAMINT(_amint); // amint token contract address
@@ -178,26 +178,27 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
         uint128 usdtAmount,
         uint128 amintAmount,
         bool _liquidate,
-        uint128 _liquidationAmount
+        uint128 _liquidationAmount,
+        uint128 ethPrice
     ) public nonReentrant whenNotPaused(IMultiSign.Functions(4)){
         // totalDepositingAmount is usdt and amint
-        uint128 totalDepositingAmount = usdtAmount + amintAmount;
+        uint256 totalDepositingAmount = usdtAmount + amintAmount;
         require(totalDepositingAmount != 0, "Deposit amount should not be zero"); // check _amount not zero
         require(
             _liquidationAmount <= (totalDepositingAmount),
             "Liquidation amount can't greater than deposited amount"
         );
 
-        if(usdtAmountDepositedTillNow < usdtLimit){
+        if((usdtAmountDepositedTillNow + usdtAmount) <= usdtLimit){
             require(usdtAmount == totalDepositingAmount,'100% of amount must be USDT');
         }else{
             require(amintAmount >= (amintLimit * totalDepositingAmount)/100,"Required AMINT amount not met");
             require(amint.balanceOf(msg.sender) >= amintAmount,"Insufficient AMINT balance with msg.sender"); // check if user has sufficient AMINT token
         }
 
-        uint128 ethPrice = getLatestData();
+        // uint128 ethPrice = getLatestData();
 
-        require(ethPrice != 0,"Oracle Failed");
+        // require(ethPrice != 0,"Oracle Failed");
 
         uint64 index;
 
@@ -286,7 +287,7 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
      * @dev withdraw amint
      * @param _index index of the deposit to withdraw
      */
-    function withdraw(uint64 _index) public nonReentrant whenNotPaused(IMultiSign.Functions(5)){
+    function withdraw(uint64 _index,uint128 ethPrice) public nonReentrant whenNotPaused(IMultiSign.Functions(5)){
         require(cdsDetails[msg.sender].index >= _index , "user doesn't have the specified index");
         require(cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawed == false,"Already withdrawn");
         
@@ -300,12 +301,12 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
             --cdsCount;
         }
 
-        uint128 ethPrice = getLatestData();
-        require(ethPrice != 0,"Oracle Failed");
+        // uint128 ethPrice = getLatestData();
+        // require(ethPrice != 0,"Oracle Failed");
         // Calculate return amount includes
         // eth Price difference gain or loss
         // option fees
-        uint128 returnAmount = 
+        uint256 returnAmount = 
             cdsAmountToReturn(msg.sender,_index, ethPrice)+
             ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * lastCumulativeRate)/PRECISION)-(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount);
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
@@ -330,7 +331,7 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
                     ethAmount += (liquidationData.ethAmount * share)/1e10;
                 }
             }
-            uint128 returnAmountWithGains = returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
+            uint256 returnAmountWithGains = returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
             totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
             totalCdsDepositedAmountWithOptionFees -= returnAmountWithGains;
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
@@ -375,12 +376,12 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
         address _user,
         uint64 index,
         uint128 _ethPrice
-    ) internal returns(uint128){
+    ) internal returns(uint256){
 
         // Calculate current value
         CalculateValueResult memory result = calculateValue(_ethPrice);
         setCumulativeValue(result.currentValue,result.gains);
-        uint128 depositedAmount = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
+        uint256 depositedAmount = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
         uint128 cumulativeValueAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
         // Get the cumulative value sign at the time of deposit
         bool cumulativeValueSignAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[index].depositValueSign;
@@ -398,29 +399,29 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
             if(cumulativeValueSignAtDeposit){
                 if(cumulativeValueAtDeposit > cumulativeValueAtWithdraw){
                     // Its loss since cumulative val is low
-                    uint128 loss = (depositedAmount * valDiff) / 1e11;
+                    uint256 loss = (depositedAmount * valDiff) / 1e11;
                     return (depositedAmount - loss);
                 }else{
                     // Its gain since cumulative val is high
-                    uint128 profit = (depositedAmount * valDiff)/1e11;
+                    uint256 profit = (depositedAmount * valDiff)/1e11;
                     return (depositedAmount + profit);
                 }
             }else{
                 if(cumulativeValueAtDeposit > cumulativeValueAtWithdraw){
-                    uint128 profit = (depositedAmount * valDiff)/1e11;
+                    uint256 profit = (depositedAmount * valDiff)/1e11;
                     return (depositedAmount + profit);
                 }else{
-                    uint128 loss = (depositedAmount * valDiff) / 1e11;
+                    uint256 loss = (depositedAmount * valDiff) / 1e11;
                     return (depositedAmount - loss);
                 }
             }
         }else{
             valDiff = cumulativeValueAtDeposit + cumulativeValueAtWithdraw;
             if(cumulativeValueSignAtDeposit){
-                uint128 loss = (depositedAmount * valDiff) / 1e11;
+                uint256 loss = (depositedAmount * valDiff) / 1e11;
                 return (depositedAmount - loss);
             }else{
-                uint128 profit = (depositedAmount * valDiff)/1e11;
+                uint256 profit = (depositedAmount * valDiff)/1e11;
                 return (depositedAmount + profit);            
             }
         }

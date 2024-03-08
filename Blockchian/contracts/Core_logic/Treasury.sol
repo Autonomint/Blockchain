@@ -12,7 +12,8 @@ import { State,IABONDToken } from "../interface/IAbond.sol";
 import "../interface/IBorrowing.sol";
 import "../interface/AaveInterfaces/IWETHGateway.sol";
 import "../interface/AaveInterfaces/IPoolAddressesProvider.sol";
-import "../interface/ICEther.sol";
+import "../interface/CometMainInterface.sol";
+import "../interface/IWETH9.sol";
 import "hardhat/console.sol";
 
 contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuardUpgradeable {
@@ -34,7 +35,8 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     IPoolAddressesProvider  public aavePoolAddressProvider; // To get the current pool  address in Aave
     IERC20  public usdt;
     IERC20  public aToken; // aave token contract
-    ICEther public cEther; // To deposit in and withdraw eth from compound
+    CometMainInterface public comet; // To deposit in and withdraw eth from compound
+    IWETH9 public WETH;
 
     address public borrowingContract;
     address public cdsContract;  
@@ -125,7 +127,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
 
     //no of times deposited in external protocol(always 1 ahead) 
     uint64 public externalProtocolDepositCount;
-    uint256 private PRECISION;
+    uint128 private PRECISION;
     uint256 private CUMULATIVE_PRECISION;
 
     // Eth depsoited in particular index
@@ -141,12 +143,14 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     function initialize(
         address _borrowing,
         address _tokenAddress,
+        address _abondAddress,
         address _cdsContract,
         address _wethGateway,
-        // address _cEther,
+        address _comet,
         address _aavePoolAddressProvider,
         address _aToken,
-        address _usdt
+        address _usdt,
+        address _weth
         ) initializer public{
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
@@ -154,11 +158,13 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         cdsContract = _cdsContract;
         borrow = IBorrowing(_borrowing);
         amint = IAMINT(_tokenAddress);
-        wethGateway = IWrappedTokenGatewayV3(_wethGateway);       //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
-        // cEther = ICEther(_cEther);                                //0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5
-        // compoundAddress = _cEther;
-        aavePoolAddressProvider = IPoolAddressesProvider(_aavePoolAddressProvider);  //0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
-        aToken = IERC20(_aToken);                                                   //0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
+        abond = IABONDToken(_abondAddress);
+        wethGateway = IWrappedTokenGatewayV3(_wethGateway);       // 0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
+        comet = CometMainInterface(_comet);                    // 0xA17581A9E3356d9A858b789D68B4d866e593aE94
+        compoundAddress = _comet;
+        WETH = IWETH9(_weth);                                  // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+        aavePoolAddressProvider = IPoolAddressesProvider(_aavePoolAddressProvider);  // 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
+        aToken = IERC20(_aToken);                                                    // 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
         aaveWETH = _wethGateway;
         usdt = IERC20(_usdt);
         externalProtocolDepositCount = 1;
@@ -239,9 +245,9 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
 
         externalProtocolCountTotalValue[externalProtocolDepositCount] += ((msg.value * 50)/100);
 
-        uint256 externalProtocolDepositEth = ((msg.value * 50)/100);
+        // uint256 externalProtocolDepositEth = ((msg.value * 25)/100);
 
-        depositToAaveByUser(externalProtocolDepositEth);
+        // depositToAaveByUser(externalProtocolDepositEth);
         // depositToCompoundByUser(externalProtocolDepositEth);
 
         emit Deposit(user,msg.value);
@@ -288,11 +294,19 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         return true;
     }
 
-    function withdrawFromExternalProtocol(address user, uint64 aBondAmount) external onlyBorrowingContract{
-        uint256 redeemAmount = withdrawFromAaveByUser(user,aBondAmount); // + withdrawFromCompoundByUser(borrower)
+    function withdrawFromExternalProtocol(address user, uint128 aBondAmount) external onlyBorrowingContract returns(uint256){
+
+        uint256 aTokenBalance = aToken.balanceOf(address(this));
+        _calculateCumulativeRate(aTokenBalance, Protocol.Aave);
+
+        uint256 cETHBalance = comet.balanceOf(address(this));
+        _calculateCumulativeRate(cETHBalance, Protocol.Compound);
+
+        uint256 redeemAmount = withdrawFromAaveByUser(user,aBondAmount) + withdrawFromCompoundByUser(user,aBondAmount);
         // Send the ETH to user
         (bool sent,) = payable(user).call{value: redeemAmount}("");
         require(sent, "Failed to send Ether");
+        return redeemAmount;
     }
 
     // //to increase the global external protocol count.
@@ -480,9 +494,9 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     //     }
 
     //     // Call the deposit function in Coumpound to deposit eth.
-    //     cEther.mint{value: share}();
+    //     comet.mint{value: share}();
 
-    //     uint256 creditedAmount = cEther.balanceOf(address(this));
+    //     uint256 creditedAmount = comet.balanceOf(address(this));
 
     //     if(creditedAmount == protocolDeposit[Protocol.Compound].totalCreditedTokens){
     //         revert Treasury_CompoundDepositAndMintFailed();
@@ -533,8 +547,8 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     //     }
 
     //     // Call the redeem function in Compound to withdraw eth.
-    //     cEther.redeem(amount);
-    //     uint256 cToken = cEther.balanceOf(address(this));
+    //     comet.redeem(amount);
+    //     uint256 cToken = comet.balanceOf(address(this));
     //     if(cToken == protocolDeposit[Protocol.Compound].totalCreditedTokens){
     //         revert Treasury_CompoundWithdrawFailed();
     //     }
@@ -579,7 +593,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     //     DepositDetails memory depositDetails = borrowing[depositor].depositDetails[index];
         
     //     // Obtain the current exchange rate from the Compound protocol
-    //     uint256 currentExchangeRate = cEther.exchangeRateCurrent();
+    //     uint256 currentExchangeRate = comet.exchangeRateCurrent();
         
     //     // Compute the equivalent ETH value of the cTokens at the current exchange rate
     //     // Taking into account the fixed-point arithmetic (scaling factor of 1e18)
@@ -696,21 +710,29 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
             borrowing[depositor].depositDetails[index]);
     }
 
-    function getAaveCumulativeRate() internal view returns(uint128){
+    function getAaveCumulativeRate() private view returns(uint128){
         return uint128(protocolDeposit[Protocol.Aave].cumulativeRate);
     }
 
-    function getCompoundCumulativeRate() internal view returns(uint128){
+    function getCompoundCumulativeRate() private view returns(uint128){
         return uint128(protocolDeposit[Protocol.Compound].cumulativeRate);
     }
 
-    function getExternalProtocolCumulativeRate() external view onlyBorrowingContract returns(uint128){
+    function getExternalProtocolCumulativeRate(bool maximum) public view onlyBorrowingContract returns(uint128){
         uint128 aaveCumulativeRate = getAaveCumulativeRate();
         uint128 compoundCumulativeRate = getCompoundCumulativeRate();
-        if(aaveCumulativeRate < compoundCumulativeRate){
-            return aaveCumulativeRate;
+        if(maximum){
+            if(aaveCumulativeRate > compoundCumulativeRate){
+                return aaveCumulativeRate;
+            }else{
+                return compoundCumulativeRate;
+            }
         }else{
-            return compoundCumulativeRate;
+            if(aaveCumulativeRate < compoundCumulativeRate){
+                return aaveCumulativeRate;
+            }else{
+                return compoundCumulativeRate;
+            }
         }
     }
 
@@ -771,23 +793,27 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         }
     }
 
-    // function compoundWithdraw(uint256 balance) external {
-    //     cEther.redeem(balance);
-    // }
+    function _calculateCumulativeRate(uint256 balanceBeforeEvent, Protocol _protocol) internal returns(uint256){
+        uint256 currentCumulativeRate;
+        // If it's the first deposit, set the cumulative rate to precision (i.e., 1 in fixed-point representation).
+        if (protocolDeposit[_protocol].totalCreditedTokens == 0) {
+            currentCumulativeRate = CUMULATIVE_PRECISION;
+        } else {
+            // Calculate the change in the credited amount relative to the total credited tokens so far.
+            uint256 change = (balanceBeforeEvent - protocolDeposit[_protocol].totalCreditedTokens) * CUMULATIVE_PRECISION / protocolDeposit[_protocol].totalCreditedTokens;
+            // Update the cumulative rate using the calculated change.
+            currentCumulativeRate = ((CUMULATIVE_PRECISION + change) * protocolDeposit[_protocol].cumulativeRate) / CUMULATIVE_PRECISION;
+        }
+        protocolDeposit[_protocol].cumulativeRate = currentCumulativeRate;
+        return currentCumulativeRate;
+    }
 
     function depositToAaveByUser(uint256 depositAmount) internal onlyBorrowingContract{
         //Atoken balance before depsoit
         uint256 aTokenBeforeDeposit = aToken.balanceOf(address(this));
 
-        // If it's the first deposit, set the cumulative rate to precision (i.e., 1 in fixed-point representation).
-        if (protocolDeposit[Protocol.Aave].totalCreditedTokens == 0) {
-            protocolDeposit[Protocol.Aave].cumulativeRate = CUMULATIVE_PRECISION; 
-        } else {
-            // Calculate the change in the credited amount relative to the total credited tokens so far.
-            uint256 change = (aTokenBeforeDeposit - protocolDeposit[Protocol.Aave].totalCreditedTokens) * CUMULATIVE_PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
-            // Update the cumulative rate using the calculated change.
-            protocolDeposit[Protocol.Aave].cumulativeRate = ((CUMULATIVE_PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate) / CUMULATIVE_PRECISION;
-        }
+        _calculateCumulativeRate(aTokenBeforeDeposit, Protocol.Aave);
+
         address poolAddress = aavePoolAddressProvider.getPool();
 
         if(poolAddress == address(0)){
@@ -801,41 +827,33 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
 
     function depositToCompoundByUser(uint256 depositAmount) internal onlyBorrowingContract {
         //Ctoken balance before depsoit
-        uint256 cTokenBeforeDeposit = cEther.balanceOf(address(this));
+        uint256 cTokenBeforeDeposit = comet.balanceOf(address(this));
 
-        // If it's the first deposit, set the cumulative rate to precision (i.e., 1 in fixed-point representation).
-        if (protocolDeposit[Protocol.Compound].totalCreditedTokens == 0) {
-            protocolDeposit[Protocol.Compound].cumulativeRate = CUMULATIVE_PRECISION; 
-        } else {
-            // Calculate the change in the credited amount relative to the total credited tokens so far.
-            uint256 change = (cTokenBeforeDeposit - protocolDeposit[Protocol.Compound].totalCreditedTokens) * CUMULATIVE_PRECISION / protocolDeposit[Protocol.Compound].totalCreditedTokens;
-            // Update the cumulative rate using the calculated change.
-            protocolDeposit[Protocol.Compound].cumulativeRate = ((CUMULATIVE_PRECISION + change) * protocolDeposit[Protocol.Compound].cumulativeRate) / CUMULATIVE_PRECISION;
-        }
+        _calculateCumulativeRate(cTokenBeforeDeposit, Protocol.Compound);
+
+        // Changing ETH into WETH
+        WETH.deposit{value: depositAmount}();
+
+        // Approve WETH to Comet
+        WETH.approve(address(comet), depositAmount);
 
         // Call the deposit function in Coumpound to deposit eth.
-        cEther.mint{value: depositAmount}();
+        comet.supply(address(WETH), depositAmount);
 
-        uint256 creditedAmount = cEther.balanceOf(address(this));
+        uint256 creditedAmount = comet.balanceOf(address(this));
 
         protocolDeposit[Protocol.Compound].totalCreditedTokens = creditedAmount;
 
     }
 
-    function withdrawFromAaveByUser(address user,uint64 aBondAmount) internal returns(uint256){
+    function withdrawFromAaveByUser(address user,uint128 aBondAmount) internal returns(uint256){
         State memory userState = abond.userStates(user);
-        uint128 depositedAmount = aBondAmount * userState.ethBacked;
-        uint128 normalizedAmount = (depositedAmount * 50)/ (userState.cumulativeRate * 100);
-
-        uint256 creditedAmount = aToken.balanceOf(address(this));
-        // Calculate the change rate based on the difference between the current credited amount and the total credited tokens 
-        uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * CUMULATIVE_PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
-
-        // Compute the current cumulative rate using the change and the stored cumulative rate
-        uint256 currentCumulativeRate = (CUMULATIVE_PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate / CUMULATIVE_PRECISION;
-        protocolDeposit[Protocol.Aave].cumulativeRate = currentCumulativeRate;
+        uint128 depositedAmount = (aBondAmount * userState.ethBacked)/PRECISION;
+        uint256 normalizedAmount = (depositedAmount * CUMULATIVE_PRECISION * 50)/ (userState.cumulativeRate * 100);
+        
         //withdraw amount
-        uint256 amount = (currentCumulativeRate * normalizedAmount)/CUMULATIVE_PRECISION;
+        uint256 amount = (getExternalProtocolCumulativeRate(false) * normalizedAmount)/CUMULATIVE_PRECISION;
+
         address poolAddress = aavePoolAddressProvider.getPool();
 
         if(poolAddress == address(0)){
@@ -851,22 +869,20 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         return amount;
     }
 
-    function withdrawFromCompoundByUser(address user,uint64 aBondAmount) internal returns(uint256){
+    function withdrawFromCompoundByUser(address user,uint128 aBondAmount) internal returns(uint256){
         State memory userState = abond.userStates(user);
-        uint128 depositedAmount = aBondAmount * userState.ethBacked;
-        uint128 normalizedAmount = (depositedAmount * 50)/ (userState.cumulativeRate * 100);
+        uint128 depositedAmount = (aBondAmount * userState.ethBacked)/PRECISION;
+        uint256 normalizedAmount = (depositedAmount * CUMULATIVE_PRECISION * 50)/ (userState.cumulativeRate * 100);
 
-        // Obtain the current exchange rate from the Compound protocol
-        uint256 currentExchangeRate = cEther.exchangeRateCurrent();
-        // Compute the equivalent ETH value of the cTokens at the current exchange rate
-        // Taking into account the fixed-point arithmetic (scaling factor of 1e18)
-        uint256 currentEquivalentEth = (normalizedAmount * currentExchangeRate) / PRECISION;
-        // Call the redeem function in Compound to withdraw eth.
-        cEther.redeem(normalizedAmount);
-        protocolDeposit[Protocol.Compound].totalCreditedTokens = cEther.balanceOf(address(this));
-        // Calculate the accrued interest by subtracting the original deposited ETH 
-        // amount from the current equivalent ETH value
-        return currentEquivalentEth;
+        //withdraw amount
+        uint256 amount = (getExternalProtocolCumulativeRate(false) * normalizedAmount)/CUMULATIVE_PRECISION;
+
+        comet.withdraw(address(WETH), amount);
+
+        protocolDeposit[Protocol.Compound].totalCreditedTokens = comet.balanceOf(address(this));
+
+        WETH.withdraw(amount);
+        return amount;
     }
 
     receive() external payable{}

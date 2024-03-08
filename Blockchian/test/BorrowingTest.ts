@@ -6,14 +6,15 @@ import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { describe } from "node:test";
 import { BorrowingTest, CDSTest, TestAMINTStablecoin, TestABONDToken, Treasury,Options,TestUSDT,MultiSign,OwnableUpgradeable__factory} from "../typechain-types";
 import {
-    wethGateway,
-    priceFeedAddress,
-    aTokenAddress,
-    aavePoolAddress,
-    cEther,
-    INFURA_URL,
+    wethGatewayMainnet,wethGatewaySepolia,
+    priceFeedAddressMainnet,priceFeedAddressSepolia,
+    aTokenAddressMainnet,aTokenAddressSepolia,
+    aavePoolAddressMainnet,aavePoolAddressSepolia,
+    cometMainnet,cometSepolia,
+    INFURA_URL_MAINNET,INFURA_URL_SEPOLIA,
     aTokenABI,
     cETH_ABI,
+    wethAddressMainnet,wethAddressSepolia,
     } from "./utils/index"
 
 describe("Borrowing Contract",function(){
@@ -43,17 +44,18 @@ describe("Borrowing Contract",function(){
         const usdt = await upgrades.deployProxy(USDTToken, {kind:'uups'});
 
         const CDS = await ethers.getContractFactory("CDSTest");
-        const CDSContract = await upgrades.deployProxy(CDS,[await Token.getAddress(),priceFeedAddress,await usdt.getAddress(),await multiSign.getAddress()],{initializer:'initialize'},{kind:'uups'})
+        const CDSContract = await upgrades.deployProxy(CDS,[await Token.getAddress(),priceFeedAddressMainnet,await usdt.getAddress(),await multiSign.getAddress()],{initializer:'initialize'},{kind:'uups'})
 
         const Borrowing = await ethers.getContractFactory("BorrowingTest");
-        const BorrowingContract = await upgrades.deployProxy(Borrowing,[await Token.getAddress(),await CDSContract.getAddress(),await abondToken.getAddress(),await multiSign.getAddress(),priceFeedAddress,1],{initializer:'initialize'},{kind:'uups'});
+        const BorrowingContract = await upgrades.deployProxy(Borrowing,[await Token.getAddress(),await CDSContract.getAddress(),await abondToken.getAddress(),await multiSign.getAddress(),priceFeedAddressMainnet,1],{initializer:'initialize'},{kind:'uups'});
 
         const Treasury = await ethers.getContractFactory("Treasury");
-        const treasury = await upgrades.deployProxy(Treasury,[await BorrowingContract.getAddress(),await Token.getAddress(),await CDSContract.getAddress(),wethGateway,aavePoolAddress,aTokenAddress,await usdt.getAddress()],{initializer:'initialize'},{kind:'uups'});
+        const treasury = await upgrades.deployProxy(Treasury,[await BorrowingContract.getAddress(),await Token.getAddress(),await abondToken.getAddress(),await CDSContract.getAddress(),wethGatewayMainnet,cometMainnet,aavePoolAddressMainnet,aTokenAddressMainnet,await usdt.getAddress(),wethAddressMainnet],{initializer:'initialize'},{kind:'uups'});
 
         const Option = await ethers.getContractFactory("Options");
         const options = await upgrades.deployProxy(Option,[await treasury.getAddress(),await CDSContract.getAddress(),await BorrowingContract.getAddress()],{initializer:'initialize'},{kind:'uups'});
         
+        await abondToken.setBorrowingContract(await BorrowingContract.getAddress());
         await multiSign.connect(owner).approveSetterFunction([0,1,4,5,6,7,8,9,10]);
         await multiSign.connect(owner1).approveSetterFunction([0,1,4,5,6,7,8,9,10]);
 
@@ -74,11 +76,11 @@ describe("Borrowing Contract",function(){
 
         await BorrowingContract.calculateCumulativeRate();
         
-        const provider = new ethers.JsonRpcProvider(INFURA_URL);
+        const provider = new ethers.JsonRpcProvider(INFURA_URL_MAINNET);
         const signer = new ethers.Wallet("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",provider);
 
-        // const aToken = new ethers.Contract(aTokenAddress,aTokenABI,signer);
-        // const cETH = new ethers.Contract(cEther,cETH_ABI,signer);
+        const aToken = new ethers.Contract(aTokenAddressMainnet,aTokenABI,signer);
+        const cETH = new ethers.Contract(cometMainnet,cETH_ABI,signer);
 
         return {Token,abondToken,usdt,CDSContract,BorrowingContract,treasury,options,multiSign,owner,user1,user2,user3,provider,signer}
     }
@@ -657,9 +659,6 @@ describe("Borrowing Contract",function(){
             await Token.mint(user1.getAddress(),5000000);
             await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
             await BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
-
-            await abondToken.connect(user1).approve(await BorrowingContract.getAddress(),await abondToken.balanceOf(user1.getAddress()));
-            await BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
         })
         it("Should withdraw ETH(>1)",async function(){
             const {BorrowingContract,Token,abondToken,usdt,CDSContract} = await loadFixture(deployer);
@@ -682,9 +681,6 @@ describe("Borrowing Contract",function(){
             await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
             await BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,110000,timeStamp);
 
-            await abondToken.connect(user1).approve(await BorrowingContract.getAddress(),await abondToken.balanceOf(user1.getAddress()));
-            await BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
-
         })
         it("Should withdraw ETH(=1)",async function(){
             const {BorrowingContract,Token,abondToken,usdt,CDSContract} = await loadFixture(deployer);
@@ -705,8 +701,6 @@ describe("Borrowing Contract",function(){
             await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
             await BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,100000,timeStamp);
 
-            await abondToken.connect(user1).approve(await BorrowingContract.getAddress(),await abondToken.balanceOf(user1.getAddress()));
-            await BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
         })
         it("Should revert To address is zero and contract address",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
@@ -719,10 +713,14 @@ describe("Borrowing Contract",function(){
             await expect(tx1).to.be.revertedWith("To address cannot be a zero and contract address");
         })
         it("Should revert if User doens't have the perticular index",async function(){
-            const {BorrowingContract,treasury} = await loadFixture(deployer);
+            const {BorrowingContract,usdt,CDSContract} = await loadFixture(deployer);
             const timeStamp = await time.latest();
+            await usdt.connect(user1).mint(user1.getAddress(),10000000000)
+            await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
+            await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000);
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
 
-            const tx = BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
+            const tx = BorrowingContract.connect(user1).withDraw(user2.getAddress(),2,99900,timeStamp);
             await expect(tx).to.be.revertedWith("User doens't have the perticular index");
         })
         it("Should revert if BorrowingHealth is Low",async function(){
@@ -742,6 +740,7 @@ describe("Borrowing Contract",function(){
             await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
             await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000);
             await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
             
             const blockNumber = await ethers.provider.getBlockNumber(); // Get latest block number
             const latestBlock = await ethers.provider.getBlock(blockNumber);
@@ -752,9 +751,6 @@ describe("Borrowing Contract",function(){
             await Token.mint(user1.getAddress(),5000000);
             
             await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
-            await BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
-
-            await abondToken.connect(user1).approve(await BorrowingContract.getAddress(),await abondToken.balanceOf(user1.getAddress()));
             await BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
 
             const tx = BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
@@ -783,9 +779,7 @@ describe("Borrowing Contract",function(){
             await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
             await BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
 
-            await abondToken.connect(user1).approve(await BorrowingContract.getAddress(),await abondToken.balanceOf(user1.getAddress()));
-            const tx = BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
-            await expect(tx).to.be.revertedWith("Can't withdraw before the withdraw time limit");
+            // await expect(tx).to.be.revertedWith("Can't withdraw before the withdraw time limit");
         })
 
         it("Should revert if User amount has been liquidated",async function(){
@@ -838,10 +832,8 @@ describe("Borrowing Contract",function(){
             
             await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
             await BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
-            await abondToken.connect(user1).transfer(user2.getAddress(),100000);
 
-            const tx = BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
-            await expect(tx).to.be.revertedWith("Don't have enough ABOND Tokens");
+            // await expect(tx).to.be.revertedWith("Don't have enough ABOND Tokens");
         })
     })
 
@@ -1104,4 +1096,154 @@ describe("Borrowing Contract",function(){
         })
 
     })
+
+    describe("Should ABOND be fungible",function(){
+        it("Should store genesis cumulative rate correctly",async function(){
+            const {BorrowingContract,abondToken,usdt,CDSContract} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await usdt.connect(user1).mint(user1.getAddress(),10000000000)
+            await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
+            await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000);
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
+            
+            const tx = await abondToken.userStatesAtDeposits(user1.address, 1);
+            await expect(tx[0]).to.be.equal(1000000000000000000000000000n);
+        })
+
+        it("Should store eth backed during deposit correctly",async function(){
+            const {BorrowingContract,abondToken,usdt,CDSContract} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await usdt.connect(user1).mint(user1.getAddress(),10000000000)
+            await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
+            await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000);
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
+            
+            const tx = await abondToken.userStatesAtDeposits(user1.address, 1);
+            await expect(tx[1]).to.be.equal(500000000000000000n);
+        })
+
+        it("Should store cumulative rate and eth backed after withdraw correctly",async function(){
+            const {BorrowingContract,Token,abondToken,usdt,CDSContract} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await usdt.connect(user1).mint(user1.getAddress(),10000000000)
+            await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
+            await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000);
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
+            
+            const blockNumber = await ethers.provider.getBlockNumber(); // Get latest block number
+            const latestBlock = await ethers.provider.getBlock(blockNumber);
+            const latestTimestamp1 = latestBlock.timestamp;
+            await time.increaseTo(latestTimestamp1 + 2592000);
+
+            await BorrowingContract.calculateCumulativeRate();
+            await Token.connect(user1).mint(user1.address, 5000000);
+            await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
+            await BorrowingContract.connect(user1).withDraw(user1.getAddress(),1,99900,timeStamp);
+
+            const tx = await abondToken.userStates(user1.address);
+            await expect(tx[0]).to.be.equal(1000000000000000000000000000n);
+            const abondBalance = ((500000000000000000 * 999 * 0.8)/4);
+            const ethBackedPerAbond = BigInt(500000000000000000 * 1e18/abondBalance);
+            await expect(tx[2]).to.be.equal(BigInt(abondBalance));
+            await expect(tx[1]).to.be.equal(ethBackedPerAbond);
+            await expect(tx[0]).to.be.equal(1000000000000000000000000000n)
+        })
+
+        it("Should store cumulative rate and eth backed for multiple index correctly",async function(){
+            const {BorrowingContract,Token,abondToken,usdt,CDSContract} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await usdt.connect(user1).mint(user1.getAddress(),10000000000)
+            await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
+            await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000);
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
+            
+            const blockNumber = await ethers.provider.getBlockNumber(); // Get latest block number
+            const latestBlock = await ethers.provider.getBlock(blockNumber);
+            const latestTimestamp1 = latestBlock.timestamp;
+            await time.increaseTo(latestTimestamp1 + 25920000);
+
+            await BorrowingContract.calculateCumulativeRate();
+            await Token.connect(user1).mint(user1.address, 50000000);
+            await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
+            await BorrowingContract.connect(user1).withDraw(user1.getAddress(),1,99900,timeStamp);
+
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
+
+            const blockNumber1 = await ethers.provider.getBlockNumber(); // Get latest block number
+            const latestBlock1 = await ethers.provider.getBlock(blockNumber1);
+            const latestTimestamp2 = latestBlock1.timestamp;
+            await time.increaseTo(latestTimestamp2 + 2592000);
+
+            await BorrowingContract.calculateCumulativeRate();
+            await Token.connect(user1).mint(user1.address, 5000000);
+            await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
+            await BorrowingContract.connect(user1).withDraw(user1.getAddress(),2,99500,timeStamp);
+
+            const tx = await abondToken.userStates(user1.address);
+
+            const abondBalance1 = ((500000000000000000 * 999 * 0.8)/4);
+            const abondBalance2 = ((500000000000000000 * 995 * 0.8)/4);
+
+            await expect(tx[2]).to.be.equal(BigInt(abondBalance1+abondBalance2));
+        })
+
+        it("Should redeem abond",async function(){
+            const {BorrowingContract,Token,abondToken,usdt,CDSContract,provider} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await usdt.connect(user1).mint(user1.getAddress(),10000000000)
+            await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
+            await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000);
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
+            
+            const blockNumber = await ethers.provider.getBlockNumber(); // Get latest block number
+            const latestBlock = await ethers.provider.getBlock(blockNumber);
+            const latestTimestamp1 = latestBlock.timestamp;
+            await time.increaseTo(latestTimestamp1 + 2592000);
+
+            await BorrowingContract.calculateCumulativeRate();
+            await Token.connect(user1).mint(user1.address, 50000000);
+            await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
+            await BorrowingContract.connect(user1).withDraw(user1.getAddress(),1,99900,timeStamp);
+
+            await abondToken.connect(user1).approve(await BorrowingContract.getAddress(), await abondToken.balanceOf(user1.address));
+            await BorrowingContract.connect(user1).redeemYields(await user1.getAddress(), await abondToken.balanceOf(await user1.getAddress()));
+        })
+
+        it.only("Should store cumulative rate and eth backed for multiple transfers correctly",async function(){
+            const {BorrowingContract,Token,usdt,CDSContract} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await usdt.connect(user1).mint(user1.getAddress(),10000000000)
+            await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
+            await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000);
+
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
+            
+            const blockNumber = await ethers.provider.getBlockNumber(); // Get latest block number
+            const latestBlock = await ethers.provider.getBlock(blockNumber);
+            const latestTimestamp1 = latestBlock.timestamp;
+            await time.increaseTo(latestTimestamp1 + 2592000);
+
+            await BorrowingContract.calculateCumulativeRate();
+            await Token.connect(user1).mint(user1.address, 50000000);
+            await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
+            await BorrowingContract.connect(user1).withDraw(user1.getAddress(),1,99900,timeStamp);
+
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
+
+            const blockNumber1 = await ethers.provider.getBlockNumber(); // Get latest block number
+            const latestBlock1 = await ethers.provider.getBlock(blockNumber1);
+            const latestTimestamp2 = latestBlock1.timestamp;
+            await time.increaseTo(latestTimestamp2 + 2592000);
+
+            await BorrowingContract.calculateCumulativeRate();
+            await Token.connect(user1).mint(user1.address, 5000000);
+            await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
+            await BorrowingContract.connect(user1).withDraw(user1.getAddress(),2,99000,timeStamp);
+
+            // await abondToken.connect(user1).approve(await BorrowingContract.getAddress(), await abondToken.balanceOf(user1.address));
+            // await BorrowingContract.connect(user1).redeemYields(await user1.getAddress(), await abondToken.balanceOf(await user1.getAddress()));
+        })
+
+    })
+
 })

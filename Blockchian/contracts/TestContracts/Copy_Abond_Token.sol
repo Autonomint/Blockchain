@@ -9,11 +9,13 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import { State } from "../interface/IAbond.sol";
 import "../lib/Colors.sol";
+import "hardhat/console.sol";
 
 contract TestABONDToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
 
     mapping(address user => State) public userStates;
     mapping(address user => mapping(uint64 index => State)) public userStatesAtDeposits;
+    uint128 PRECISION;
 
     function initialize() initializer public {
         __ERC20_init("Test ABOND Token", "TABOND");
@@ -21,6 +23,7 @@ contract TestABONDToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgrade
         __ERC20Pausable_init();
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
+        PRECISION = 1e18;
     }
 
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
@@ -33,8 +36,13 @@ contract TestABONDToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgrade
         _;
     }
 
-    function decimals() public pure override returns (uint8) {
-        return 6;
+    function isContract(address account) internal view returns (bool) {
+        return account.code.length > 0;
+    }
+
+    function setBorrowingContract(address _address) external onlyOwner {
+        require(_address != address(0) && isContract(_address) != false, "Input address is invalid");
+        borrowingContract = _address;
     }
 
     function pause() public onlyOwner {
@@ -45,13 +53,17 @@ contract TestABONDToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgrade
         _unpause();
     }
 
-    function mint(address to, uint64 index, uint256 amount) public returns(bool){
-        require(to == address(0),"Invalid User");
+    function mint(address to, uint64 index, uint256 amount) public onlyBorrowingContract returns(bool){
+        require(to != address(0),"Invalid User");
         
         State memory fromState = userStatesAtDeposits[to][index];
         State memory toState = userStates[to];
-        toState = Colors._credit(fromState, toState, uint64(amount));
-        toState.aBondBalance += uint64(amount); 
+
+        fromState.ethBacked = fromState.ethBacked * PRECISION/ uint128(amount);
+
+        toState = Colors._credit(fromState, toState, uint128(amount));
+
+        userStatesAtDeposits[to][index] = fromState;
         userStates[to] = toState;
 
         _mint(to, amount);
@@ -60,17 +72,17 @@ contract TestABONDToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgrade
 
     function transfer(address to, uint256 value) public override returns (bool) {
 
-        require(msg.sender == address(0) && to == address(0),"Invalid User");
+        require(msg.sender != address(0) && to != address(0),"Invalid User");
 
         State memory fromState = userStates[msg.sender];
         State memory toState = userStates[to];
         
         require(fromState.aBondBalance >= value,"Insufficient aBond balance");
         
-        toState = Colors._credit(fromState, toState, uint64(value));
+        toState = Colors._credit(fromState, toState, uint128(value));
         userStates[to] = toState;
 
-        fromState = Colors._debit(fromState, uint64(value));
+        fromState = Colors._debit(fromState, uint128(value));
         userStates[msg.sender] = fromState;
 
         super.transfer(to, value);
@@ -78,15 +90,15 @@ contract TestABONDToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgrade
     }
 
     function transferFrom(address from, address to, uint256 value) public override returns (bool) {
-        require(from == address(0) && to == address(0),"Invalid User");
+        require(from != address(0) && to != address(0),"Invalid User");
 
         State memory fromState = userStates[from];
         State memory toState = userStates[to];
 
-        toState = Colors._credit(fromState, toState, uint64(value));
+        toState = Colors._credit(fromState, toState, uint128(value));
         userStates[to] = toState;
 
-        Colors._debit(fromState, uint64(value));
+        Colors._debit(fromState, uint128(value));
         userStates[msg.sender] = fromState;
 
         super.transferFrom(from, to, value);
@@ -94,6 +106,9 @@ contract TestABONDToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgrade
     }
 
     function burnFromUser(address to, uint256 amount) public onlyBorrowingContract returns(bool){
+        State memory state = userStates[to];
+        state = Colors._debit(state, uint128(amount));
+        userStates[to] = state; 
         burnFrom(to, amount);
         return true;
     }

@@ -2,14 +2,15 @@
 src = "src"
 out = "out"
 lib = ["lib"]
-viaIR = true
+# viaIR = true
 remappings = [
     'ds-test/ = lib/forge-std/lib/ds-test/src/',
     'forge-std/ = lib/forge-std/src/',
     'openzeppelin-contracts/ = @openzeppelin/'
 ]
-# [invariant]
-# runs = 1000
-# depth = 128
-# fail_on_revert = false
+
+[invariant]
+runs = 256
+depth = 128
+fail_on_revert = true
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

@@ -35,7 +35,7 @@ interface ITreasury{
 
         function deposit(address user,uint128 _ethPrice,uint64 _depositTime) external payable returns(DepositResult memory);
         function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index) external returns(bool);
-        function withdrawFromExternalProtocol(address user, uint64 aBondAmount) external;
+        function withdrawFromExternalProtocol(address user, uint128 aBondAmount) external returns(uint256);
 
         // function depositToAave() external;
         // function withdrawFromAave(uint64 index) external;
@@ -60,7 +60,7 @@ interface ITreasury{
         function updateTotalBorrowedAmount(address borrower,uint256 amount) external;
 
         function getBorrowing(address depositor,uint64 index) external view returns(GetBorrowingResult memory);
-        function getExternalProtocolCumulativeRate() external view  returns(uint128);
+        function getExternalProtocolCumulativeRate(bool maximum) external view  returns(uint128);
         function updateDepositDetails(address depositor,uint64 index,DepositDetails memory depositDetail) external;
         function updateTotalInterest(uint256 _amount) external;
         function updateTotalInterestFromLiquidation(uint256 _amount) external;

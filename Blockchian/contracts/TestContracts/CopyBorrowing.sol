@@ -212,7 +212,7 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
         require(_amount != 0,"Amount can't be zero");
 
         // ABOND:AMINT = 4:1
-        uint128 amount = (uint128(_amount) * 100)/(bondRatio * 100);
+        uint128 amount = (uint128(_amount) * AMINT_PRECISION)/bondRatio;
 
         //Call the mint function in ABONDToken
         bool minted = abond.mint(_toAddress, _index, amount);
@@ -253,13 +253,12 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
         
         //Call the deposit function in Treasury contract
         ITreasury.DepositResult memory depositResult = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
-        abond.setAbondData(msg.sender,(uint128(msg.value) * 50)/100,treasury.getExternalProtocolCumulativeRate());
         uint64 index = depositResult.borrowerIndex;
         //Check whether the deposit is successfull
         if(!depositResult.hasDeposited){
             revert Borrowing_DepositFailed();
         }
-
+        abond.setAbondData(msg.sender, index, (uint128(msg.value) * 50)/100, treasury.getExternalProtocolCumulativeRate(true));
         // Call the transfer function to mint AMINT
         _transferToken(msg.sender,msg.value,_ethPrice,optionFees);
 
@@ -365,6 +364,7 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
                             
                 // Update the borrower's data
                 {depositDetail.ethPriceAtWithdraw = _ethPrice;
+                depositDetail.withdrawed = true;
                 depositDetail.withdrawTime = _withdrawTime;
                 // Calculate interest for the borrower's debt
                 //uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
@@ -602,12 +602,12 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
     //         }
     // }
 
-    function redeemYields(address user,uint64 aBondAmount) public{
+    function redeemYields(address user,uint128 aBondAmount) public returns(uint256){
         State memory userState = abond.userStates(user);
         require(aBondAmount <= userState.aBondBalance,"You don't have enough aBonds");
 
-        uint64 amintToAbondRatio = uint64(treasury.abondAmintPool() * RATIO_PRECISION/ abond.totalSupply());
-        uint256 amintToBurn = (amintToAbondRatio * aBondAmount) / RATIO_PRECISION;
+        uint128 amintToAbondRatio = uint64(treasury.abondAmintPool() * RATE_PRECISION/ abond.totalSupply());
+        uint256 amintToBurn = (amintToAbondRatio * aBondAmount) / RATE_PRECISION;
         treasury.updateAbondAmintPool(amintToBurn,false);
 
         //Burn the amint from treasury
@@ -616,13 +616,15 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
         if(!transfer){
             revert Borrowing_WithdrawBurnFailed();
         }
+        
+        uint256 withdrawAmount = treasury.withdrawFromExternalProtocol(user,aBondAmount);
+
         //Burn the abond from user
         bool success = abond.burnFromUser(msg.sender,aBondAmount);
         if(!success){
             revert Borrowing_WithdrawBurnFailed();
         }
-        
-        treasury.withdrawFromExternalProtocol(user,aBondAmount);
+        return withdrawAmount;
     }
 
     /**
@@ -650,7 +652,7 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
         ITreasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
         require(!depositDetail.liquidated,"Already Liquidated");
         
-        uint256 externalProtocolInterest = treasury.withdrawFromExternalProtocol(borrower); // + treasury.withdrawFromCompoundByUser(borrower,index);
+        // uint256 externalProtocolInterest = treasury.withdrawFromExternalProtocol(borrower,10000); // + treasury.withdrawFromCompoundByUser(borrower,index);
 
         require(
             depositDetail.depositedAmount <= (treasury.totalVolumeOfBorrowersAmountinWei() - treasury.ethProfitsOfLiquidators())
@@ -681,7 +683,7 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
         cds.updateTotalCdsDepositedAmountWithOptionFees(liquidationAmountNeeded);
         cds.updateTotalAvailableLiquidationAmount(liquidationAmountNeeded);
         treasury.updateEthProfitsOfLiquidators(depositDetail.depositedAmount,true);
-        treasury.updateInterestFromExternalProtocol(externalProtocolInterest);
+        //treasury.updateInterestFromExternalProtocol(externalProtocolInterest);
 
         //Update totalInterestFromLiquidation
         // uint256 totalInterestFromLiquidation = uint256(returnToTreasury - borrowerDebt + returnToAbond);
