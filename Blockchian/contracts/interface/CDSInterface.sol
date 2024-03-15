@@ -5,14 +5,18 @@ interface CDSInterface {
 
     struct CdsAccountDetails {
         uint64 depositedTime;
-        uint128 depositedAmount;
+        uint256 depositedAmount;
         uint64 withdrawedTime;
-        uint128 withdrawedAmount;
+        uint256 withdrawedAmount;
         bool withdrawed;
         uint128 depositPrice;
         uint128 depositValue;
+        bool depositValueSign;
         bool optedLiquidation;
-        uint128 profits; 
+        uint128 InitialLiquidationAmount;
+        uint128 liquidationAmount;
+        uint128 liquidationindex;
+        uint256 normalizedAmount;
     }
 
     struct LiquidationInfo{

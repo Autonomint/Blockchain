@@ -57,6 +57,14 @@ contract AMINTStablecoin is Initializable, ERC20Upgradeable, ERC20BurnableUpgrad
         return true;
     }
 
+    function burn(uint256 value) public override onlyCDSOrBorrowingContract {
+        super.burn(value);
+    }
+
+    function burnFrom(address account, uint256 value) public override onlyCDSOrBorrowingContract {
+        super.burnFrom(account,value);
+    }
+
     // function _beforeTokenTransfer(address from, address to, uint256 amount)
     //     internal
     //     whenNotPaused

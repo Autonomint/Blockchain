@@ -249,6 +249,8 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
         uint256 optionFees = options.calculateOptionPrice(_ethPrice,_volatility,msg.value,_strikePercent);
 
         uint256 tokensToLend = (msg.value * _ethPrice * LTV) / (AMINT_PRECISION * RATIO_PRECISION);
+        console.log("TOKENS TO LEND",tokensToLend);
+        console.log("OPTION FEE",optionFees);
         uint256 borrowAmount = tokensToLend - optionFees;
         
         //Call the deposit function in Treasury contract
@@ -373,8 +375,10 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
                 treasury.updateAbondAmintPool(discountedETH,true);
                 // Calculate the amount of AMINT to burn and sent to the treasury
                 // uint256 halfValue = (50 *(depositDetail.borrowedAmount))/100;
+                console.log("BORROWED AMOUNT",depositDetail.borrowedAmount);
+                console.log("DISCOUNTED ETH",discountedETH);
                 uint256 burnValue = depositDetail.borrowedAmount - discountedETH;
-
+                console.log("BURN VALUE",burnValue);
                 // Burn the AMINT from the Borrower
                 bool success = amint.burnFromUser(msg.sender, burnValue);
                 if(!success){
@@ -388,7 +392,7 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
                 }
                 //Update totalNormalizedAmount
                 totalNormalizedAmount -= depositDetail.normalizedAmount;
-
+                console.log("borrowerDebt",borrowerDebt);
                 treasury.updateTotalInterest(borrowerDebt - depositDetail.borrowedAmount);
 
                 // Mint the ABondTokens
@@ -674,6 +678,7 @@ contract BorrowingTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reent
         // CDS profits
         uint128 cdsProfits = (((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/AMINT_PRECISION)/100) - returnToTreasury - returnToAbond;
         uint128 liquidationAmountNeeded = returnToTreasury + returnToAbond;
+        require(cds.totalAvailableLiquidationAmount() >= liquidationAmountNeeded,"Don't have enough AMINT in CDS to liquidate");
         
         CDSInterface.LiquidationInfo memory liquidationInfo;
         liquidationInfo = CDSInterface.LiquidationInfo(liquidationAmountNeeded,cdsProfits,depositDetail.depositedAmount,cds.totalAvailableLiquidationAmount());

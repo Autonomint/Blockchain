@@ -48,9 +48,9 @@ contract CDS is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuard
 
     struct CdsAccountDetails {
         uint64 depositedTime;
-        uint128 depositedAmount;
+        uint256 depositedAmount;
         uint64 withdrawedTime;
-        uint128 withdrawedAmount;
+        uint256 withdrawedAmount;
         bool withdrawed;
         uint128 depositPrice;
         uint128 depositValue;
@@ -59,7 +59,7 @@ contract CDS is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuard
         uint128 InitialLiquidationAmount;
         uint128 liquidationAmount;
         uint128 liquidationindex;
-        uint128 normalizedAmount;
+        uint256 normalizedAmount;
     }
 
     struct CdsDetails {
@@ -85,8 +85,8 @@ contract CDS is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuard
     // liquidations info based on liquidation numbers
     mapping (uint128 liquidationIndex => LiquidationInfo) public liquidationIndexToInfo;
 
-    event Deposit(uint128 depositedAmint,uint64 index,uint128 liquidationAmount,uint128 normalizedAmount,uint128 depositVal);
-    event Withdraw(uint128 withdrewAmint,uint128 withdrawETH);
+    event Deposit(uint256 depositedAmint,uint64 index,uint128 liquidationAmount,uint256 normalizedAmount,uint128 depositVal);
+    event Withdraw(uint256 withdrewAmint,uint128 withdrawETH);
 
     function initialize(
         address _amint,
@@ -170,14 +170,14 @@ contract CDS is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuard
         uint128 _liquidationAmount
     ) public nonReentrant whenNotPaused(IMultiSign.Functions(4)){
         // totalDepositingAmount is usdt and amint
-        uint128 totalDepositingAmount = usdtAmount + amintAmount;
+        uint256 totalDepositingAmount = usdtAmount + amintAmount;
         require(totalDepositingAmount != 0, "Deposit amount should not be zero"); // check _amount not zero
         require(
             _liquidationAmount <= (totalDepositingAmount),
             "Liquidation amount can't greater than deposited amount"
         );
 
-        if(usdtAmountDepositedTillNow < usdtLimit){
+        if((usdtAmountDepositedTillNow + usdtAmount) <= usdtLimit){
             require(usdtAmount == totalDepositingAmount,'100% of amount must be USDT');
         }else{
             require(amintAmount >= (amintLimit * totalDepositingAmount)/100,"Required AMINT amount not met");
@@ -231,11 +231,7 @@ contract CDS is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuard
         cdsDetails[msg.sender].cdsAccountDetails[index].optedLiquidation = _liquidate;
         //If user opted for liquidation
         if(_liquidate){
-            if(borrowing.noOfLiquidations() == 0){
-                cdsDetails[msg.sender].cdsAccountDetails[index].liquidationindex = 1;
-            }else{
-                cdsDetails[msg.sender].cdsAccountDetails[index].liquidationindex = borrowing.noOfLiquidations();
-            }
+            cdsDetails[msg.sender].cdsAccountDetails[index].liquidationindex = borrowing.noOfLiquidations();
             cdsDetails[msg.sender].cdsAccountDetails[index].liquidationAmount = _liquidationAmount;
             cdsDetails[msg.sender].cdsAccountDetails[index].InitialLiquidationAmount = _liquidationAmount;
             totalAvailableLiquidationAmount += _liquidationAmount;
@@ -294,7 +290,7 @@ contract CDS is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuard
         // Calculate return amount includes
         // eth Price difference gain or loss
         // option fees
-        uint128 returnAmount = 
+        uint256 returnAmount = 
             cdsAmountToReturn(msg.sender,_index, ethPrice)+
             ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * lastCumulativeRate)/PRECISION)-(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount);
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
@@ -306,44 +302,47 @@ contract CDS is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuard
             uint128 currentLiquidations = borrowing.noOfLiquidations();
             uint128 liquidationIndexAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationindex;
             uint128 ethAmount;
-        // Loop through the liquidations that were done after user enters
-            for(uint128 i = liquidationIndexAtDeposit; i<= currentLiquidations; i++){
-                uint128 liquidationAmount = cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
-                if(liquidationAmount > 0){
-                    LiquidationInfo memory liquidationData = liquidationIndexToInfo[i];
-                    uint128 share = (liquidationAmount * 1e10)/uint128(liquidationData.availableLiquidationAmount);
-                    uint128 profit;
-                    profit = (liquidationData.profits * share)/1e10;
-                    cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount += profit;
-                    cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount -= ((liquidationData.liquidationAmount*share)/1e10);
-                    ethAmount += (liquidationData.ethAmount * share)/1e10;
+            if(currentLiquidations >= liquidationIndexAtDeposit){
+                // Loop through the liquidations that were done after user enters
+                for(uint128 i = (liquidationIndexAtDeposit + 1); i <= currentLiquidations; i++){
+                    uint128 liquidationAmount = cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
+                    if(liquidationAmount > 0){
+                        LiquidationInfo memory liquidationData = liquidationIndexToInfo[i];
+                        uint128 share = (liquidationAmount * 1e10)/uint128(liquidationData.availableLiquidationAmount);
+                        uint128 profit;
+                        profit = (liquidationData.profits * share)/1e10;
+                        cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount += profit;
+                        cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount -= ((liquidationData.liquidationAmount*share)/1e10);
+                        ethAmount += (liquidationData.ethAmount * share)/1e10;
+                    }
                 }
-            }
-            uint128 returnAmountWithGains = returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
-            totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
-            totalCdsDepositedAmountWithOptionFees -= returnAmountWithGains;
-            cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
-            // Get approval from treasury 
-            treasury.approveAmint(address(this),returnAmountWithGains);
+                uint256 returnAmountWithGains = returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
+                totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
+                totalCdsDepositedAmountWithOptionFees -= returnAmountWithGains;
+                cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
+                // Get approval from treasury 
+                treasury.approveAmint(address(this),returnAmountWithGains);
 
-            //Call transferFrom in amint
-            bool success = amint.transferFrom(treasuryAddress,msg.sender, returnAmountWithGains); // transfer amount to msg.sender
-            require(success == true, "Transsuccessed in cds withdraw");
-            
-            if(ethAmount != 0){
-                treasury.updateEthProfitsOfLiquidators(ethAmount,false);
-                // Call transferEthToCdsLiquidators to tranfer eth
-                treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
+                //Call transferFrom in amint
+                bool success = amint.transferFrom(treasuryAddress,msg.sender, returnAmountWithGains); // transfer amount to msg.sender
+                require(success == true, "Transsuccessed in cds withdraw");
+                
+                if(ethAmount != 0){
+                    treasury.updateEthProfitsOfLiquidators(ethAmount,false);
+                    // Call transferEthToCdsLiquidators to tranfer eth
+                    treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
+                }
+
+                emit Withdraw(returnAmountWithGains,ethAmount);
             }
 
-            emit Withdraw(returnAmountWithGains,ethAmount);
         }else{
             // amint.approve(msg.sender, returnAmount);
             totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
             totalCdsDepositedAmountWithOptionFees -= returnAmount;
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
             if(treasury.totalVolumeOfBorrowersAmountinUSD() != 0){
-                require(borrowing.calculateRatio(0,ethPrice) > (2 * RATIO_PRECISION),"Not enough fund in CDS");
+                require(borrowing.calculateRatio(0,ethPrice) > (2 * RATIO_PRECISION),"CDS: Not enough fund in CDS");
             }
             treasury.approveAmint(address(this),returnAmount);
             bool transfer = amint.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
@@ -364,12 +363,12 @@ contract CDS is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuard
         address _user,
         uint64 index,
         uint128 _ethPrice
-    ) internal returns(uint128){
+    ) internal returns(uint256){
 
         // Calculate current value
         CalculateValueResult memory result = calculateValue(_ethPrice);
         setCumulativeValue(result.currentValue,result.gains);
-        uint128 depositedAmount = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
+        uint256 depositedAmount = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
         uint128 cumulativeValueAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
         // Get the cumulative value sign at the time of deposit
         bool cumulativeValueSignAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[index].depositValueSign;
@@ -387,29 +386,29 @@ contract CDS is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuard
             if(cumulativeValueSignAtDeposit){
                 if(cumulativeValueAtDeposit > cumulativeValueAtWithdraw){
                     // Its loss since cumulative val is low
-                    uint128 loss = (depositedAmount * valDiff) / 1e11;
+                    uint256 loss = (depositedAmount * valDiff) / 1e11;
                     return (depositedAmount - loss);
                 }else{
                     // Its gain since cumulative val is high
-                    uint128 profit = (depositedAmount * valDiff)/1e11;
+                    uint256 profit = (depositedAmount * valDiff)/1e11;
                     return (depositedAmount + profit);
                 }
             }else{
                 if(cumulativeValueAtDeposit > cumulativeValueAtWithdraw){
-                    uint128 profit = (depositedAmount * valDiff)/1e11;
+                    uint256 profit = (depositedAmount * valDiff)/1e11;
                     return (depositedAmount + profit);
                 }else{
-                    uint128 loss = (depositedAmount * valDiff) / 1e11;
+                    uint256 loss = (depositedAmount * valDiff) / 1e11;
                     return (depositedAmount - loss);
                 }
             }
         }else{
             valDiff = cumulativeValueAtDeposit + cumulativeValueAtWithdraw;
             if(cumulativeValueSignAtDeposit){
-                uint128 loss = (depositedAmount * valDiff) / 1e11;
+                uint256 loss = (depositedAmount * valDiff) / 1e11;
                 return (depositedAmount - loss);
             }else{
-                uint128 profit = (depositedAmount * valDiff)/1e11;
+                uint256 profit = (depositedAmount * valDiff)/1e11;
                 return (depositedAmount + profit);            
             }
         }

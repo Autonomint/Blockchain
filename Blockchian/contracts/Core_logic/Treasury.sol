@@ -245,10 +245,10 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
 
         externalProtocolCountTotalValue[externalProtocolDepositCount] += ((msg.value * 50)/100);
 
-        // uint256 externalProtocolDepositEth = ((msg.value * 25)/100);
+        uint256 externalProtocolDepositEth = ((msg.value * 25)/100);
 
-        // depositToAaveByUser(externalProtocolDepositEth);
-        // depositToCompoundByUser(externalProtocolDepositEth);
+        depositToAaveByUser(externalProtocolDepositEth);
+        depositToCompoundByUser(externalProtocolDepositEth);
 
         emit Deposit(user,msg.value);
         return DepositResult(borrowing[user].hasDeposited,borrowerIndex);

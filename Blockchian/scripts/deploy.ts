@@ -3,23 +3,18 @@ import hre = require("hardhat");
 
 import {
   wethGatewayMumbai,
-  wethGatewayGoerli,
   wethGatewaySepolia,
   cEtherMumbai,
-  cEtherGoerli,
-  cEtherSepolia,
+  cometSepolia,
   aTokenAddressMumbai,
-  aTokenAddressGoerli,
   aTokenAddressSepolia,
   priceFeedAddressMumbai,
-  priceFeedAddressGoerli,
   priceFeedAddressSepolia,
   aavePoolAddressMumbai,
-  aavePoolAddressGoerli,
   aavePoolAddressSepolia,
   owner1,owner2,owner3,
   PROXY_AMINT_ADDRESS,PROXY_ABOND_ADDRESS,PROXY_BORROWING_ADDRESS,
-  PROXY_CDS_ADDRESS,PROXY_OPTIONS_ADDRESS,PROXY_MULTISIGN_ADDRESS,PROXY_TESTUSDT_ADDRESS,PROXY_TREASURY_ADDRESS
+  PROXY_CDS_ADDRESS,PROXY_OPTIONS_ADDRESS,PROXY_MULTISIGN_ADDRESS,PROXY_TESTUSDT_ADDRESS,PROXY_TREASURY_ADDRESS, wethAddressSepolia
 } from"./index"
 
 async function main() {
@@ -55,7 +50,7 @@ async function main() {
   console.log("PROXY BORROWING ADDRESS",await deployedBorrowing.getAddress());
 
   const Treasury = await ethers.getContractFactory("Treasury");
-  const deployedTreasury = await upgrades.deployProxy(Treasury,[await deployedBorrowing.getAddress(),await deployedAMINTStablecoin.getAddress(),await deployedCDS.getAddress(),wethGatewaySepolia,aavePoolAddressSepolia,aTokenAddressSepolia,await deployedTestUSDT.getAddress()],{initializer:'initialize'},{kind:'uups'});
+  const deployedTreasury = await upgrades.deployProxy(Treasury,[await deployedBorrowing.getAddress(),await deployedAMINTStablecoin.getAddress(),await deployedABONDToken.getAddress(),await deployedCDS.getAddress(),wethGatewaySepolia,cometSepolia,aavePoolAddressSepolia,aTokenAddressSepolia,await deployedTestUSDT.getAddress(),wethAddressSepolia],{initializer:'initialize'},{kind:'uups'});
   await deployedTreasury.waitForDeployment();
   console.log("PROXY TREASURY ADDRESS",await deployedTreasury.getAddress());
 

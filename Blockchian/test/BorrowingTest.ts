@@ -1209,7 +1209,7 @@ describe("Borrowing Contract",function(){
             await BorrowingContract.connect(user1).redeemYields(await user1.getAddress(), await abondToken.balanceOf(await user1.getAddress()));
         })
 
-        it.only("Should store cumulative rate and eth backed for multiple transfers correctly",async function(){
+        it("Should store cumulative rate and eth backed for multiple transfers correctly",async function(){
             const {BorrowingContract,Token,usdt,CDSContract} = await loadFixture(deployer);
             const timeStamp = await time.latest();
             await usdt.connect(user1).mint(user1.getAddress(),10000000000)

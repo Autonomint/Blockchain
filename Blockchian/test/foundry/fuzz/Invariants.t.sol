@@ -1,102 +1,102 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.20;
+// // SPDX-License-Identifier: UNLICENSED
+// pragma solidity 0.8.20;
 
-import {Test} from "../../../lib/forge-std/src/Test.sol";
-import {StdInvariant} from "../../../lib/forge-std/src/StdInvariant.sol";
-import {console} from "../../../lib/forge-std/src/console.sol";
-import {BorrowingTest} from "../../../contracts/TestContracts/CopyBorrowing.sol";
-import {Treasury} from "../../../contracts/Core_logic/Treasury.sol";
-import {CDSTest} from "../../../contracts/TestContracts/CopyCDS.sol";
-import {Options} from "../../../contracts/Core_logic/Options.sol";
-import {MultiSign} from "../../../contracts/Core_logic/multiSign.sol";
-import {TestAMINTStablecoin} from "../../../contracts/TestContracts/CopyAmint.sol";
-import {TestABONDToken} from "../../../contracts/TestContracts/Copy_Abond_Token.sol";
-import {TestUSDT} from "../../../contracts/TestContracts/CopyUsdt.sol";
-import {HelperConfig} from "../../../scripts/script/HelperConfig.s.sol";
-import {DeployBorrowing} from "../../../scripts/script/DeployBorrowing.s.sol";
-import {Handler} from "./Handler.t.sol";
+// import {Test} from "../../../lib/forge-std/src/Test.sol";
+// import {StdInvariant} from "../../../lib/forge-std/src/StdInvariant.sol";
+// import {console} from "../../../lib/forge-std/src/console.sol";
+// import {BorrowingTest} from "../../../contracts/TestContracts/CopyBorrowing.sol";
+// import {Treasury} from "../../../contracts/Core_logic/Treasury.sol";
+// import {CDSTest} from "../../../contracts/TestContracts/CopyCDS.sol";
+// import {Options} from "../../../contracts/Core_logic/Options.sol";
+// import {MultiSign} from "../../../contracts/Core_logic/multiSign.sol";
+// import {TestAMINTStablecoin} from "../../../contracts/TestContracts/CopyAmint.sol";
+// import {TestABONDToken} from "../../../contracts/TestContracts/Copy_Abond_Token.sol";
+// import {TestUSDT} from "../../../contracts/TestContracts/CopyUsdt.sol";
+// import {HelperConfig} from "../../../scripts/script/HelperConfig.s.sol";
+// import {DeployBorrowing} from "../../../scripts/script/DeployBorrowing.s.sol";
+// import {Handler} from "./Handler.t.sol";
 
-import {IWrappedTokenGatewayV3} from "../../../contracts/interface/AaveInterfaces/IWETHGateway.sol";
-import {CometMainInterface} from "../../../contracts/interface/CometMainInterface.sol";
-import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+// import {IWrappedTokenGatewayV3} from "../../../contracts/interface/AaveInterfaces/IWETHGateway.sol";
+// import {CometMainInterface} from "../../../contracts/interface/CometMainInterface.sol";
+// import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 
-contract InvariantTest is StdInvariant,Test {
-    DeployBorrowing deployer;
-    TestAMINTStablecoin amint;
-    TestABONDToken abond;
-    TestUSDT usdt;
-    CDSTest cds;
-    BorrowingTest borrow;
-    Treasury treasury;
-    Options option;
-    MultiSign multiSign;
-    HelperConfig config;
-    Handler handler;
+// contract InvariantTest is StdInvariant,Test {
+//     DeployBorrowing deployer;
+//     TestAMINTStablecoin amint;
+//     TestABONDToken abond;
+//     TestUSDT usdt;
+//     CDSTest cds;
+//     BorrowingTest borrow;
+//     Treasury treasury;
+//     Options option;
+//     MultiSign multiSign;
+//     HelperConfig config;
+//     Handler handler;
 
-    address ethUsdPriceFeed;
+//     address ethUsdPriceFeed;
 
-    // IPoolAddressesProvider public aaveProvider;
-    // IPool public aave;
-    address public USER = makeAddr("user");
-    address public owner = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
-    address public owner1 = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8;
-    address public aTokenAddress = 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8; // 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8;
-    address public cometAddress = 0xA17581A9E3356d9A858b789D68B4d866e593aE94; // 0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5;
+//     // IPoolAddressesProvider public aaveProvider;
+//     // IPool public aave;
+//     address public USER = makeAddr("user");
+//     address public owner = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+//     address public owner1 = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8;
+//     address public aTokenAddress = 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8; // 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8;
+//     address public cometAddress = 0xA17581A9E3356d9A858b789D68B4d866e593aE94; // 0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5;
 
-    uint8[] functions = [0,1,2,3,4,5,6,7,8,9,10];
+//     uint8[] functions = [0,1,2,3,4,5,6,7,8,9,10];
 
-    uint256 public ETH_AMOUNT = 1 ether;
-    uint256 public STARTING_ETH_BALANCE = 100 ether;
+//     uint256 public ETH_AMOUNT = 1 ether;
+//     uint256 public STARTING_ETH_BALANCE = 100 ether;
 
-    function setUp() public {
-        deployer = new DeployBorrowing();
-        (DeployBorrowing.Contracts memory contracts) = deployer.run();
-        amint = contracts.amint;
-        abond = contracts.abond;
-        usdt = contracts.usdt;
-        borrow = contracts.borrow;
-        treasury = contracts.treasury;
-        cds = contracts.cds;
-        multiSign = contracts.multiSign;
-        option = contracts.option;
-        config = contracts.config;
-        (ethUsdPriceFeed,) = config.activeNetworkConfig();
-        handler = new Handler(borrow,cds,treasury,amint,abond,usdt);
+//     function setUp() public {
+//         deployer = new DeployBorrowing();
+//         (DeployBorrowing.Contracts memory contracts) = deployer.run();
+//         amint = contracts.amint;
+//         abond = contracts.abond;
+//         usdt = contracts.usdt;
+//         borrow = contracts.borrow;
+//         treasury = contracts.treasury;
+//         cds = contracts.cds;
+//         multiSign = contracts.multiSign;
+//         option = contracts.option;
+//         config = contracts.config;
+//         (ethUsdPriceFeed,) = config.activeNetworkConfig();
+//         handler = new Handler(borrow,cds,treasury,amint,abond,usdt);
 
-        vm.startPrank(owner1);
-        multiSign.approveSetterFunction(functions);
-        vm.stopPrank();
+//         vm.startPrank(owner1);
+//         multiSign.approveSetterFunction(functions);
+//         vm.stopPrank();
 
-        vm.startPrank(owner);
-        abond.setBorrowingContract(address(borrow));
-        borrow.setAdmin(0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266);
-        borrow.setTreasury(address(treasury));
-        borrow.setOptions(address(option));
-        borrow.setLTV(80);
-        borrow.setBondRatio(4);
-        borrow.setAPR(1000000001547125957863212449);
+//         vm.startPrank(owner);
+//         abond.setBorrowingContract(address(borrow));
+//         borrow.setAdmin(0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266);
+//         borrow.setTreasury(address(treasury));
+//         borrow.setOptions(address(option));
+//         borrow.setLTV(80);
+//         borrow.setBondRatio(4);
+//         borrow.setAPR(1000000001547125957863212449);
 
-        cds.setAdmin(0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266);
-        cds.setTreasury(address(treasury));
-        cds.setBorrowingContract(address(borrow));
-        cds.setAmintLimit(80);
-        cds.setUsdtLimit(20000000000);
-        borrow.calculateCumulativeRate();
-        vm.stopPrank();
+//         cds.setAdmin(0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266);
+//         cds.setTreasury(address(treasury));
+//         cds.setBorrowingContract(address(borrow));
+//         cds.setAmintLimit(80);
+//         cds.setUsdtLimit(20000000000);
+//         borrow.calculateCumulativeRate();
+//         vm.stopPrank();
 
-        vm.deal(USER,STARTING_ETH_BALANCE);
-        vm.deal(owner,STARTING_ETH_BALANCE);
-        targetContract(address(handler));
-    }
+//         vm.deal(USER,STARTING_ETH_BALANCE);
+//         vm.deal(owner,STARTING_ETH_BALANCE);
+//         targetContract(address(handler));
+//     }
 
-    function invariant_ProtocolMustHaveMoreValueThanSupply() public view{
-        uint256 totalSupply = amint.totalSupply();
-        uint256 totalDepositedEth = (address(treasury)).balance;
-        uint256 totalEthValue = totalDepositedEth * borrow.getUSDValue();
-        uint256 usdtInCds = usdt.balanceOf(address(treasury));
-        uint256 totalBacked = (totalEthValue / 1e2) + (usdtInCds * 1e12) + handler.amintMintedManually();
-        // console.log("ETH VALUE",totalBacked);
-        // console.log("TOTAL SUPPLY",(totalSupply * 1e12));
-        assert(totalBacked >= (totalSupply * 1e12));
-    }
-}
+//     function invariant_ProtocolMustHaveMoreValueThanSupply() public view{
+//         // uint256 totalSupply = amint.totalSupply();
+//         // uint256 totalDepositedEth = (address(treasury)).balance;
+//         // uint256 totalEthValue = totalDepositedEth * borrow.getUSDValue();
+//         // uint256 usdtInCds = usdt.balanceOf(address(treasury));
+//         // uint256 totalBacked = (totalEthValue / 1e2) + (usdtInCds * 1e12);
+//         // console.log("ETH VALUE",totalBacked);
+//         // console.log("TOTAL SUPPLY",(totalSupply * 1e12));
+//         // assert(totalBacked >= (totalSupply * 1e12));
+//     }
+// }

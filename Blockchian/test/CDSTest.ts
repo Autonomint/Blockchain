@@ -43,13 +43,13 @@ describe("Testing contracts ", function(){
         const usdt = await upgrades.deployProxy(USDTToken, {kind:'uups'});
 
         const CDS = await ethers.getContractFactory("CDSTest");
-        const CDSContract = await upgrades.deployProxy(CDS,[await Token.getAddress(),priceFeedAddressSepolia,await usdt.getAddress(),await multiSign.getAddress()],{initializer:'initialize'},{kind:'uups'})
+        const CDSContract = await upgrades.deployProxy(CDS,[await Token.getAddress(),priceFeedAddressMainnet,await usdt.getAddress(),await multiSign.getAddress()],{initializer:'initialize'},{kind:'uups'})
 
         const Borrowing = await ethers.getContractFactory("BorrowingTest");
-        const BorrowingContract = await upgrades.deployProxy(Borrowing,[await Token.getAddress(),await CDSContract.getAddress(),await abondToken.getAddress(),await multiSign.getAddress(),priceFeedAddressSepolia,1],{initializer:'initialize'},{kind:'uups'});
+        const BorrowingContract = await upgrades.deployProxy(Borrowing,[await Token.getAddress(),await CDSContract.getAddress(),await abondToken.getAddress(),await multiSign.getAddress(),priceFeedAddressMainnet,1],{initializer:'initialize'},{kind:'uups'});
 
         const Treasury = await ethers.getContractFactory("Treasury");
-        const treasury = await upgrades.deployProxy(Treasury,[await BorrowingContract.getAddress(),await Token.getAddress(),await abondToken.getAddress(),await CDSContract.getAddress(),wethGatewaySepolia,cometSepolia,aavePoolAddressSepolia,aTokenAddressSepolia,await usdt.getAddress(),wethAddressSepolia],{initializer:'initialize'},{kind:'uups'});
+        const treasury = await upgrades.deployProxy(Treasury,[await BorrowingContract.getAddress(),await Token.getAddress(),await abondToken.getAddress(),await CDSContract.getAddress(),wethGatewayMainnet,cometMainnet,aavePoolAddressMainnet,aTokenAddressMainnet,await usdt.getAddress(),wethAddressMainnet],{initializer:'initialize'},{kind:'uups'});
 
         const Option = await ethers.getContractFactory("Options");
         const options = await upgrades.deployProxy(Option,[await treasury.getAddress(),await CDSContract.getAddress(),await BorrowingContract.getAddress()],{initializer:'initialize'},{kind:'uups'});
@@ -75,7 +75,7 @@ describe("Testing contracts ", function(){
 
         await BorrowingContract.calculateCumulativeRate();
         
-        const provider = new ethers.JsonRpcProvider(INFURA_URL_SEPOLIA);
+        const provider = new ethers.JsonRpcProvider(INFURA_URL_MAINNET);
         const signer = new ethers.Wallet("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",provider);
         
         return {Token,abondToken,usdt,CDSContract,BorrowingContract,treasury,options,multiSign,owner,user1,user2,user3}
@@ -331,7 +331,7 @@ describe("Testing contracts ", function(){
             await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("5")});
 
             await CDSContract.connect(user1).withdraw(1);
-            await expect(CDSContract.connect(user1).withdraw(2)).to.be.revertedWith("Not enough fund in CDS");
+            await expect(CDSContract.connect(user1).withdraw(2)).to.be.revertedWith("CDS: Not enough fund in CDS");
         })
 
         it("Should revert Already withdrawn",async () => {
