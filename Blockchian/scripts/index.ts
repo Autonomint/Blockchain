@@ -6,7 +6,8 @@ export const aTokenAddressMumbai = "0xaCA5e6a7117F54B34B476aB95Bf3034c304e7a81";
 
 
 export const wethGatewaySepolia = "0x387d311e47e80b498169e6fb51d3193167d89F7D";
-export const cEtherSepolia = "0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5";
+export const cometSepolia = "0x2943ac1216979aD8dB76D9147F64E61adc126e96";
+export const wethAddressSepolia = "0x2D5ee574e710219a521449679A4A7f2B43f046ad";
 export const priceFeedAddressSepolia = "0x694AA1769357215DE4FAC081bf1f309aDC325306";
 export const aavePoolAddressSepolia = "0x012bAC54348C0E635dCAc9D5FB99f06F24136C9A";
 export const aTokenAddressSepolia = "0x5b071b590a59395fE4025A0Ccc1FcC931AAc1830";

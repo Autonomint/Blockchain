@@ -2,7 +2,26 @@
 
 pragma solidity 0.8.20;
 
+    struct RatioInputData{
+        uint128 noOfBorrowers;
+        uint256 lastEthVaultValue;
+        uint256 lastCDSPoolValue;
+        uint256 lastTotalCDSPool;
+        uint256 latestTotalCDSPool;
+        uint256 _amount;
+        uint128 lastEthprice;
+        uint128 currentEthPrice;
+    }
+
+    struct RatioReturnData{
+        uint256 lastEthVaultValue;
+        uint256 lastCDSPoolValue;
+        uint256 lastTotalCDSPool;
+        uint64 ratio;
+    }
+
 interface IBorrowing{
+
     function pause() external;
     function unpause() external;
     function transferToken(address _borrower, uint64 borrowerIndex) external;

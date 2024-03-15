@@ -19,6 +19,8 @@ contract HelperConfig is Script {
     constructor(){
         if(block.chainid == 11155111){
             activeNetworkConfig = getSepoliaEthConfig();
+        }else if(block.chainid == 1){
+            activeNetworkConfig = getMainnetEthConfig();
         }else{
             activeNetworkConfig = getOrCreateAnvilEthConfig();
         }
@@ -28,6 +30,13 @@ contract HelperConfig is Script {
         return NetworkConfig({
             ethUsdPriceFeed: 0x694AA1769357215DE4FAC081bf1f309aDC325306,
             deployerKey: vm.envUint("PRIVATE_KEY")
+        });
+    }
+
+    function getMainnetEthConfig() public pure returns (NetworkConfig memory){
+        return NetworkConfig({
+            ethUsdPriceFeed: 0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419,
+            deployerKey: DEFAULT_ANVIL_KEY
         });
     }
 
