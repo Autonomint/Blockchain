@@ -15,6 +15,7 @@ import {TestUSDT} from "../../../contracts/TestContracts/CopyUsdt.sol";
 import {HelperConfig} from "../../../scripts/script/HelperConfig.s.sol";
 import {DeployBorrowing} from "../../../scripts/script/DeployBorrowing.s.sol";
 import {Handler} from "./Handler.t.sol";
+import {Handler1} from "./Handler1.t.sol";
 
 import {IWrappedTokenGatewayV3} from "../../../contracts/interface/AaveInterfaces/IWETHGateway.sol";
 import {CometMainInterface} from "../../../contracts/interface/CometMainInterface.sol";
@@ -32,6 +33,7 @@ contract InvariantTest is StdInvariant,Test {
     MultiSign multiSign;
     HelperConfig config;
     Handler handler;
+    Handler1 handler1;
 
     address ethUsdPriceFeed;
 
@@ -62,6 +64,7 @@ contract InvariantTest is StdInvariant,Test {
         config = contracts.config;
         (ethUsdPriceFeed,) = config.activeNetworkConfig();
         handler = new Handler(borrow,cds,treasury,amint,abond,usdt);
+        handler1 = new Handler1(borrow,cds,treasury,amint,abond,usdt);
 
         vm.startPrank(owner1);
         multiSign.approveSetterFunction(functions);
@@ -86,17 +89,17 @@ contract InvariantTest is StdInvariant,Test {
 
         vm.deal(USER,STARTING_ETH_BALANCE);
         vm.deal(owner,STARTING_ETH_BALANCE);
-        targetContract(address(handler));
+        targetContract(address(handler1));
     }
 
     function invariant_ProtocolMustHaveMoreValueThanSupply() public view{
-        // uint256 totalSupply = amint.totalSupply();
-        // uint256 totalDepositedEth = (address(treasury)).balance;
-        // uint256 totalEthValue = totalDepositedEth * borrow.getUSDValue();
-        // uint256 usdtInCds = usdt.balanceOf(address(treasury));
-        // uint256 totalBacked = (totalEthValue / 1e2) + (usdtInCds * 1e12);
+        uint256 totalSupply = amint.totalSupply();
+        uint256 totalDepositedEth = (address(treasury)).balance;
+        uint256 totalEthValue = totalDepositedEth * borrow.getUSDValue();
+        uint256 usdtInCds = usdt.balanceOf(address(treasury));
+        uint256 totalBacked = (totalEthValue / 1e2) + (usdtInCds * 1e12);
         // console.log("ETH VALUE",totalBacked);
         // console.log("TOTAL SUPPLY",(totalSupply * 1e12));
-        // assert(totalBacked >= (totalSupply * 1e12));
+        assert(totalBacked >= (totalSupply * 1e12));
     }
 }

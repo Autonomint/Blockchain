@@ -178,8 +178,7 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
         uint128 usdtAmount,
         uint128 amintAmount,
         bool _liquidate,
-        uint128 _liquidationAmount,
-        uint128 ethPrice
+        uint128 _liquidationAmount
     ) public nonReentrant whenNotPaused(IMultiSign.Functions(4)){
         // totalDepositingAmount is usdt and amint
         uint256 totalDepositingAmount = usdtAmount + amintAmount;
@@ -200,9 +199,9 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
             require(amint.balanceOf(msg.sender) >= amintAmount,"Insufficient AMINT balance with msg.sender"); // check if user has sufficient AMINT token
         }
 
-        // uint128 ethPrice = getLatestData();
+        uint128 ethPrice = getLatestData();
 
-        // require(ethPrice != 0,"Oracle Failed");
+        require(ethPrice != 0,"Oracle Failed");
 
         uint64 index;
 
@@ -287,7 +286,7 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
      * @dev withdraw amint
      * @param _index index of the deposit to withdraw
      */
-    function withdraw(uint64 _index,uint128 ethPrice) public nonReentrant whenNotPaused(IMultiSign.Functions(5)){
+    function withdraw(uint64 _index) public nonReentrant whenNotPaused(IMultiSign.Functions(5)){
         require(cdsDetails[msg.sender].index >= _index , "user doesn't have the specified index");
         require(cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawed == false,"Already withdrawn");
         
@@ -301,8 +300,8 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
             --cdsCount;
         }
 
-        // uint128 ethPrice = getLatestData();
-        // require(ethPrice != 0,"Oracle Failed");
+        uint128 ethPrice = getLatestData();
+        require(ethPrice != 0,"Oracle Failed");
         // Calculate return amount includes
         // eth Price difference gain or loss
         // option fees
@@ -351,10 +350,10 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
                 console.log("totalCdsDepositedAmount",totalCdsDepositedAmount);
                 console.log("cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount",cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount);
 
-                totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
+                totalCdsDepositedAmount -= (cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
                 console.log("totalCdsDepositedAmountWithOptionFees",totalCdsDepositedAmountWithOptionFees);
 
-                totalCdsDepositedAmountWithOptionFees -= returnAmountWithGains;
+                totalCdsDepositedAmountWithOptionFees -= (returnAmountWithGains - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
                 cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
                 // Get approval from treasury 
                 treasury.approveAmint(address(this),returnAmountWithGains);

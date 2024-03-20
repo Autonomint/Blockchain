@@ -20,7 +20,7 @@ interface IABONDToken {
     function totalSupply() external view returns (uint256);
 
     function setAbondData(address user, uint64 index, uint128 ethBacked, uint128 cumulativeRate) external;
-    function userStates(address user) external returns(State memory);
+    function userStates(address user) external view returns(State memory);
 
 
     event Transfer(address indexed from, address indexed to, uint256 value);

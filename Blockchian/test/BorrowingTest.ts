@@ -1244,6 +1244,28 @@ describe("Borrowing Contract",function(){
             // await BorrowingContract.connect(user1).redeemYields(await user1.getAddress(), await abondToken.balanceOf(await user1.getAddress()));
         })
 
+        it("Should get withdraw amount",async function(){
+            const {BorrowingContract,abondToken,usdt,CDSContract,Token} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await usdt.connect(user1).mint(user1.getAddress(),10000000000)
+            await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
+            await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000);
+            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
+            
+            const blockNumber1 = await ethers.provider.getBlockNumber(); // Get latest block number
+            const latestBlock1 = await ethers.provider.getBlock(blockNumber1);
+            const latestTimestamp2 = latestBlock1.timestamp;
+            await time.increaseTo(latestTimestamp2 + 25920000);
+
+            await BorrowingContract.calculateCumulativeRate();
+            await Token.connect(user1).mint(user1.address, 50000000);
+            await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
+            await BorrowingContract.connect(user1).withDraw(user1.getAddress(),1,99000,timeStamp);
+
+            const tx = await BorrowingContract.getAbondYields(user1.getAddress(), await abondToken.balanceOf(user1.getAddress()));
+            console.log(tx);
+        })
+
     })
 
 })

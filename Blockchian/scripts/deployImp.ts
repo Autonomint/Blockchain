@@ -3,19 +3,14 @@ import hre = require("hardhat");
 
 import {
   wethGatewayMumbai,
-  wethGatewayGoerli,
   wethGatewaySepolia,
   cEtherMumbai,
-  cEtherGoerli,
-  cEtherSepolia,
+  cometSepolia,
   aTokenAddressMumbai,
-  aTokenAddressGoerli,
   aTokenAddressSepolia,
   priceFeedAddressMumbai,
-  priceFeedAddressGoerli,
   priceFeedAddressSepolia,
   aavePoolAddressMumbai,
-  aavePoolAddressGoerli,
   aavePoolAddressSepolia,
   owner1,owner2,owner3,
   PROXY_AMINT_ADDRESS,PROXY_ABOND_ADDRESS,PROXY_BORROWING_ADDRESS,
@@ -49,20 +44,20 @@ async function main() {
   // await deployedCDS.waitForDeployment();
   // console.log("NEW IMP CDS ADDRESS",deployedCDS.getAddress());
 
-  // const Borrowing = await ethers.getContractFactory("Borrowing");
-  // const deployedBorrowing = await upgrades.upgradeProxy(PROXY_BORROWING_ADDRESS,Borrowing,{kind:'uups'});
-  // await deployedBorrowing.waitForDeployment();
-  // console.log("NEW IMP BORROWING ADDRESS",await deployedBorrowing.getAddress());
+  const Borrowing = await ethers.getContractFactory("Borrowing");
+  const deployedBorrowing = await upgrades.upgradeProxy(PROXY_BORROWING_ADDRESS,Borrowing,{kind:'uups'});
+  await deployedBorrowing.waitForDeployment();
+  console.log("NEW IMP BORROWING ADDRESS",await deployedBorrowing.getAddress());
 
   // const Treasury = await ethers.getContractFactory("Treasury");
   // const deployedTreasury = await upgrades.upgradeProxy(PROXY_TREASURY_ADDRESS,Treasury,{kind:'uups'});
   // await deployedTreasury.waitForDeployment();
   // console.log("NEW IMP TREASURY ADDRESS",await deployedTreasury.getAddress());
 
-  const Option = await ethers.getContractFactory("Options");
-  const deployedOptions = await upgrades.upgradeProxy(PROXY_OPTIONS_ADDRESS,Option,{kind:'uups'});
-  await deployedOptions.waitForDeployment();
-  console.log("NEW IMP OPTIONS ADDRESS",await deployedOptions.getAddress());
+  // const Option = await ethers.getContractFactory("Options");
+  // const deployedOptions = await upgrades.upgradeProxy(PROXY_OPTIONS_ADDRESS,Option,{kind:'uups'});
+  // await deployedOptions.waitForDeployment();
+  // console.log("NEW IMP OPTIONS ADDRESS",await deployedOptions.getAddress());
 
   // async function sleep(ms:number) {
   //   return new Promise((resolve) => setTimeout(resolve, ms));

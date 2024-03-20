@@ -88,9 +88,6 @@ contract Handler is Test{
         index = uint64(bound(index,0,maxIndex));
         ethPrice = uint64(bound(ethPrice,0,type(uint24).max));
 
-        if(ethPrice < 3500){
-            return;
-        }
         if(index == 0){
             return;
         }
@@ -225,5 +222,28 @@ contract Handler is Test{
         vm.startPrank(owner);
         borrow.liquidate(user,index,ethPrice);
         vm.stopPrank();
+    }
+
+    function redeemUSDT(uint128 amount,uint16 amintPrice,uint16 usdtPrice) public {
+        amount = uint128(bound(amount,0,type(uint64).max));
+        amintPrice = uint16(bound(amintPrice,0,1200));
+        usdtPrice = uint16(bound(amintPrice,0,1200));
+
+        if(amount == 0 || amintPrice == 0 || usdtPrice == 0){
+            return;
+        }
+
+        if(amint.balanceOf(user) < amount){
+            return;
+        }
+
+        if(usdt.balanceOf(address(treasury)) < amount){
+            return;
+        }
+
+        vm.startPrank(user);
+        cds.redeemUSDT(amount,amintPrice,usdtPrice);
+        vm.stopPrank();
+
     }
 }

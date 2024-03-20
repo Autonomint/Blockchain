@@ -132,6 +132,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
 
     // Eth depsoited in particular index
     mapping(uint256=>uint256) externalProtocolCountTotalValue;
+    uint256 public amintGainedFromLiquidation;
 
     event Deposit(address indexed user,uint256 amount);
     event Withdraw(address indexed user,uint256 amount);
@@ -653,6 +654,37 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     //     return interestGainedByUser;
     // }
 
+    function calculateYieldsForExternalProtocol(address user,uint128 aBondAmount) external view onlyBorrowingContract returns (uint256) {
+        
+        State memory userState = abond.userStates(user);
+
+        uint128 depositedAmount = (aBondAmount * userState.ethBacked)/PRECISION;
+        uint256 normalizedAmount = (depositedAmount * CUMULATIVE_PRECISION)/userState.cumulativeRate;
+
+        uint256 currentCumulativeRateAave = getCurrentCumulativeRate(aToken.balanceOf(address(this)),Protocol.Aave);
+        uint256 currentCumulativeRateComp = getCurrentCumulativeRate(comet.balanceOf(address(this)),Protocol.Compound);
+
+        uint256 currentCumulativeRate = currentCumulativeRateAave < currentCumulativeRateComp ? currentCumulativeRateAave : currentCumulativeRateComp;
+        //withdraw amount
+        uint256 amount = (currentCumulativeRate * normalizedAmount)/CUMULATIVE_PRECISION;
+        
+        return amount;
+    }
+
+    function getCurrentCumulativeRate(uint256 balanceBeforeEvent, Protocol _protocol) internal view returns (uint256){
+        uint256 currentCumulativeRate;
+        // If it's the first deposit, set the cumulative rate to precision (i.e., 1 in fixed-point representation).
+        if (protocolDeposit[_protocol].totalCreditedTokens == 0) {
+            currentCumulativeRate = CUMULATIVE_PRECISION;
+        } else {
+            // Calculate the change in the credited amount relative to the total credited tokens so far.
+            uint256 change = (balanceBeforeEvent - protocolDeposit[_protocol].totalCreditedTokens) * CUMULATIVE_PRECISION / protocolDeposit[_protocol].totalCreditedTokens;
+            // Update the cumulative rate using the calculated change.
+            currentCumulativeRate = ((CUMULATIVE_PRECISION + change) * protocolDeposit[_protocol].cumulativeRate) / CUMULATIVE_PRECISION;
+        }
+        return currentCumulativeRate;
+    }
+
     function getBalanceInTreasury() external view returns(uint256){
         return address(this).balance;
     }
@@ -688,6 +720,14 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
             abondAmintPool += amount;
         }else{
             abondAmintPool -= amount;
+        }
+    }
+
+    function updateAmintGainedFromLiquidation(uint256 amount,bool operation) external onlyBorrowingContract{
+        if(operation){
+            amintGainedFromLiquidation += amount;
+        }else{
+            amintGainedFromLiquidation -= amount;
         }
     }
 

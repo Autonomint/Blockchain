@@ -76,6 +76,8 @@ contract Borrowing is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     uint128 private RATIO_PRECISION;
     uint128 private RATE_PRECISION;
     uint128 private AMINT_PRECISION;
+    uint256 public ethRemainingInWithdraw;
+    uint256 public ethValueRemainingInWithdraw;
 
     event Deposit(uint64 index,uint256 depositedAmount,uint256 borrowAmount,uint256 normalizedAmount);
     event Withdraw(uint256 borrowDebt,uint128 withdrawAmount,uint128 noOfAbond);
@@ -397,6 +399,12 @@ contract Borrowing is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
                 if(borrowingHealth > 10000){
                     // If the ethPrice is higher than deposit ethPrice,call withdrawOption in options contract
                     ethToReturn = (depositedAmountvalue + (options.calculateStrikePriceGains(depositDetail.depositedAmount,depositDetail.strikePrice,_ethPrice)));
+                    if(ethToReturn > depositDetail.depositedAmount){
+                        ethRemainingInWithdraw += (ethToReturn - depositDetail.depositedAmount);
+                    }else{
+                        ethRemainingInWithdraw += (depositDetail.depositedAmount - ethToReturn);
+                    }
+                    ethValueRemainingInWithdraw += (ethRemainingInWithdraw * _ethPrice);
                 }else if(borrowingHealth == 10000){
                     ethToReturn = depositedAmountvalue;
                 }else if(8000 < borrowingHealth && borrowingHealth < 10000) {
@@ -595,18 +603,30 @@ contract Borrowing is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     // }
 
     function redeemYields(address user,uint128 aBondAmount) public returns(uint256){
+        require(aBondAmount > 0,"Abond amount should not be zero");
         State memory userState = abond.userStates(user);
         require(aBondAmount <= userState.aBondBalance,"You don't have enough aBonds");
 
-        uint128 amintToAbondRatio = uint64(treasury.abondAmintPool() * RATE_PRECISION/ abond.totalSupply());
+        uint128 amintToAbondRatio = uint128(treasury.abondAmintPool() * RATE_PRECISION/ abond.totalSupply());
         uint256 amintToBurn = (amintToAbondRatio * aBondAmount) / RATE_PRECISION;
         treasury.updateAbondAmintPool(amintToBurn,false);
 
+        uint128 amintToAbondRatioLiq = uint128(treasury.amintGainedFromLiquidation() * RATE_PRECISION/ abond.totalSupply());
+        uint256 amintToTransfer = (amintToAbondRatioLiq * aBondAmount) / RATE_PRECISION;
+        treasury.updateAmintGainedFromLiquidation(amintToTransfer,false);
+
         //Burn the amint from treasury
-        treasury.approveAmint(address(this),amintToBurn);
-        bool transfer = amint.burnFromUser(treasuryAddress,amintToBurn);
-        if(!transfer){
-            revert Borrowing_WithdrawBurnFailed();
+        treasury.approveAmint(address(this),(amintToBurn + amintToTransfer));
+        bool burned = amint.burnFromUser(treasuryAddress,amintToBurn);
+        if(!burned){
+            revert ('Borrowing_RedeemBurnFailed');
+        }
+        
+        if(amintToTransfer > 0){
+            bool transferred = amint.transferFrom(treasuryAddress,user,amintToTransfer);
+            if(!transferred){
+                revert ('Borrowing_RedeemTransferFailed');
+            }
         }
         
         uint256 withdrawAmount = treasury.withdrawFromExternalProtocol(user,aBondAmount);
@@ -614,9 +634,23 @@ contract Borrowing is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         //Burn the abond from user
         bool success = abond.burnFromUser(msg.sender,aBondAmount);
         if(!success){
-            revert Borrowing_WithdrawBurnFailed();
+            revert ('Borrowing_RedeemBurnFailed');
         }
         return withdrawAmount;
+    }
+
+    function getAbondYields(address user,uint128 aBondAmount) public view returns(uint128,uint256,uint256){
+        require(aBondAmount > 0,"Abond amount should not be zero");
+        State memory userState = abond.userStates(user);
+        require(aBondAmount <= userState.aBondBalance,"You don't have enough aBonds");
+
+        uint256 redeemableAmount = treasury.calculateYieldsForExternalProtocol(user,aBondAmount);
+        uint128 depositedAmount = (aBondAmount * userState.ethBacked)/1e18;
+
+        uint128 amintToAbondRatioLiq = uint64(treasury.amintGainedFromLiquidation() * RATE_PRECISION/ abond.totalSupply());
+        uint256 amintToTransfer = (amintToAbondRatioLiq * aBondAmount) / RATE_PRECISION;
+
+        return (depositedAmount,redeemableAmount,amintToTransfer);
     }
 
     /**
@@ -658,11 +692,12 @@ contract Borrowing is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         depositDetail.liquidated = true;
 
         // Calculate borrower's debt 
-        uint256 borrowerDebt = ((depositDetail.normalizedAmount * lastCumulativeRate)/RATE_PRECISION);
         lastCumulativeRate = calculateCumulativeRate()/RATE_PRECISION;
+        uint256 borrowerDebt = ((depositDetail.normalizedAmount * lastCumulativeRate)/RATE_PRECISION);
         uint128 returnToTreasury = uint128(borrowerDebt);
         // 20% to abond amint pool
         uint128 returnToAbond = (((((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/AMINT_PRECISION)/100) - returnToTreasury) * 20)/100;
+        treasury.updateAmintGainedFromLiquidation(returnToAbond,true);
         // CDS profits
         uint128 cdsProfits = (((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/AMINT_PRECISION)/100) - returnToTreasury - returnToAbond;
         uint128 liquidationAmountNeeded = returnToTreasury + returnToAbond;
@@ -672,9 +707,9 @@ contract Borrowing is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         liquidationInfo = CDSInterface.LiquidationInfo(liquidationAmountNeeded,cdsProfits,depositDetail.depositedAmount,cds.totalAvailableLiquidationAmount());
 
         cds.updateLiquidationInfo(noOfLiquidations,liquidationInfo);
-        cds.updateTotalCdsDepositedAmount(liquidationAmountNeeded);
-        cds.updateTotalCdsDepositedAmountWithOptionFees(liquidationAmountNeeded);
-        cds.updateTotalAvailableLiquidationAmount(liquidationAmountNeeded);
+        cds.updateTotalCdsDepositedAmount(liquidationAmountNeeded - cdsProfits);
+        cds.updateTotalCdsDepositedAmountWithOptionFees(liquidationAmountNeeded - cdsProfits);
+        cds.updateTotalAvailableLiquidationAmount(liquidationAmountNeeded - cdsProfits);
         treasury.updateEthProfitsOfLiquidators(depositDetail.depositedAmount,true);
         //treasury.updateInterestFromExternalProtocol(externalProtocolInterest);
 

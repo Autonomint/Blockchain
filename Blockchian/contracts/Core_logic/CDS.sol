@@ -177,8 +177,12 @@ contract CDS is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuard
             "Liquidation amount can't greater than deposited amount"
         );
 
-        if((usdtAmountDepositedTillNow + usdtAmount) <= usdtLimit){
-            require(usdtAmount == totalDepositingAmount,'100% of amount must be USDT');
+        if(usdtAmountDepositedTillNow < usdtLimit){
+            if((usdtAmountDepositedTillNow + usdtAmount) <= usdtLimit){
+                require(usdtAmount == totalDepositingAmount,'100% of amount must be USDT');
+            }else{
+                revert("Surplus USDT amount");
+            }
         }else{
             require(amintAmount >= (amintLimit * totalDepositingAmount)/100,"Required AMINT amount not met");
             require(amint.balanceOf(msg.sender) >= amintAmount,"Insufficient AMINT balance with msg.sender"); // check if user has sufficient AMINT token
@@ -317,8 +321,8 @@ contract CDS is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuard
                     }
                 }
                 uint256 returnAmountWithGains = returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
-                totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
-                totalCdsDepositedAmountWithOptionFees -= returnAmountWithGains;
+                totalCdsDepositedAmount -= (cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
+                totalCdsDepositedAmountWithOptionFees -= (returnAmountWithGains - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
                 cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
                 // Get approval from treasury 
                 treasury.approveAmint(address(this),returnAmountWithGains);

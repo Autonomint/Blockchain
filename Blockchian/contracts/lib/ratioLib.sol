@@ -5,11 +5,11 @@
 
 pragma solidity 0.8.20;
 
-import { CalculateRatioData } from "../interface/IBorrowing.sol";
+import { RatioReturnData } from "../interface/IBorrowing.sol";
 library Colors {
 
-    uint128 CUMULATIVE_PRECISION = 1e7;
-    uint128 AMINT_PRECISION = 1e12;
+    uint128 constant CUMULATIVE_PRECISION = 1e7;
+    uint128 constant AMINT_PRECISION = 1e12;
     /**
      * @dev calculate the ratio of CDS Pool/Eth Vault
      * @param _amount amount to be depositing
@@ -24,7 +24,7 @@ library Colors {
         uint256 _amount,
         uint128 lastEthprice,
         uint128 currentEthPrice
-    ) public returns(CalculateRatioData memory){
+    ) public pure returns(RatioReturnData memory){
 
         uint256 netPLCdsPool;
 
@@ -85,6 +85,6 @@ library Colors {
         // since it may return in decimals we multiply it by 1e6
         uint64 ratio = uint64((currentCDSPoolValue * CUMULATIVE_PRECISION)/currentEthVaultValue);
 
-        return CalculateRatioData(lastEthVaultValue,lastCDSPoolValue,lastTotalCDSPool,ratio);
+        return RatioReturnData(lastEthVaultValue,lastCDSPoolValue,lastTotalCDSPool,ratio);
     }
 }

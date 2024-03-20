@@ -42,7 +42,7 @@ interface ITreasury{
         // function depositToCompound() external;
         // function withdrawFromCompound(uint64 index) external;
         // function withdrawFromCompoundByUser(address depositor,uint64 index) external returns(uint256);
-
+        function calculateYieldsForExternalProtocol(address user,uint128 aBondAmount) external view returns (uint256);
         function getBalanceInTreasury() external view returns(uint256);
         function approveAmint(address _address, uint _amount) external;
         function approveUsdt(address _address, uint _amount) external;
@@ -52,6 +52,7 @@ interface ITreasury{
         function noOfBorrowers() external view returns(uint128);
         function ethProfitsOfLiquidators() external view returns(uint256);
         function abondAmintPool() external view returns(uint256);
+        function amintGainedFromLiquidation() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinWei() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinUSD() external view returns(uint256);
 
@@ -65,6 +66,7 @@ interface ITreasury{
         function updateTotalInterest(uint256 _amount) external;
         function updateTotalInterestFromLiquidation(uint256 _amount) external;
         function updateAbondAmintPool(uint256 amount,bool operation) external;
+        function updateAmintGainedFromLiquidation(uint256 amount,bool operation) external;
         function updateEthProfitsOfLiquidators(uint256 amount,bool operation) external;
         function updateInterestFromExternalProtocol(uint256 amount) external;
 
