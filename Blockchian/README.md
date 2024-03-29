@@ -46,8 +46,8 @@ Withdraw the user amount with price change P/L, option fees, gains from [liquida
 The user can provide AMint and get the equivalent amount of USDT.
 
 ### Options
-- [calculateStrikePriceGains](calculate-strike-price-gains)
-- [calculateOptionPrice](calculate-option-price)
+- [calculateStrikePriceGains](#calculate-strike-price-gains)
+- [calculateOptionPrice](#calculate-option-fees)
 
 #### Calculate strike price gains
 Calculates the strike price gains by if the current eth price greater than equal to strike price chose by user during [deposit](#deposit-tokens) else no gains.
