@@ -15,8 +15,11 @@ import "../interface/ITreasury.sol";
 import "../interface/IMultiSign.sol";
 import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
+import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
+import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 
-contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuardUpgradeable{
+contract CDSTest is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp{
 
     IAMINT      public amint; // our stablecoin
     IBorrowing  public borrowing; // Borrowing contract interface
@@ -85,6 +88,17 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
     // liquidations info based on liquidation numbers
     mapping (uint128 liquidationIndex => LiquidationInfo) public liquidationIndexToInfo;
 
+    struct OmniChainCDSData {
+        uint64  cdsCount;
+        uint256 totalCdsDepositedAmount;
+        uint256 totalCdsDepositedAmountWithOptionFees;
+        uint256 totalAvailableLiquidationAmount;
+        uint256 usdtAmountDepositedTillNow;
+        uint256 burnedAmintInRedeem;
+    }
+    OmniChainCDSData public omniChainCDS;
+
+
     event Deposit(uint256 depositedAmint,uint64 index,uint128 liquidationAmount,uint256 normalizedAmount,uint128 depositVal);
     event Withdraw(uint256 withdrewAmint,uint128 withdrawETH);
 
@@ -103,10 +117,13 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
         address _amint,
         address priceFeed,
         address _usdt,
-        address _multiSign
+        address _multiSign,
+        address _endpoint,
+        address _delegate
     ) initializer public{
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
+        __oAppinit(_endpoint, _delegate);
         amint = IAMINT(_amint); // amint token contract address
         usdt = IERC20(_usdt);
         multiSign = IMultiSign(_multiSign);
@@ -609,6 +626,45 @@ contract CDSTest is Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyG
                 // Cumulative value is in negative
                 cumulativeValue += value;
             }
+        }
+    }
+
+    function quote(
+        uint32 _dstEid,
+        OmniChainCDSData memory _message,
+        bytes memory _options,
+        bool _payInLzToken
+    ) public view returns (MessagingFee memory fee) {
+        bytes memory payload = abi.encode(_message);
+        fee = _quote(_dstEid, payload, _options, _payInLzToken);
+    }
+
+    function _lzReceive(
+        Origin calldata /*_origin*/,
+        bytes32 /*_guid*/,
+        bytes calldata payload,
+        address /*_executor*/,
+        bytes calldata /*_extraData*/
+    ) internal override {
+
+        uint8[] memory index;
+
+        OmniChainCDSData memory data;
+
+        data = abi.decode(payload, (OmniChainCDSData));
+
+        if(index.length > 0){
+            // bytes memory _payload = abi.encode();
+            // bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(50000, 0);
+            // MessagingFee memory fee = quote(dstEid, ,[], _options, false);
+            // _lzSend(dstEid, _payload, _options, fee, payable(msg.sender));
+        }else{
+            omniChainCDS.cdsCount = data.cdsCount;
+            omniChainCDS.totalCdsDepositedAmount = data.totalCdsDepositedAmount;
+            omniChainCDS.totalCdsDepositedAmountWithOptionFees = data.totalCdsDepositedAmountWithOptionFees;
+            omniChainCDS.totalAvailableLiquidationAmount = data.totalAvailableLiquidationAmount;
+            omniChainCDS.usdtAmountDepositedTillNow = data.usdtAmountDepositedTillNow;
+            omniChainCDS.burnedAmintInRedeem = data.burnedAmintInRedeem;
         }
     }
 

@@ -22,20 +22,20 @@ const config: HardhatUserConfig = {
           enabled: true,
           runs: 200,
         },
-        // viaIR:true
+        viaIR:true
       },
 
     },
   networks:{
+    hardhat: {
+      forking: {
+        url: "https://mainnet.infura.io/v3/e9cf275f1ddc4b81aa62c5aa0b11ac0f",
+        blockNumber: 19381269
+      },
+    },
     mumbai:{
       url: QUICKNODE_MUMBAI,
       accounts: [PRIVATE_KEY]
-    },
-    hardhat: {
-      forking: {
-        url: "https://goerli.infura.io/v3/e9cf275f1ddc4b81aa62c5aa0b11ac0f",
-        blockNumber: 10360783
-      },
     },
     sepolia:{
       url: INFURA_ID_SEPOLIA,

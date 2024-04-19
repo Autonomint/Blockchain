@@ -4,7 +4,9 @@ const { it } = require("mocha")
 import { ethers,upgrades } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { describe } from "node:test";
-import { BorrowingTest, CDSTest, TestAMINTStablecoin, TestABONDToken, Treasury,Options,TestUSDT,MultiSign,OwnableUpgradeable__factory} from "../typechain-types";
+import { BorrowLib } from "../typechain-types";
+import { Contract, ContractFactory } from 'ethers'
+
 import {
     wethGatewayMainnet,wethGatewaySepolia,
     priceFeedAddressMainnet,priceFeedAddressSepolia,
@@ -15,6 +17,7 @@ import {
     aTokenABI,
     cETH_ABI,
     wethAddressMainnet,wethAddressSepolia,
+    endPointAddressMainnet,eidMainnet
     } from "./utils/index"
 
 describe("Borrowing Contract",function(){
@@ -25,11 +28,17 @@ describe("Borrowing Contract",function(){
     let user1: any;
     let user2: any;
     let user3: any;
+    const eidA = 1
+    const eidB = 2
     const ethVolatility = 50622665;
 
 
     async function deployer(){
         [owner,owner1,owner2,user1,user2,user3] = await ethers.getSigners();
+
+        // const EndpointV2Mock = await ethers.getContractFactory('EndpointV2Mock')
+        // const mockEndpointV2A = await EndpointV2Mock.deploy(eidA)
+        // const mockEndpointV2B = await EndpointV2Mock.deploy(eidB)
 
         const AmintStablecoin = await ethers.getContractFactory("TestAMINTStablecoin");
         const Token = await upgrades.deployProxy(AmintStablecoin, {kind:'uups'});
@@ -44,13 +53,51 @@ describe("Borrowing Contract",function(){
         const usdt = await upgrades.deployProxy(USDTToken, {kind:'uups'});
 
         const CDS = await ethers.getContractFactory("CDSTest");
-        const CDSContract = await upgrades.deployProxy(CDS,[await Token.getAddress(),priceFeedAddressMainnet,await usdt.getAddress(),await multiSign.getAddress()],{initializer:'initialize'},{kind:'uups'})
+        const CDSContract = await upgrades.deployProxy(CDS,[
+            await Token.getAddress(),
+            priceFeedAddressMainnet,
+            await usdt.getAddress(),
+            await multiSign.getAddress(),
+            endPointAddressMainnet,
+            await owner.getAddress()],{initializer:'initialize'},{kind:'uups'})
 
-        const Borrowing = await ethers.getContractFactory("BorrowingTest");
-        const BorrowingContract = await upgrades.deployProxy(Borrowing,[await Token.getAddress(),await CDSContract.getAddress(),await abondToken.getAddress(),await multiSign.getAddress(),priceFeedAddressMainnet,1],{initializer:'initialize'},{kind:'uups'});
+        const borrowLibFactory = await ethers.getContractFactory("BorrowLib");
+        const borrowLib = await borrowLibFactory.deploy();
+
+        const Borrowing = await ethers.getContractFactory("BorrowingTest",{
+            libraries: {
+                BorrowLib:await borrowLib.getAddress()
+            }
+        });
+
+        const BorrowingContract = await upgrades.deployProxy(Borrowing,[
+            await Token.getAddress(),
+            await CDSContract.getAddress(),
+            await abondToken.getAddress(),
+            await multiSign.getAddress(),
+            priceFeedAddressMainnet,
+            1,
+            endPointAddressMainnet,
+            await owner.getAddress()
+        ],{initializer:'initialize',
+            unsafeAllowLinkedLibraries:true
+        },{kind:'uups'});
 
         const Treasury = await ethers.getContractFactory("Treasury");
-        const treasury = await upgrades.deployProxy(Treasury,[await BorrowingContract.getAddress(),await Token.getAddress(),await abondToken.getAddress(),await CDSContract.getAddress(),wethGatewayMainnet,cometMainnet,aavePoolAddressMainnet,aTokenAddressMainnet,await usdt.getAddress(),wethAddressMainnet],{initializer:'initialize'},{kind:'uups'});
+        const treasury = await upgrades.deployProxy(Treasury,[
+            await BorrowingContract.getAddress(),
+            await Token.getAddress(),
+            await abondToken.getAddress(),
+            await CDSContract.getAddress(),
+            wethGatewayMainnet,
+            cometMainnet,
+            aavePoolAddressMainnet,
+            aTokenAddressMainnet,
+            await usdt.getAddress(),
+            wethAddressMainnet,
+            endPointAddressMainnet,
+            await owner.getAddress()
+            ],{initializer:'initialize'},{kind:'uups'});
 
         const Option = await ethers.getContractFactory("Options");
         const options = await upgrades.deployProxy(Option,[await treasury.getAddress(),await CDSContract.getAddress(),await BorrowingContract.getAddress()],{initializer:'initialize'},{kind:'uups'});
@@ -86,7 +133,7 @@ describe("Borrowing Contract",function(){
     }
 
     describe("Should deposit ETH and mint Trinity",function(){
-        it("Should deposit ETH",async function(){
+        it.only("Should deposit ETH",async function(){
             const {BorrowingContract,CDSContract,usdt} = await loadFixture(deployer);
             const timeStamp = await time.latest();
             await usdt.connect(user1).mint(user1.getAddress(),10000000000);

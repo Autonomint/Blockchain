@@ -39,20 +39,20 @@ async function main() {
   // await deployedMultisign.waitForDeployment();
   // console.log("NEW IMP MULTISIGN ADDRESS",await deployedMultisign.getAddress());
 
-  // const CDS = await ethers.getContractFactory("CDSTest");
-  // const deployedCDS = await upgrades.upgradeProxy(CDS,[await deployedAMINTStablecoin.getAddress(),priceFeedAddressGoerli,await deployedTestUSDT.getAddress(),await deployedMultisign.getAddress()],{initializer:'initialize'},{kind:'uups'})
-  // await deployedCDS.waitForDeployment();
-  // console.log("NEW IMP CDS ADDRESS",deployedCDS.getAddress());
+  const CDS = await ethers.getContractFactory("CDS");
+  const deployedCDS = await upgrades.upgradeProxy(PROXY_CDS_ADDRESS,CDS,{kind:'uups'})
+  await deployedCDS.waitForDeployment();
+  console.log("NEW IMP CDS ADDRESS",await deployedCDS.getAddress());
 
   const Borrowing = await ethers.getContractFactory("Borrowing");
   const deployedBorrowing = await upgrades.upgradeProxy(PROXY_BORROWING_ADDRESS,Borrowing,{kind:'uups'});
   await deployedBorrowing.waitForDeployment();
   console.log("NEW IMP BORROWING ADDRESS",await deployedBorrowing.getAddress());
 
-  // const Treasury = await ethers.getContractFactory("Treasury");
-  // const deployedTreasury = await upgrades.upgradeProxy(PROXY_TREASURY_ADDRESS,Treasury,{kind:'uups'});
-  // await deployedTreasury.waitForDeployment();
-  // console.log("NEW IMP TREASURY ADDRESS",await deployedTreasury.getAddress());
+  const Treasury = await ethers.getContractFactory("Treasury");
+  const deployedTreasury = await upgrades.upgradeProxy(PROXY_TREASURY_ADDRESS,Treasury,{kind:'uups'});
+  await deployedTreasury.waitForDeployment();
+  console.log("NEW IMP TREASURY ADDRESS",await deployedTreasury.getAddress());
 
   // const Option = await ethers.getContractFactory("Options");
   // const deployedOptions = await upgrades.upgradeProxy(PROXY_OPTIONS_ADDRESS,Option,{kind:'uups'});

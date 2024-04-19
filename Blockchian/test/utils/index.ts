@@ -11,9 +11,12 @@ export const wethAddressMainnet = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 export const priceFeedAddressMainnet = "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419";
 export const aavePoolAddressMainnet = "0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e";
 export const aTokenAddressMainnet = "0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8";
+export const endPointAddressMainnet = "0x1a44076050125825900e736c501f859c50fe728c";
+export const eidMainnet = 30101;
 
 export const INFURA_URL_SEPOLIA = "https://sepolia.infura.io/v3/e9cf275f1ddc4b81aa62c5aa0b11ac0f";
-export const INFURA_URL_MAINNET = "https://sepolia.infura.io/v3/e9cf275f1ddc4b81aa62c5aa0b11ac0f";
+export const INFURA_URL_MAINNET = "https://mainnet.infura.io/v3/e9cf275f1ddc4b81aa62c5aa0b11ac0f";
+
 
 export const aTokenABI =[{"inputs":[{"internalType":"address","name":"admin","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"implementation","type":"address"}],"name":"Upgraded","type":"event"},{"stateMutability":"payable","type":"fallback"},{"inputs":[],"name":"admin","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"implementation","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"_logic","type":"address"},{"internalType":"bytes","name":"_data","type":"bytes"}],"name":"initialize","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"address","name":"newImplementation","type":"address"}],"name":"upgradeTo","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newImplementation","type":"address"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"upgradeToAndCall","outputs":[],"stateMutability":"payable","type":"function"}]
 

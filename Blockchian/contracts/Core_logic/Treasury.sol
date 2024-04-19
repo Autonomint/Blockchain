@@ -14,9 +14,13 @@ import "../interface/AaveInterfaces/IWETHGateway.sol";
 import "../interface/AaveInterfaces/IPoolAddressesProvider.sol";
 import "../interface/CometMainInterface.sol";
 import "../interface/IWETH9.sol";
+import "../lib/TreasuryLib.sol";
 import "hardhat/console.sol";
+import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
+import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
+import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 
-contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuardUpgradeable {
+contract Treasury is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
 
     error Treasury_ZeroDeposit();
     error Treasury_ZeroWithdraw();
@@ -109,6 +113,18 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         DepositDetails depositDetails;
     }
 
+    struct OmniChainTreasuryData {
+        uint256  totalVolumeOfBorrowersAmountinWei;
+        uint256  totalVolumeOfBorrowersAmountinUSD;
+        uint128  noOfBorrowers;
+        uint256  totalInterest;
+        uint256  totalInterestFromLiquidation;
+        uint256  abondAmintPool;
+        uint256  ethProfitsOfLiquidators;
+        uint256  interestFromExternalProtocolDuringLiquidation;
+        uint256  amintGainedFromLiquidation;
+    }
+
     enum Protocol{Aave,Compound}
 
     // Get depositor details by address
@@ -133,6 +149,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     // Eth depsoited in particular index
     mapping(uint256=>uint256) externalProtocolCountTotalValue;
     uint256 public amintGainedFromLiquidation;
+    OmniChainTreasuryData public omniChainTreasury;
 
     event Deposit(address indexed user,uint256 amount);
     event Withdraw(address indexed user,uint256 amount);
@@ -151,10 +168,13 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         address _aavePoolAddressProvider,
         address _aToken,
         address _usdt,
-        address _weth
+        address _weth,
+        address _endpoint,
+        address _delegate
         ) initializer public{
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
+        __oAppinit(_endpoint, _delegate);
         borrowingContract = _borrowing;
         cdsContract = _cdsContract;
         borrow = IBorrowing(_borrowing);
@@ -162,7 +182,6 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         abond = IABONDToken(_abondAddress);
         wethGateway = IWrappedTokenGatewayV3(_wethGateway);       // 0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
         comet = CometMainInterface(_comet);                    // 0xA17581A9E3356d9A858b789D68B4d866e593aE94
-        compoundAddress = _comet;
         WETH = IWETH9(_weth);                                  // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
         aavePoolAddressProvider = IPoolAddressesProvider(_aavePoolAddressProvider);  // 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
         aToken = IERC20(_aToken);                                                    // 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
@@ -923,6 +942,50 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
 
         WETH.withdraw(amount);
         return amount;
+    }
+
+    function send(
+        uint32 _dstEid,
+        OmniChainTreasuryData memory _message,
+        bytes calldata _options
+    ) public payable returns (MessagingReceipt memory receipt) {
+        bytes memory _payload = abi.encode(_message);
+        receipt = _lzSend(_dstEid, _payload, _options, MessagingFee(msg.value, 0), payable(msg.sender));
+    }
+
+    function quote(
+        uint32 _dstEid,
+        OmniChainTreasuryData memory _message,
+        bytes memory _options,
+        bool _payInLzToken
+    ) public view returns (MessagingFee memory fee) {
+        bytes memory payload = abi.encode(_message);
+        fee = _quote(_dstEid, payload, _options, _payInLzToken);
+    }
+
+    function _lzReceive(
+        Origin calldata /*_origin*/,
+        bytes32 /*_guid*/,
+        bytes calldata payload,
+        address /*_executor*/,
+        bytes calldata /*_extraData*/
+    ) internal override {
+
+        uint8[] memory index;
+
+        OmniChainTreasuryData memory data;
+
+        data = abi.decode(payload, (OmniChainTreasuryData));
+
+        omniChainTreasury.totalVolumeOfBorrowersAmountinWei = totalVolumeOfBorrowersAmountinWei + data.totalVolumeOfBorrowersAmountinWei;
+        omniChainTreasury.totalVolumeOfBorrowersAmountinUSD = totalVolumeOfBorrowersAmountinUSD + data.totalVolumeOfBorrowersAmountinUSD;
+        omniChainTreasury.noOfBorrowers = noOfBorrowers + data.noOfBorrowers;
+        omniChainTreasury.totalInterest = totalInterest + data.totalInterest;
+        omniChainTreasury.totalInterestFromLiquidation = totalInterestFromLiquidation + data.totalInterestFromLiquidation;
+        omniChainTreasury.abondAmintPool = abondAmintPool + data.abondAmintPool;
+        omniChainTreasury.ethProfitsOfLiquidators = ethProfitsOfLiquidators + data.ethProfitsOfLiquidators;
+        omniChainTreasury.interestFromExternalProtocolDuringLiquidation = interestFromExternalProtocolDuringLiquidation + data.interestFromExternalProtocolDuringLiquidation;
+        omniChainTreasury.amintGainedFromLiquidation = amintGainedFromLiquidation + data.amintGainedFromLiquidation;
     }
 
     receive() external payable{}
