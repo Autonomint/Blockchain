@@ -17,7 +17,8 @@ import {
     aTokenABI,
     cETH_ABI,
     wethAddressMainnet,wethAddressSepolia,
-    endPointAddressMainnet,eidMainnet
+    endPointAddressMainnet,endPointAddressPolygon,
+    eidMainnet,eidPolygon
     } from "./utils/index"
 
 describe("Borrowing Contract",function(){
@@ -36,9 +37,9 @@ describe("Borrowing Contract",function(){
     async function deployer(){
         [owner,owner1,owner2,user1,user2,user3] = await ethers.getSigners();
 
-        // const EndpointV2Mock = await ethers.getContractFactory('EndpointV2Mock')
-        // const mockEndpointV2A = await EndpointV2Mock.deploy(eidA)
-        // const mockEndpointV2B = await EndpointV2Mock.deploy(eidB)
+        const EndpointV2Mock = await ethers.getContractFactory('EndpointV2Mock')
+        const mockEndpointV2A = await EndpointV2Mock.deploy(eidA)
+        const mockEndpointV2B = await EndpointV2Mock.deploy(eidB)
 
         const AmintStablecoin = await ethers.getContractFactory("TestAMINTStablecoin");
         const Token = await upgrades.deployProxy(AmintStablecoin, {kind:'uups'});
@@ -70,6 +71,8 @@ describe("Borrowing Contract",function(){
             }
         });
 
+        const BorrowOApp = await ethers.getContractFactory("BorrowOApp");
+
         const BorrowingContract = await upgrades.deployProxy(Borrowing,[
             await Token.getAddress(),
             await CDSContract.getAddress(),
@@ -77,6 +80,35 @@ describe("Borrowing Contract",function(){
             await multiSign.getAddress(),
             priceFeedAddressMainnet,
             1,
+            await mockEndpointV2A.getAddress(),
+            await owner.getAddress()
+        ],{initializer:'initialize',
+            unsafeAllowLinkedLibraries:true
+        },{kind:'uups'});
+
+        const BorrowingContractOAPP1 = await upgrades.deployProxy(BorrowOApp,[
+            await BorrowingContract.getAddress(),
+            endPointAddressMainnet,
+            await owner.getAddress()
+        ],{initializer:'initialize',
+            unsafeAllowLinkedLibraries:true
+        },{kind:'uups'});
+
+        const BorrowingContractA = await upgrades.deployProxy(Borrowing,[
+            await Token.getAddress(),
+            await CDSContract.getAddress(),
+            await abondToken.getAddress(),
+            await multiSign.getAddress(),
+            priceFeedAddressMainnet,
+            1,
+            await mockEndpointV2B.getAddress(),
+            await owner.getAddress()
+        ],{initializer:'initialize',
+            unsafeAllowLinkedLibraries:true
+        },{kind:'uups'});
+
+        const BorrowingContractOAPP2 = await upgrades.deployProxy(BorrowOApp,[
+            await BorrowingContractA.getAddress(),
             endPointAddressMainnet,
             await owner.getAddress()
         ],{initializer:'initialize',
@@ -101,7 +133,13 @@ describe("Borrowing Contract",function(){
 
         const Option = await ethers.getContractFactory("Options");
         const options = await upgrades.deployProxy(Option,[await treasury.getAddress(),await CDSContract.getAddress(),await BorrowingContract.getAddress()],{initializer:'initialize'},{kind:'uups'});
+
+        await BorrowingContract.setBorrowOApp(await BorrowingContractOAPP1.getAddress());
+        await BorrowingContractA.setBorrowOApp(await BorrowingContractOAPP2.getAddress());
         
+        await BorrowingContractOAPP1.connect(owner).setPeer(eidPolygon, ethers.zeroPadValue(await BorrowingContractOAPP2.getAddress(), 32))
+        await BorrowingContractOAPP2.connect(owner).setPeer(eidMainnet, ethers.zeroPadValue(await BorrowingContractOAPP1.getAddress(), 32))
+
         await abondToken.setBorrowingContract(await BorrowingContract.getAddress());
         await multiSign.connect(owner).approveSetterFunction([0,1,4,5,6,7,8,9,10]);
         await multiSign.connect(owner1).approveSetterFunction([0,1,4,5,6,7,8,9,10]);
@@ -115,6 +153,8 @@ describe("Borrowing Contract",function(){
         await BorrowingContract.connect(owner).setLTV(80);
         await BorrowingContract.connect(owner).setBondRatio(4);
         await BorrowingContract.connect(owner).setAPR(BigInt("1000000001547125957863212449"));
+        await BorrowingContract.setDstEid(eidPolygon);
+        await BorrowingContractA.setDstEid(eidMainnet);
 
         await CDSContract.connect(owner).setTreasury(await treasury.getAddress());
         await CDSContract.connect(owner).setBorrowingContract(await BorrowingContract.getAddress());

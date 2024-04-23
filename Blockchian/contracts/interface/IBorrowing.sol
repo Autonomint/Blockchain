@@ -40,6 +40,7 @@ interface IBorrowing{
 
     function updateLastEthVaultValue(uint256 _amount) external;
     function calculateRatio(uint256 _amount,uint currentEthPrice) external returns(uint64);
+    function setLZReceive(OmniChainBorrowingData memory data,uint8[] memory index) external;
 
     event Deposit(uint64 index,uint256 depositedAmount,uint256 borrowAmount,uint256 normalizedAmount);
     event Withdraw(uint256 borrowDebt,uint128 withdrawAmount,uint128 noOfAbond);

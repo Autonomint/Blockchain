@@ -12,7 +12,9 @@ export const priceFeedAddressMainnet = "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b84
 export const aavePoolAddressMainnet = "0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e";
 export const aTokenAddressMainnet = "0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8";
 export const endPointAddressMainnet = "0x1a44076050125825900e736c501f859c50fe728c";
+export const endPointAddressPolygon = "0x1a44076050125825900e736c501f859c50fe728c";
 export const eidMainnet = 30101;
+export const eidPolygon = 30109;
 
 export const INFURA_URL_SEPOLIA = "https://sepolia.infura.io/v3/e9cf275f1ddc4b81aa62c5aa0b11ac0f";
 export const INFURA_URL_MAINNET = "https://mainnet.infura.io/v3/e9cf275f1ddc4b81aa62c5aa0b11ac0f";
