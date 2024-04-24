@@ -15,14 +15,13 @@ import { BorrowLib } from "../lib/BorrowLib.sol";
 import "../interface/ITreasury.sol";
 import "../interface/IOptions.sol";
 import "../interface/IMultiSign.sol";
-import "../interface/IBorrowOApp.sol";
 import "hardhat/console.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 
-contract BorrowingTest is IBorrowing,Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuardUpgradeable {
+contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
 
     // error Borrowing_DepositFailed();
     // error Borrowing_GettingETHPriceFailed();
@@ -45,8 +44,6 @@ contract BorrowingTest is IBorrowing,Initializable,OwnableUpgradeable,UUPSUpgrad
     IOptions private options; // options contract interface
 
     IMultiSign private multiSign;
-
-    IBorrowOApp private borrowOApp;
 
     uint256 private _downSideProtectionLimit;
     
@@ -109,7 +106,7 @@ contract BorrowingTest is IBorrowing,Initializable,OwnableUpgradeable,UUPSUpgrad
         ) initializer public{
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
-        // __oAppinit(_endpoint, _delegate);
+        __oAppinit(_endpoint, _delegate);
         amint = IAMINT(_tokenAddress);
         cds = CDSInterface(_cds);
         abond = IABONDToken(_abondToken);
@@ -172,9 +169,6 @@ contract BorrowingTest is IBorrowing,Initializable,OwnableUpgradeable,UUPSUpgrad
         options = IOptions(_options);
     }
 
-    function setBorrowOApp(address _oapp) external {
-        borrowOApp = IBorrowOApp(_oapp);
-    }
     /**
      * @dev set admin address
      * @param _admin  admin address
@@ -306,7 +300,7 @@ contract BorrowingTest is IBorrowing,Initializable,OwnableUpgradeable,UUPSUpgrad
         totalNormalizedAmount += normalizedAmount;
         lastEthprice = uint128(_ethPrice);
 
-        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(20000, 0);
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(50000, 0);
 
         OmniChainBorrowingData memory data = OmniChainBorrowingData(
             totalNormalizedAmount,
@@ -321,10 +315,11 @@ contract BorrowingTest is IBorrowing,Initializable,OwnableUpgradeable,UUPSUpgrad
 
         uint8[] memory structIndex;
 
-        MessagingFee memory fee = borrowOApp.quote(dstEid, data, structIndex, _options, false);
-                console.log(fee.nativeFee);
-                                console.log(fee.lzTokenFee);
-        borrowOApp.send{value: fee.nativeFee}(dstEid, data, structIndex, fee, _options);
+        MessagingFee memory fee = quote(dstEid, data, structIndex, _options, false);
+        uint256 messageValue = fee.nativeFee;
+
+        console.log(messageValue);
+        send(dstEid, data, structIndex, fee, _options);
         emit Deposit(index,msg.value,borrowAmount,normalizedAmount);
     }
 
@@ -731,44 +726,42 @@ contract BorrowingTest is IBorrowing,Initializable,OwnableUpgradeable,UUPSUpgrad
         return currentCumulativeRate;
     }
 
-    // function send(
-    //     uint32 _dstEid,
-    //     OmniChainBorrowingData memory _message,
-    //     uint8[] memory indices,
-    //     MessagingFee memory fee,
-    //     bytes memory _options
-    // ) internal returns (MessagingReceipt memory receipt) {
-    //     bytes memory _payload = abi.encode(_message,indices);
-    //     console.log(fee.nativeFee);
-    //     console.log(fee.lzTokenFee);
-    //     receipt = _lzSend(_dstEid, _payload, _options, fee, payable(msg.sender));
-    // }
+    function send(
+        uint32 _dstEid,
+        OmniChainBorrowingData memory _message,
+        uint8[] memory indices,
+        MessagingFee memory fee,
+        bytes memory _options
+    ) internal returns (MessagingReceipt memory receipt) {
+        bytes memory _payload = abi.encode(_message,indices);
+        receipt = _lzSend(_dstEid, _payload, _options, fee, payable(msg.sender));
+    }
 
-    // function quote(
-    //     uint32 _dstEid,
-    //     OmniChainBorrowingData memory _message,
-    //     uint8[] memory indices,
-    //     bytes memory _options,
-    //     bool _payInLzToken
-    // ) public view returns (MessagingFee memory fee) {
-    //     bytes memory payload = abi.encode(_message,indices);
-    //     fee = _quote(_dstEid, payload, _options, _payInLzToken);
-    // }
+    function quote(
+        uint32 _dstEid,
+        OmniChainBorrowingData memory _message,
+        uint8[] memory indices,
+        bytes memory _options,
+        bool _payInLzToken
+    ) public view returns (MessagingFee memory fee) {
+        bytes memory payload = abi.encode(_message,indices);
+        fee = _quote(_dstEid, payload, _options, _payInLzToken);
+    }
 
     function _lzReceive(
-        // Origin calldata /*_origin*/,
-        // bytes32 /*_guid*/,
-        // bytes calldata payload,
-        // address /*_executor*/,
-        // bytes calldata /*_extraData*/
-        OmniChainBorrowingData memory data,uint8[] memory index
-    ) internal {
+        Origin calldata /*_origin*/,
+        bytes32 /*_guid*/,
+        bytes calldata payload,
+        address /*_executor*/,
+        bytes calldata /*_extraData*/
+        // OmniChainBorrowingData memory data,uint8[] memory index
+    ) internal override{
 
-        // uint8[] memory index;
+        uint8[] memory index;
 
-        // OmniChainBorrowingData memory data;
+        OmniChainBorrowingData memory data;
 
-        // (data,index) = abi.decode(payload, (OmniChainBorrowingData, uint8[]));
+        (data,index) = abi.decode(payload, (OmniChainBorrowingData, uint8[]));
 
         if(index.length > 0){
             // bytes memory _payload = abi.encode();
@@ -785,9 +778,5 @@ contract BorrowingTest is IBorrowing,Initializable,OwnableUpgradeable,UUPSUpgrad
             omniChainBorrowing.ethValueRemainingInWithdraw = ethValueRemainingInWithdraw + data.ethValueRemainingInWithdraw;
             nonce = data.nonce;
         }
-    }
-
-    function setLZReceive(OmniChainBorrowingData memory data,uint8[] memory index) external{
-        _lzReceive(data,index);
     }
 }

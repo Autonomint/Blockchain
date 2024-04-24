@@ -114,7 +114,6 @@ library BorrowLib {
             currentCumulativeRate = lastCumulativeRate * _rpow(ratePerSec, timeInterval, RATE_PRECISION);
             currentCumulativeRate = currentCumulativeRate / RATE_PRECISION;
         }
-        console.log(currentCumulativeRate);
         return currentCumulativeRate;
     }
 
