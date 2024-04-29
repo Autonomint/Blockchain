@@ -12,6 +12,7 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "../interface/IAmint.sol";
 import "../interface/IBorrowing.sol";
 import "../interface/ITreasury.sol";
+import "../interface/CDSInterface.sol";
 import "../interface/IMultiSign.sol";
 import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
@@ -19,7 +20,7 @@ import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contra
 import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 
-contract CDSTest is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp{
+contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp{
 
     IAMINT      public amint; // our stablecoin
     IBorrowing  public borrowing; // Borrowing contract interface
@@ -49,69 +50,14 @@ contract CDSTest is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OAp
     uint128 public PRECISION;
     uint128 RATIO_PRECISION;
 
-    struct CdsAccountDetails {
-        uint64 depositedTime;
-        uint256 depositedAmount;
-        uint64 withdrawedTime;
-        uint256 withdrawedAmount;
-        bool withdrawed;
-        uint128 depositPrice;
-        uint128 depositValue;
-        bool depositValueSign;
-        bool optedLiquidation;
-        uint128 InitialLiquidationAmount;
-        uint128 liquidationAmount;
-        uint128 liquidationindex;
-        uint256 normalizedAmount;
-    }
-
-    struct CdsDetails {
-        uint64 index;
-        bool hasDeposited;
-        mapping ( uint64 => CdsAccountDetails) cdsAccountDetails;
-    }
-
-    struct LiquidationInfo{
-        uint128 liquidationAmount;
-        uint128 profits;
-        uint128 ethAmount;
-        uint256 availableLiquidationAmount;
-    }
-    
-    struct CalculateValueResult{
-        uint128 currentValue;
-        bool gains;
-    }
-
     mapping (address => CdsDetails) public cdsDetails;
 
     // liquidations info based on liquidation numbers
     mapping (uint128 liquidationIndex => LiquidationInfo) public liquidationIndexToInfo;
 
-    struct OmniChainCDSData {
-        uint64  cdsCount;
-        uint256 totalCdsDepositedAmount;
-        uint256 totalCdsDepositedAmountWithOptionFees;
-        uint256 totalAvailableLiquidationAmount;
-        uint256 usdtAmountDepositedTillNow;
-        uint256 burnedAmintInRedeem;
-    }
-    OmniChainCDSData public omniChainCDS;
-
-
-    event Deposit(uint256 depositedAmint,uint64 index,uint128 liquidationAmount,uint256 normalizedAmount,uint128 depositVal);
-    event Withdraw(uint256 withdrewAmint,uint128 withdrawETH);
-
-    // constructor(address _amint,address priceFeed,address _usdt,address _multiSign) Ownable(msg.sender) {
-    //     amint = IAMINT(_amint); // amint token contract address
-    //     usdt = IERC20(_usdt);
-    //     multiSign = IMultiSign(_multiSign);
-    //     dataFeed = AggregatorV3Interface(priceFeed);
-    //     lastEthPrice = getLatestData();
-    //     fallbackEthPrice = lastEthPrice;
-    //     lastCumulativeRate = PRECISION;
-    //     cumulativeValueSign = true;
-    // }
+    using OptionsBuilder for bytes;
+    OmniChainCDSData public omniChainCDS;//! omnichainCDS contains global CDS data(all chains)
+    uint32 private dstEid;
 
     function initialize(
         address _amint,
@@ -184,6 +130,11 @@ contract CDSTest is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OAp
         admin = _admin;    
     }
 
+    function setDstEid(uint32 _eid) external {
+        require(_eid != 0, "EID can't be zero");
+        dstEid = _eid;
+    }
+
     /**
      * @dev amint and usdt deposit to cds
      * @param usdtAmount usdt amount to deposit
@@ -196,7 +147,7 @@ contract CDSTest is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OAp
         uint128 amintAmount,
         bool _liquidate,
         uint128 _liquidationAmount
-    ) public nonReentrant whenNotPaused(IMultiSign.Functions(4)){
+    ) public payable nonReentrant whenNotPaused(IMultiSign.Functions(4)){
         // totalDepositingAmount is usdt and amint
         uint256 totalDepositingAmount = usdtAmount + amintAmount;
         require(totalDepositingAmount != 0, "Deposit amount should not be zero"); // check _amount not zero
@@ -234,6 +185,8 @@ contract CDSTest is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OAp
 
             //Increase cdsCount if msg.sender is depositing for the first time
             ++cdsCount;
+            //! updating global data 
+            ++omniChainCDS.cdsCount;
         }
         else {
             //increase index value by 1
@@ -253,8 +206,16 @@ contract CDSTest is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OAp
         //add deposited amount to totalCdsDepositedAmount
         totalCdsDepositedAmount += totalDepositingAmount;
         totalCdsDepositedAmountWithOptionFees += totalDepositingAmount;
+
+        //! updating global data 
+        omniChainCDS.totalCdsDepositedAmount += totalDepositingAmount;
+        omniChainCDS.totalCdsDepositedAmount += totalDepositingAmount;
+
         //increment usdtAmountDepositedTillNow
         usdtAmountDepositedTillNow += usdtAmount;
+
+        //! updating global data 
+        omniChainCDS.usdtAmountDepositedTillNow += usdtAmount;
         
         //add deposited time of perticular index and amount in cdsAccountDetails
         cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = uint64(block.timestamp);
@@ -267,6 +228,9 @@ contract CDSTest is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OAp
             cdsDetails[msg.sender].cdsAccountDetails[index].liquidationAmount = _liquidationAmount;
             cdsDetails[msg.sender].cdsAccountDetails[index].InitialLiquidationAmount = _liquidationAmount;
             totalAvailableLiquidationAmount += _liquidationAmount;
+            
+            //! updating global data 
+            omniChainCDS.totalAvailableLiquidationAmount += _liquidationAmount;
         }  
 
         if(ethPrice != lastEthPrice){
@@ -295,6 +259,15 @@ contract CDSTest is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OAp
             bool success = amint.mint(treasuryAddress,usdtAmount);
             require(success == true, "AMINT mint to treasury failed in CDS deposit");
         }
+
+        //! getting options since,the src don't know the dst state
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+
+        //! calculting fee 
+        MessagingFee memory fee = quote(dstEid, omniChainCDS, _options, false);
+
+        //! Calling Omnichain send function
+        send(dstEid, omniChainCDS, fee, _options);
 
         emit Deposit(totalDepositingAmount,index,_liquidationAmount,cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount,cdsDetails[msg.sender].cdsAccountDetails[index].depositValue);
     }
@@ -488,6 +461,7 @@ contract CDSTest is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OAp
 
         require(amint.balanceOf(msg.sender) >= _amintAmount,"Insufficient balance");
         burnedAmintInRedeem += _amintAmount;
+        omniChainCDS.burnedAmintInRedeem += _amintAmount;
         bool transfer = amint.burnFromUser(msg.sender,_amintAmount);
         require(transfer == true, "AMINT Burn failed in redeemUSDT");
 
@@ -629,6 +603,18 @@ contract CDSTest is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OAp
         }
     }
 
+    function send(
+        uint32 _dstEid,
+        OmniChainCDSData memory _message,
+        MessagingFee memory fee,
+        bytes memory _options
+    ) internal returns (MessagingReceipt memory receipt) {
+        bytes memory _payload = abi.encode(_message);
+        
+        //! Calling layer zero send function to send to dst chain
+        receipt = _lzSend(_dstEid, _payload, _options, fee, payable(msg.sender));
+    }
+
     function quote(
         uint32 _dstEid,
         OmniChainCDSData memory _message,
@@ -659,12 +645,9 @@ contract CDSTest is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OAp
             // MessagingFee memory fee = quote(dstEid, ,[], _options, false);
             // _lzSend(dstEid, _payload, _options, fee, payable(msg.sender));
         }else{
-            omniChainCDS.cdsCount = data.cdsCount;
-            omniChainCDS.totalCdsDepositedAmount = data.totalCdsDepositedAmount;
-            omniChainCDS.totalCdsDepositedAmountWithOptionFees = data.totalCdsDepositedAmountWithOptionFees;
-            omniChainCDS.totalAvailableLiquidationAmount = data.totalAvailableLiquidationAmount;
-            omniChainCDS.usdtAmountDepositedTillNow = data.usdtAmountDepositedTillNow;
-            omniChainCDS.burnedAmintInRedeem = data.burnedAmintInRedeem;
+
+            omniChainCDS = data;
+
         }
     }
 

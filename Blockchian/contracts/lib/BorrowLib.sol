@@ -193,6 +193,117 @@ library BorrowLib {
         }
         return withdrawAmount;
     }
+    // function withDraw(
+    //     address toAddress,
+    //     uint64 index,
+    //     uint64 ethPrice,
+    //     uint64 withdrawTime,
+    //     uint256 lastCumulativeRate,
+    //     address abondAddress,
+    //     address amintAddress,
+    //     address treasuryAddress
+    // ) public {
+
+    //     IAMINT amint = IAMINT(amintAddress);
+    //     IABONDToken abond = IABONDToken(abondAddress);
+    //     ITreasury treasury = ITreasury(treasuryAddress);
+
+    //     calculateRatio(0,ethPrice);
+    //     uint128 lastEthprice = uint128(ethPrice);
+
+    //     ITreasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(msg.sender,index);
+    //     ITreasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
+
+    //     // check if borrowerIndex in BorrowerDetails of the msg.sender is greater than or equal to Index
+    //     if(getBorrowingResult.totalIndex >= index ) {
+    //         // Check if user amount in the Index is been liquidated or not
+    //         require(!depositDetail.liquidated,"User amount has been liquidated");
+    //         // check if withdrawed in depositDetail in borrowing of msg.seader is false or not
+    //         if(depositDetail.withdrawed == false) {                                  
+    //             // Calculate the borrowingHealth
+    //             uint128 borrowingHealth = (ethPrice * 10000) / depositDetail.ethPriceAtDeposit;
+    //             require(borrowingHealth > 8000,"BorrowingHealth is Low");
+    //             // Calculate th borrower's debt
+    //             uint256 borrowerDebt = ((depositDetail.normalizedAmount * lastCumulativeRate)/BorrowLib.RATE_PRECISION);
+    //             calculateCumulativeRate();
+    //             uint128 lastEventTime = uint128(block.timestamp);
+    //             // Check whether the Borrower have enough Trinty
+    //             require(amint.balanceOf(msg.sender) >= borrowerDebt, "User balance is less than required");
+                            
+    //             // Update the borrower's data
+    //             {depositDetail.ethPriceAtWithdraw = ethPrice;
+    //             depositDetail.withdrawed = true;
+    //             depositDetail.withdrawTime = withdrawTime;
+    //             // Calculate interest for the borrower's debt
+    //             //uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
+
+    //             uint256 discountedETH = ((((80*((depositDetail.depositedAmount * 50)/100))/100)*ethPrice)/100)/BorrowLib.AMINT_PRECISION; // 0.4
+    //             treasury.updateAbondAmintPool(discountedETH,true);
+    //             // Calculate the amount of AMINT to burn and sent to the treasury
+    //             // uint256 halfValue = (50 *(depositDetail.borrowedAmount))/100;
+    //             console.log("BORROWED AMOUNT",depositDetail.borrowedAmount);
+    //             console.log("DISCOUNTED ETH",discountedETH);
+    //             uint256 burnValue = depositDetail.borrowedAmount - discountedETH;
+    //             console.log("BURN VALUE",burnValue);
+    //             // Burn the AMINT from the Borrower
+    //             bool success = amint.burnFromUser(msg.sender, burnValue);
+    //             if(!success){
+    //                 revert ("Borrowing_WithdrawBurnFailed");
+    //             }
+
+    //             //Transfer the remaining AMINT to the treasury
+    //             bool transfer = amint.transferFrom(msg.sender,treasuryAddress,borrowerDebt - burnValue);
+    //             if(!transfer){
+    //                 revert ("Borrowing_WithdrawAMINTTransferFailed");
+    //             }
+    //             //Update totalNormalizedAmount
+    //             totalNormalizedAmount -= depositDetail.normalizedAmount;
+    //             console.log("borrowerDebt",borrowerDebt);
+    //             treasury.updateTotalInterest(borrowerDebt - depositDetail.borrowedAmount);
+
+    //             // Mint the ABondTokens
+    //             uint128 noOfAbondTokensminted = _mintAbondToken(msg.sender, index, discountedETH);
+    //             // Update ABONDToken data
+    //             depositDetail.aBondTokensAmount = noOfAbondTokensminted;
+
+    //             // Update deposit details    
+    //             treasury.updateDepositDetails(msg.sender,index,depositDetail);}             
+    //             uint128 ethToReturn;
+    //             //Calculate current depositedAmount value
+    //             uint128 depositedAmountvalue = (depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/ethPrice;
+
+    //             if(borrowingHealth > 10000){
+    //                 // If the ethPrice is higher than deposit ethPrice,call withdrawOption in options contract
+    //                 ethToReturn = (depositedAmountvalue + (options.calculateStrikePriceGains(depositDetail.depositedAmount,depositDetail.strikePrice,_ethPrice)));
+    //                 if(ethToReturn > depositDetail.depositedAmount){
+    //                     ethRemainingInWithdraw += (ethToReturn - depositDetail.depositedAmount);
+    //                 }else{
+    //                     ethRemainingInWithdraw += (depositDetail.depositedAmount - ethToReturn);
+    //                 }
+    //                 ethValueRemainingInWithdraw += (ethRemainingInWithdraw * ethPrice);
+    //             }else if(borrowingHealth == 10000){
+    //                 ethToReturn = depositedAmountvalue;
+    //             }else if(8000 < borrowingHealth && borrowingHealth < 10000) {
+    //                 ethToReturn = depositDetail.depositedAmount;
+    //             }else{
+    //                 revert("BorrowingHealth is Low");
+    //             }
+    //             ethToReturn = (ethToReturn * 50)/100;
+    //             // Call withdraw in treasury
+    //             bool sent = treasury.withdraw(msg.sender,toAddress,ethToReturn,index);
+    //             if(!sent){
+    //                 revert ("Borrowing_WithdrawEthTransferFailed");
+    //             }
+    //             emit Withdraw(borrowerDebt,ethToReturn,depositDetail.aBondTokensAmount);
+    //         }else{
+    //             // update withdrawed to true
+    //             revert("User already withdraw entire amount");
+    //         }
+    //     }else {
+    //         // revert if user doens't have the perticular index
+    //         revert("User doens't have the perticular index");
+    //     }
+    // }
 
     function _rpow(uint x, uint n, uint b) internal pure returns (uint z) {
       assembly {

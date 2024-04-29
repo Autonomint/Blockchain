@@ -10,6 +10,7 @@ import "@openzeppelin/contracts/interfaces/IERC20.sol";
 import "../interface/IAmint.sol";
 import { State,IABONDToken } from "../interface/IAbond.sol";
 import "../interface/IBorrowing.sol";
+import "../interface/ITreasury.sol";
 import "../interface/AaveInterfaces/IWETHGateway.sol";
 import "../interface/AaveInterfaces/IPoolAddressesProvider.sol";
 import "../interface/CometMainInterface.sol";
@@ -20,17 +21,7 @@ import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contra
 import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 
-contract Treasury is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
-
-    error Treasury_ZeroDeposit();
-    error Treasury_ZeroWithdraw();
-    error Treasury_AavePoolAddressZero();
-    error Treasury_AaveDepositAndMintFailed();
-    error Treasury_AaveWithdrawFailed();
-    error Treasury_CompoundDepositAndMintFailed();
-    error Treasury_CompoundWithdrawFailed();
-    error Treasury_EthTransferToCdsLiquidatorFailed();
-    error Treasury_WithdrawExternalProtocolInterestFailed();
+contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
 
     IBorrowing  public borrow;
     IAMINT      public amint;
@@ -46,86 +37,6 @@ contract Treasury is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OA
     address public cdsContract;  
     address public compoundAddress;
     address public aaveWETH;        //wethGateway Address for Approve
-
-    //Depositor's Details for each depsoit.
-    struct DepositDetails{
-        uint64  depositedTime;
-        uint128 depositedAmount;
-        uint128 depositedAmountUsdValue;
-        uint64  downsidePercentage;
-        uint128 ethPriceAtDeposit;
-        uint128 borrowedAmount;
-        uint128 normalizedAmount;
-        bool    withdrawed;
-        uint128 withdrawAmount;
-        bool    liquidated;
-        uint64  ethPriceAtWithdraw;
-        uint64  withdrawTime;
-        uint128 aBondTokensAmount;
-        uint128 strikePrice;
-        uint128 optionFees;
-        uint64  externalProtocolCount;
-    }
-
-    //Borrower Details
-    struct BorrowerDetails {
-        uint256 depositedAmount;
-        mapping(uint64 => DepositDetails) depositDetails;
-        uint256 totalBorrowedAmount;
-        bool    hasBorrowed;
-        bool    hasDeposited;
-        uint64  borrowerIndex;
-    }
-
-    //Each Deposit to Aave/Compound
-    struct EachDepositToProtocol{
-        uint64  depositedTime;
-        uint128 depositedAmount;
-        uint128 ethPriceAtDeposit;
-        uint256 depositedUsdValue;
-        uint128 tokensCredited;
-
-        bool    withdrawed;
-        uint128 ethPriceAtWithdraw;
-        uint64  withdrawTime;
-        uint256 withdrawedUsdValue;
-        uint128 interestGained;
-        uint256 discountedPrice;
-    }
-
-    //Total Deposit to Aave/Compound
-    struct ProtocolDeposit{
-        mapping (uint64 => EachDepositToProtocol) eachDepositToProtocol;
-        uint64  depositIndex;
-        uint256 depositedAmount;
-        uint256 totalCreditedTokens;
-        uint256 depositedUsdValue;
-        uint256 cumulativeRate;       
-    }
-
-    struct DepositResult{
-        bool hasDeposited;
-        uint64 borrowerIndex;
-    }
-
-    struct GetBorrowingResult{
-        uint64 totalIndex;
-        DepositDetails depositDetails;
-    }
-
-    struct OmniChainTreasuryData {
-        uint256  totalVolumeOfBorrowersAmountinWei;
-        uint256  totalVolumeOfBorrowersAmountinUSD;
-        uint128  noOfBorrowers;
-        uint256  totalInterest;
-        uint256  totalInterestFromLiquidation;
-        uint256  abondAmintPool;
-        uint256  ethProfitsOfLiquidators;
-        uint256  interestFromExternalProtocolDuringLiquidation;
-        uint256  amintGainedFromLiquidation;
-    }
-
-    enum Protocol{Aave,Compound}
 
     // Get depositor details by address
     mapping(address depositor => BorrowerDetails) public borrowing;
@@ -149,14 +60,9 @@ contract Treasury is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OA
     // Eth depsoited in particular index
     mapping(uint256=>uint256) externalProtocolCountTotalValue;
     uint256 public amintGainedFromLiquidation;
-    OmniChainTreasuryData public omniChainTreasury;
-
-    event Deposit(address indexed user,uint256 amount);
-    event Withdraw(address indexed user,uint256 amount);
-    event DepositToAave(uint64 count,uint256 amount);
-    event WithdrawFromAave(uint64 count,uint256 amount);
-    event DepositToCompound(uint64 count,uint256 amount);
-    event WithdrawFromCompound(uint64 count,uint256 amount);
+    OmniChainTreasuryData public omniChainTreasury;//! omnichainTreasury contains global treasury data(all chains)
+    using OptionsBuilder for bytes;
+    uint32 private dstEid;
 
     function initialize(
         address _borrowing,
@@ -233,6 +139,7 @@ contract Treasury is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OA
             //change hasDeposited bool to true after first deposit
             borrowing[user].hasDeposited = true;
             ++noOfBorrowers;
+            ++omniChainTreasury.noOfBorrowers;
         }
         else {
             //increment the borrowerIndex for each deposit
@@ -248,9 +155,11 @@ contract Treasury is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OA
 
         //Total volume of borrowers in USD
         totalVolumeOfBorrowersAmountinUSD += (_ethPrice * msg.value);
+        omniChainTreasury.totalVolumeOfBorrowersAmountinUSD += (_ethPrice * msg.value);
 
         //Total volume of borrowers in Wei
         totalVolumeOfBorrowersAmountinWei += msg.value;
+        omniChainTreasury.totalVolumeOfBorrowersAmountinWei += msg.value;
 
         //Adding depositTime to borrowing struct
         borrowing[user].depositDetails[borrowerIndex].depositedTime = _depositTime;
@@ -267,8 +176,13 @@ contract Treasury is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OA
 
         uint256 externalProtocolDepositEth = ((msg.value * 25)/100);
 
-        depositToAaveByUser(externalProtocolDepositEth);
-        depositToCompoundByUser(externalProtocolDepositEth);
+        // depositToAaveByUser(externalProtocolDepositEth);
+        // depositToCompoundByUser(externalProtocolDepositEth);
+
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+        
+        //! Calling omnichain send function
+        send(dstEid, omniChainTreasury, _options);
 
         emit Deposit(user,msg.value);
         return DepositResult(borrowing[user].hasDeposited,borrowerIndex);
@@ -727,26 +641,32 @@ contract Treasury is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OA
 
     function updateTotalInterest(uint256 _amount) external onlyBorrowingContract{
         totalInterest += _amount;
+        omniChainTreasury.totalInterest += _amount;
     }
 
     function updateTotalInterestFromLiquidation(uint256 _amount) external onlyBorrowingContract{
         totalInterestFromLiquidation += _amount;
+        omniChainTreasury.totalInterestFromLiquidation += _amount;
     }
 
     function updateAbondAmintPool(uint256 amount,bool operation) external onlyBorrowingContract{
         require(amount != 0, "Treasury:Amount should not be zero");
         if(operation){
             abondAmintPool += amount;
+            omniChainTreasury.abondAmintPool += amount;
         }else{
             abondAmintPool -= amount;
+            omniChainTreasury.abondAmintPool -= amount;
         }
     }
 
     function updateAmintGainedFromLiquidation(uint256 amount,bool operation) external onlyBorrowingContract{
         if(operation){
             amintGainedFromLiquidation += amount;
+            omniChainTreasury.amintGainedFromLiquidation += amount;
         }else{
             amintGainedFromLiquidation -= amount;
+            omniChainTreasury.amintGainedFromLiquidation -= amount;
         }
     }
 
@@ -754,13 +674,17 @@ contract Treasury is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OA
         require(amount != 0, "Treasury:Amount should not be zero");
         if(operation){
             ethProfitsOfLiquidators += amount;
+            omniChainTreasury.ethProfitsOfLiquidators += amount;
+
         }else{
             ethProfitsOfLiquidators -= amount;
+            omniChainTreasury.ethProfitsOfLiquidators += amount;
         }
     }
 
     function updateInterestFromExternalProtocol(uint256 amount) external onlyBorrowingContract{
         interestFromExternalProtocolDuringLiquidation += amount;
+        omniChainTreasury.interestFromExternalProtocolDuringLiquidation += amount;
     }
 
     function getBorrowing(address depositor,uint64 index) external view returns(GetBorrowingResult memory){
@@ -944,13 +868,20 @@ contract Treasury is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OA
         return amount;
     }
 
+    function setDstEid(uint32 _eid) external {
+        require(_eid != 0, "EID can't be zero");
+        dstEid = _eid;
+    }
+
     function send(
         uint32 _dstEid,
         OmniChainTreasuryData memory _message,
-        bytes calldata _options
-    ) public payable returns (MessagingReceipt memory receipt) {
+        bytes memory _options
+    ) internal returns (MessagingReceipt memory receipt) {
         bytes memory _payload = abi.encode(_message);
-        receipt = _lzSend(_dstEid, _payload, _options, MessagingFee(msg.value, 0), payable(msg.sender));
+        
+        //! Calling layer zero send function to send to dst chain
+        receipt = _lzSend(_dstEid, _payload, _options, MessagingFee(msg.value,0), payable(msg.sender));
     }
 
     function quote(
@@ -971,21 +902,12 @@ contract Treasury is Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OA
         bytes calldata /*_extraData*/
     ) internal override {
 
-        uint8[] memory index;
-
         OmniChainTreasuryData memory data;
 
         data = abi.decode(payload, (OmniChainTreasuryData));
 
-        omniChainTreasury.totalVolumeOfBorrowersAmountinWei = totalVolumeOfBorrowersAmountinWei + data.totalVolumeOfBorrowersAmountinWei;
-        omniChainTreasury.totalVolumeOfBorrowersAmountinUSD = totalVolumeOfBorrowersAmountinUSD + data.totalVolumeOfBorrowersAmountinUSD;
-        omniChainTreasury.noOfBorrowers = noOfBorrowers + data.noOfBorrowers;
-        omniChainTreasury.totalInterest = totalInterest + data.totalInterest;
-        omniChainTreasury.totalInterestFromLiquidation = totalInterestFromLiquidation + data.totalInterestFromLiquidation;
-        omniChainTreasury.abondAmintPool = abondAmintPool + data.abondAmintPool;
-        omniChainTreasury.ethProfitsOfLiquidators = ethProfitsOfLiquidators + data.ethProfitsOfLiquidators;
-        omniChainTreasury.interestFromExternalProtocolDuringLiquidation = interestFromExternalProtocolDuringLiquidation + data.interestFromExternalProtocolDuringLiquidation;
-        omniChainTreasury.amintGainedFromLiquidation = amintGainedFromLiquidation + data.amintGainedFromLiquidation;
+        omniChainTreasury = data;
+
     }
 
     receive() external payable{}

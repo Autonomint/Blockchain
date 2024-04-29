@@ -4,6 +4,17 @@ pragma solidity 0.8.20;
 
 interface ITreasury{
 
+    error Treasury_ZeroDeposit();
+    error Treasury_ZeroWithdraw();
+    error Treasury_AavePoolAddressZero();
+    error Treasury_AaveDepositAndMintFailed();
+    error Treasury_AaveWithdrawFailed();
+    error Treasury_CompoundDepositAndMintFailed();
+    error Treasury_CompoundWithdrawFailed();
+    error Treasury_EthTransferToCdsLiquidatorFailed();
+    error Treasury_WithdrawExternalProtocolInterestFailed();
+
+    //Depositor's Details for each depsoit.
     struct DepositDetails{
         uint64  depositedTime;
         uint128 depositedAmount;
@@ -23,6 +34,42 @@ interface ITreasury{
         uint64  externalProtocolCount;
     }
 
+    //Borrower Details
+    struct BorrowerDetails {
+        uint256 depositedAmount;
+        mapping(uint64 => DepositDetails) depositDetails;
+        uint256 totalBorrowedAmount;
+        bool    hasBorrowed;
+        bool    hasDeposited;
+        uint64  borrowerIndex;
+    }
+
+    //Each Deposit to Aave/Compound
+    struct EachDepositToProtocol{
+        uint64  depositedTime;
+        uint128 depositedAmount;
+        uint128 ethPriceAtDeposit;
+        uint256 depositedUsdValue;
+        uint128 tokensCredited;
+
+        bool    withdrawed;
+        uint128 ethPriceAtWithdraw;
+        uint64  withdrawTime;
+        uint256 withdrawedUsdValue;
+        uint128 interestGained;
+        uint256 discountedPrice;
+    }
+
+    //Total Deposit to Aave/Compound
+    struct ProtocolDeposit{
+        mapping (uint64 => EachDepositToProtocol) eachDepositToProtocol;
+        uint64  depositIndex;
+        uint256 depositedAmount;
+        uint256 totalCreditedTokens;
+        uint256 depositedUsdValue;
+        uint256 cumulativeRate;       
+    }
+
     struct DepositResult{
         bool hasDeposited;
         uint64 borrowerIndex;
@@ -32,6 +79,20 @@ interface ITreasury{
         uint64 totalIndex;
         DepositDetails depositDetails;
     }
+
+    struct OmniChainTreasuryData {
+        uint256  totalVolumeOfBorrowersAmountinWei;
+        uint256  totalVolumeOfBorrowersAmountinUSD;
+        uint128  noOfBorrowers;
+        uint256  totalInterest;
+        uint256  totalInterestFromLiquidation;
+        uint256  abondAmintPool;
+        uint256  ethProfitsOfLiquidators;
+        uint256  interestFromExternalProtocolDuringLiquidation;
+        uint256  amintGainedFromLiquidation;
+    }
+
+    enum Protocol{Aave,Compound}
 
         function deposit(address user,uint128 _ethPrice,uint64 _depositTime) external payable returns(DepositResult memory);
         function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index) external returns(bool);
@@ -70,8 +131,10 @@ interface ITreasury{
         function updateEthProfitsOfLiquidators(uint256 amount,bool operation) external;
         function updateInterestFromExternalProtocol(uint256 amount) external;
 
-        event Deposit(address indexed user,uint256 amount);
-        event Withdraw(address indexed user,uint256 amount);
-        event DepositToAave(uint256 amount);
-        event WithdrawFromAave(uint256 amount);
+    event Deposit(address indexed user,uint256 amount);
+    event Withdraw(address indexed user,uint256 amount);
+    event DepositToAave(uint64 count,uint256 amount);
+    event WithdrawFromAave(uint64 count,uint256 amount);
+    event DepositToCompound(uint64 count,uint256 amount);
+    event WithdrawFromCompound(uint64 count,uint256 amount);
 }

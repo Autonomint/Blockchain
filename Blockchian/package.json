@@ -32,11 +32,14 @@
   },
   "dependencies": {
     "@chainlink/contracts": "^0.6.1",
+    "@layerzerolabs/devtools-evm-hardhat": "^0.3.11",
     "@layerzerolabs/lz-evm-oapp-v2": "^2.2.4",
+    "@layerzerolabs/lz-v2-utilities": "^2.3.3",
     "@openzeppelin/contracts": "^5.0.1",
     "@openzeppelin/contracts-upgradeable": "^5.0.1",
     "dotenv": "^16.3.1",
     "ganache-cli": "^6.12.2",
+    "hardhat-contract-sizer": "^2.10.0",
     "hardhat-tracer": "^2.6.0"
   }
 }
