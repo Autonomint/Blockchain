@@ -663,7 +663,6 @@ contract Borrowing is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     function liquidate(
         address _user,
         uint64 _index,
-        uint64 currentEthPrice
     ) external whenNotPaused(IMultiSign.Functions(2)) onlyAdmin{
 
         // Check whether the liquidator 
@@ -683,7 +682,8 @@ contract Borrowing is Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         require(
             depositDetail.depositedAmount <= (treasury.totalVolumeOfBorrowersAmountinWei() - treasury.ethProfitsOfLiquidators())
             ,"Not enough funds in treasury");
-
+        
+        uint64 currentEthPrice = uint64(getUSDValue());
         // Check whether the position is eligible or not for liquidation
         uint128 ratio = ((currentEthPrice * 10000) / depositDetail.ethPriceAtDeposit);
         require(ratio <= 8000,"You cannot liquidate");

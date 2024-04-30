@@ -44,9 +44,11 @@ interface CDSInterface {
         uint256 totalAvailableLiquidationAmount;
         uint256 usdtAmountDepositedTillNow;
         uint256 burnedAmintInRedeem;
+        uint128 lastCumulativeRate;
     }
 
     function totalCdsDepositedAmount() external view returns(uint256);
+    function omniChainCDSTotalCdsDepositedAmount() external view returns(uint256);
     function totalAvailableLiquidationAmount() external returns(uint256);
 
     function calculateCumulativeRate(uint128 fees) external;

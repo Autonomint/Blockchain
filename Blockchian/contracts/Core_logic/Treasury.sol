@@ -211,6 +211,8 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         // Updating total volumes
         totalVolumeOfBorrowersAmountinUSD -= borrowing[borrower].depositDetails[index].depositedAmountUsdValue;
         totalVolumeOfBorrowersAmountinWei -= amount * 2;
+        omniChainTreasury.totalVolumeOfBorrowersAmountinUSD -= borrowing[borrower].depositDetails[index].depositedAmountUsdValue;
+        omniChainTreasury.totalVolumeOfBorrowersAmountinWei -= amount * 2;
 
         // Deduct tototalBorrowedAmountt
         borrowing[borrower].totalBorrowedAmount -= borrowing[borrower].depositDetails[index].borrowedAmount;
@@ -218,8 +220,13 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
 
         if(borrowing[borrower].depositedAmount == 0){
             --noOfBorrowers;
+            --omniChainTreasury.noOfBorrowers;
         }
         borrowing[borrower].depositDetails[index].withdrawAmount += uint128(amount);
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+        
+        //! Calling omnichain send function
+        send(dstEid, omniChainTreasury, _options);
         // Send the ETH to Borrower
         (bool sent,) = payable(toAddress).call{value: amount}("");
         require(sent, "Failed to send Ether");
@@ -693,6 +700,18 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
             borrowing[depositor].depositDetails[index]);
     }
 
+    function omniChainTreasuryNoOfBorrowers() external view returns(uint128){
+        return omniChainTreasury.noOfBorrowers;
+    }
+
+    function omniChainTreasuryTotalVolumeOfBorrowersAmountinWei() external view returns(uint256){
+        return omniChainTreasury.totalVolumeOfBorrowersAmountinWei;
+    }
+
+    function omniChainTreasuryTotalVolumeOfBorrowersAmountinUSD() external view returns(uint256){
+        return omniChainTreasury.totalVolumeOfBorrowersAmountinUSD;
+    }
+
     function getAaveCumulativeRate() private view returns(uint128){
         return uint128(protocolDeposit[Protocol.Aave].cumulativeRate);
     }
@@ -877,7 +896,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         uint32 _dstEid,
         OmniChainTreasuryData memory _message,
         bytes memory _options
-    ) internal returns (MessagingReceipt memory receipt) {
+    ) internal onlyBorrowingContract returns (MessagingReceipt memory receipt) {
         bytes memory _payload = abi.encode(_message);
         
         //! Calling layer zero send function to send to dst chain

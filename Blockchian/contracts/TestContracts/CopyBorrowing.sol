@@ -61,7 +61,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
     uint32 private dstEid; //! dst id
     uint64 private nonce; 
     using OptionsBuilder for bytes;
-    OmniChainBorrowingData public omniChainBorrowing; //! omnichainBorrowing contains global borrowing data(all chains)
+    OmniChainBorrowingData public omniChainBorrowing; //! omniChainBorrowing contains global borrowing data(all chains)
 
 
     function initialize( 
@@ -289,7 +289,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         uint64 _index,
         uint64 _ethPrice,
         uint64 _withdrawTime
-    ) external nonReentrant whenNotPaused(IMultiSign.Functions(1)){
+    ) internal nonReentrant whenNotPaused(IMultiSign.Functions(1)){
         // check is _toAddress in not a zero address and isContract address
         require(_toAddress != address(0) && isContract(_toAddress) != true, "To address cannot be a zero and contract address");
         
@@ -343,6 +343,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
                 }
                 //Update totalNormalizedAmount
                 totalNormalizedAmount -= depositDetail.normalizedAmount;
+                omniChainBorrowing.normalizedAmount -= depositDetail.normalizedAmount;
                 console.log("borrowerDebt",borrowerDebt);
                 treasury.updateTotalInterest(borrowerDebt - depositDetail.borrowedAmount);
 
@@ -362,10 +363,13 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
                     ethToReturn = (depositedAmountvalue + (options.calculateStrikePriceGains(depositDetail.depositedAmount,depositDetail.strikePrice,_ethPrice)));
                     if(ethToReturn > depositDetail.depositedAmount){
                         ethRemainingInWithdraw += (ethToReturn - depositDetail.depositedAmount);
+                        omniChainBorrowing.ethRemainingInWithdraw += (ethToReturn - depositDetail.depositedAmount);
                     }else{
                         ethRemainingInWithdraw += (depositDetail.depositedAmount - ethToReturn);
+                        omniChainBorrowing.ethRemainingInWithdraw += (depositDetail.depositedAmount - ethToReturn);
                     }
                     ethValueRemainingInWithdraw += (ethRemainingInWithdraw * _ethPrice);
+                    omniChainBorrowing.ethValueRemainingInWithdraw += (ethRemainingInWithdraw * _ethPrice);
                 }else if(borrowingHealth == 10000){
                     ethToReturn = depositedAmountvalue;
                 }else if(8000 < borrowingHealth && borrowingHealth < 10000) {
@@ -409,7 +413,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         address _user,
         uint64 _index,
         uint64 currentEthPrice
-    ) external whenNotPaused(IMultiSign.Functions(2)) onlyAdmin{
+    ) internal whenNotPaused(IMultiSign.Functions(2)) onlyAdmin{
 
         // Check whether the liquidator 
         require(_user != address(0), "To address cannot be a zero address");
@@ -417,6 +421,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         address borrower = _user;
         uint64 index = _index;
         ++noOfLiquidations;
+        ++omniChainBorrowing.noOfLiquidations;
 
         // Get the borrower details
         ITreasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(borrower,index);
@@ -519,7 +524,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
      */
     function updateLastEthVaultValue(uint256 _amount) external onlyTreasury{
         require(_amount != 0,"Last ETH vault value can't be zero");
-        lastEthVaultValue -= _amount;
+        omniChainBorrowing.ethVaultValue -= _amount;
     }
 
     /**
@@ -534,9 +539,9 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         }
 
         // Get the number of Borrowers
-        uint128 noOfBorrowers = treasury.noOfBorrowers();
+        uint128 noOfBorrowers = treasury.omniChainTreasuryNoOfBorrowers();
 
-        uint256 latestTotalCDSPool = cds.totalCdsDepositedAmount();
+        uint256 latestTotalCDSPool = cds.omniChainCDSTotalCdsDepositedAmount();
 
         (uint64 ratio, OmniChainBorrowingData memory omniChainBorrowingFromLib) = BorrowLib.calculateRatio(
             _amount,
@@ -646,19 +651,45 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         return currentCumulativeRate;
     }
 
+    function omniChainBorrowingCDSPoolValue() external view returns(uint256){
+        return omniChainBorrowing.cdsPoolValue;
+    }
+
     /**
      * @dev only user interaction function
      */
 
-    function send(
-        uint128 _ethPrice,
-        uint64 _depositTime,
-        IOptions.StrikePrice _strikePercent,
-        uint64 _strikePrice,
-        uint256 _volatility
-    ) external payable returns (MessagingReceipt memory receipt) {
+    function send( BorrowFunction _borrowFunction, bytes calldata _data )
+        external payable returns (MessagingReceipt memory receipt) {
 
-        depositTokens( _ethPrice, _depositTime, _strikePercent, _strikePrice, _volatility);
+        (        
+            uint64 _ethPrice,
+            uint64 _time,
+            IOptions.StrikePrice _strikePercent,
+            uint64 _strikePrice,
+            uint256 _volatility,
+            address _user,
+            uint64 _index
+        ) = abi.decode(_data, (
+            uint64,
+            uint64,
+            IOptions.StrikePrice,
+            uint64,
+            uint256,
+            address,
+            uint64));
+
+        if(_borrowFunction == BorrowFunction.DEPOSIT){
+
+            depositTokens( _ethPrice, _time, _strikePercent, _strikePrice, _volatility);
+
+        }else if(_borrowFunction == BorrowFunction.WITHDRAW){
+
+            withDraw( _user, _index, _ethPrice, _time);
+
+        }else if(_borrowFunction == BorrowFunction.LIQUIDATION){
+            liquidate( _user, _index, _ethPrice);
+        }
 
         //! getting options since,the src don't know the dst state
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);

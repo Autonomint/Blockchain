@@ -55,16 +55,32 @@ describe("Borrowing Contract",function(){
             await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
         const ABONDToken = await ethers.getContractFactory("TestABONDToken");
-        const abondTokenA = await upgrades.deployProxy(ABONDToken, {kind:'uups'});
-        const abondTokenB = await upgrades.deployProxy(ABONDToken, {kind:'uups'});
+        const abondTokenA = await upgrades.deployProxy(ABONDToken,[
+            "Test ABOND Token",
+            "TABOND",
+            await mockEndpointV2A.getAddress(),
+            await owner.getAddress()],{initializer: 'initialize'}, {kind:'uups'});
+        const abondTokenB = await upgrades.deployProxy(ABONDToken,[
+            "Test ABOND Token",
+            "TABOND",
+            await mockEndpointV2B.getAddress(),
+            await owner.getAddress()],{initializer: 'initialize'}, {kind:'uups'});
 
         const MultiSign = await ethers.getContractFactory("MultiSign");
         const multiSignA = await upgrades.deployProxy(MultiSign,[[await owner.getAddress(),await owner1.getAddress(),await owner2.getAddress()],2],{initializer:'initialize'},{kind:'uups'});
         const multiSignB = await upgrades.deployProxy(MultiSign,[[await owner.getAddress(),await owner1.getAddress(),await owner2.getAddress()],2],{initializer:'initialize'},{kind:'uups'});
 
         const USDTToken = await ethers.getContractFactory("TestUSDT");
-        const usdtA = await upgrades.deployProxy(USDTToken, {kind:'uups'});
-        const usdtB = await upgrades.deployProxy(USDTToken, {kind:'uups'});
+        const usdtA = await upgrades.deployProxy(USDTToken,[
+            "Test Tether",
+            "TUSDT",
+            await mockEndpointV2A.getAddress(),
+            await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
+        const usdtB = await upgrades.deployProxy(USDTToken,[
+            "Test Tether",
+            "TUSDT",
+            await mockEndpointV2B.getAddress(),
+            await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
         const MockPriceFeed = await ethers.getContractFactory("MockV3Aggregator");
         const mockPriceFeedA = await MockPriceFeed.deploy(8,100000000000);
@@ -74,14 +90,24 @@ describe("Borrowing Contract",function(){
         const priceFeedAddressMainnetB = await mockPriceFeedB.getAddress();
 
 
-        const CDS = await ethers.getContractFactory("CDSTest");
+        const cdsLibFactory = await ethers.getContractFactory("CDSLib");
+        const cdsLib = await cdsLibFactory.deploy();
+
+        const CDS = await ethers.getContractFactory("CDSTest",{
+            libraries: {
+                CDSLib:await cdsLib.getAddress()
+            }
+        });
         const CDSContractA = await upgrades.deployProxy(CDS,[
             await TokenA.getAddress(),
             priceFeedAddressMainnetA,
             await usdtA.getAddress(),
             await multiSignA.getAddress(),
             await mockEndpointV2A.getAddress(),
-            await owner.getAddress()],{initializer:'initialize'},{kind:'uups'})
+            await owner.getAddress()
+        ],{initializer:'initialize',
+            unsafeAllowLinkedLibraries:true
+        },{kind:'uups'})
 
         const CDSContractB = await upgrades.deployProxy(CDS,[
             await TokenB.getAddress(),
@@ -89,7 +115,10 @@ describe("Borrowing Contract",function(){
             await usdtB.getAddress(),
             await multiSignB.getAddress(),
             await mockEndpointV2B.getAddress(),
-            await owner.getAddress()],{initializer:'initialize'},{kind:'uups'})
+            await owner.getAddress()
+        ],{initializer:'initialize',
+            unsafeAllowLinkedLibraries:true
+        },{kind:'uups'})
 
         const borrowLibFactory = await ethers.getContractFactory("BorrowLib");
         const borrowLib = await borrowLibFactory.deploy();
@@ -173,6 +202,12 @@ describe("Borrowing Contract",function(){
         await TokenA.setDstEid(eidB);
         await TokenB.setDstEid(eidA);
 
+        await abondTokenA.setDstEid(eidB);
+        await abondTokenB.setDstEid(eidA);
+
+        await usdtA.setDstEid(eidB);
+        await usdtB.setDstEid(eidA);
+
         await mockEndpointV2B.setDestLzEndpoint(await TokenA.getAddress(), mockEndpointV2A.getAddress())
         await mockEndpointV2A.setDestLzEndpoint(await TokenB.getAddress(), mockEndpointV2B.getAddress())
 
@@ -208,6 +243,12 @@ describe("Borrowing Contract",function(){
 
         await TokenA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await TokenB.getAddress(), 32))
         await TokenB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await TokenA.getAddress(), 32))
+
+        await abondTokenA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await abondTokenB.getAddress(), 32))
+        await abondTokenB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await abondTokenA.getAddress(), 32))
+
+        await usdtA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await usdtB.getAddress(), 32))
+        await usdtB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await usdtA.getAddress(), 32))
 
         await abondTokenA.setBorrowingContract(await BorrowingContractA.getAddress());
         await abondTokenB.setBorrowingContract(await BorrowingContractB.getAddress());
@@ -269,25 +310,8 @@ describe("Borrowing Contract",function(){
     }
 
     describe("Should deposit ETH and mint Trinity",function(){
+
         it("Should deposit ETH",async function(){
-            const {BorrowingContract,CDSContract,usdt,user1} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
-            await usdt.connect(user1).mint(user1.getAddress(),10000000000);
-            await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
-
-            const options = "0x00030100110100000000000000000000000000030d40";
-            let nativeFee = 0
-            ;[nativeFee] = await CDSContract.quote(eidB, [5,10,15,20,25,30],options, false)
-
-            await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
-            await user1.sendTransaction({
-                to: await BorrowingContract.getAddress(),
-                value: ethers.parseEther("1")
-              });
-            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("50")});
-        })
-
-        it.only("Should deposit ETH",async function(){
             const {
                 BorrowingContractA,BorrowingContractB,
                 CDSContractA,CDSContractB,
@@ -301,34 +325,52 @@ describe("Borrowing Contract",function(){
             const options = "0x00030100110100000000000000000000000000030d40";
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB, [5,10,15,20,25,30],options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB, [5,10,15,20,25,30,35],options, false)
             await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
-
-            console.log(await CDSContractA.omniChainCDS());
-            console.log(await CDSContractB.omniChainCDS());
 
             await usdtB.connect(user1).mint(user1.getAddress(),10000000000);
             await usdtB.connect(user1).approve(CDSContractB.getAddress(),10000000000);
             await CDSContractB.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
 
-            console.log(await CDSContractA.omniChainCDS());
-            console.log(await CDSContractB.omniChainCDS());
+            const coder = ethers.AbiCoder.defaultAbiCoder();
+            const callDataDeposit = coder.encode([            
+                "uint64",
+                "uint64",
+                "uint64",
+                "uint64",
+                "uint256",
+                "address",
+                'uint64'
+            ],[
+                100000,
+                timeStamp,
+                1,
+                110000,
+                ethVolatility,
+                await user1.getAddress(),
+                1
+            ]);
 
-            await BorrowingContractA.connect(user2).send(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("50")})
-            const tx1 = await BorrowingContractA.omniChainBorrowing();
-            const tx2 = await BorrowingContractB.omniChainBorrowing();
+            await BorrowingContractB.connect(user2).send(1, callDataDeposit, {value: ethers.parseEther("50")})
+            // const tx1 = await BorrowingContractA.omniChainBorrowing();
+            // const tx2 = await BorrowingContractB.omniChainBorrowing();
 
-            const tx3 = await treasuryA.omniChainTreasury();
-            const tx4 = await treasuryB.omniChainTreasury();
+            // const tx3 = await treasuryA.omniChainTreasury();
+            // const tx4 = await treasuryB.omniChainTreasury();
 
-            console.log(tx1)
-            console.log(tx2);
+            // console.log(await CDSContractA.omniChainCDS());
+            // console.log(await CDSContractB.omniChainCDS());
+
+            // console.log(tx1)
+            // console.log(tx2);
+            // console.log(tx3);
+            // console.log(tx4);
         })
 
         it("Should transfer amint from src to dst ",async function(){
-            const {Token,TokenA} = await loadFixture(deployer);
+            const {TokenA,TokenB} = await loadFixture(deployer);
             const initialAmount = ethers.parseEther('100')
-            await Token.mint(await user1.getAddress(), initialAmount)
+            await TokenA.mint(await user1.getAddress(), initialAmount)
     
             const tokensToSend = ethers.parseEther('1')
     
@@ -346,24 +388,92 @@ describe("Borrowing Contract",function(){
             ]
     
             // Fetching the native fee for the token send operation
-            const [nativeFee] = await Token.quoteSend(sendParam, false)
+            const [nativeFee] = await TokenA.quoteSend(sendParam, false)
 
-            console.log("SRC TOTAL SUPPLY BEFORE SEND", await Token.totalSupply());
-            console.log("DST TOTAL SUPPLY BEFORE SEND", await TokenA.totalSupply());
+            console.log("SRC TOTAL SUPPLY BEFORE SEND", await TokenA.totalSupply());
+            console.log("DST TOTAL SUPPLY BEFORE SEND", await TokenB.totalSupply());
     
             // Executing the send operation from myOFTA contract
-            await Token.connect(user1).send(sendParam, [nativeFee, 0], await user1.getAddress(), { value: nativeFee })
+            await TokenA.connect(user1).send(sendParam, [nativeFee, 0], await user1.getAddress(), { value: nativeFee })
     
             // Fetching the final token balances of ownerA and ownerB
-            const finalBalance = await Token.balanceOf(await user1.getAddress())
-            const finalBalanceA = await TokenA.balanceOf(await user2.getAddress())
+            const finalBalance = await TokenA.balanceOf(await user1.getAddress())
+            const finalBalanceA = await TokenB.balanceOf(await user2.getAddress())
 
             console.log("USER1 BALANCE IN SRC AFTER SEND", finalBalance);
             console.log("USER2 BALANCE IN DST AFTER SEND", finalBalanceA);
 
-            console.log("SRC TOTAL SUPPLY AFTER SEND", await Token.totalSupply());
-            console.log("DST TOTAL SUPPLY AFTER SEND", await TokenA.totalSupply());
+            console.log("SRC TOTAL SUPPLY AFTER SEND", await TokenA.totalSupply());
+            console.log("DST TOTAL SUPPLY AFTER SEND", await TokenB.totalSupply());
     
+        })
+    })
+
+    describe("Should withdraw ETH from protocol",function(){
+        it.only("Should withdraw ETH (between 0.8 and 1)",async function(){
+            const {BorrowingContractA,TokenA,abondTokenA,usdtA,CDSContractA} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+            await usdtA.connect(user1).mint(user1.getAddress(),10000000000)
+            await usdtA.connect(user1).approve(CDSContractA.getAddress(),10000000000);
+
+            const options = "0x00030100110100000000000000000000000000030d40";
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB, [5,10,15,20,25,30,35],options, false)
+            await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
+
+
+            const coder = ethers.AbiCoder.defaultAbiCoder();
+            const callDataDeposit = coder.encode([            
+                "uint128",
+                "uint64",
+                "uint64",
+                "uint64",
+                "uint256",
+                "address",
+                'uint64'
+            ],[
+                100000,
+                timeStamp,
+                1,
+                110000,
+                ethVolatility,
+                await user1.getAddress(),
+                1
+            ]);
+
+            await BorrowingContractA.connect(user1).send(1,callDataDeposit,{value: ethers.parseEther("1")});
+            
+            const blockNumber = await ethers.provider.getBlockNumber(); // Get latest block number
+            const latestBlock = await ethers.provider.getBlock(blockNumber);
+            const latestTimestamp1 = latestBlock.timestamp;
+            await time.increaseTo(latestTimestamp1 + 2592000);
+            
+            await BorrowingContractA.calculateCumulativeRate();
+            await TokenA.mint(user1.getAddress(),5000000);
+            await TokenA.connect(user1).approve(await BorrowingContractA.getAddress(),await TokenA.balanceOf(user1.getAddress()));
+
+            let nativeFee1 = 0
+            ;[nativeFee1] = await CDSContractA.quote(eidB, [5,10,15,20,25,30,35],options, false)
+            const callDataWithdraw = coder.encode([            
+                "uint128",
+                "uint64",
+                "uint64",
+                "uint64",
+                "uint256",
+                "address",
+                'uint64'
+            ],[
+                99900,
+                timeStamp,
+                1,
+                110000,
+                ethVolatility,
+                await user1.getAddress(),
+                1
+            ]);
+
+            await BorrowingContractA.connect(user1).send(2,callDataWithdraw,{value: nativeFee1.toString()});
+
         })
     })
 })

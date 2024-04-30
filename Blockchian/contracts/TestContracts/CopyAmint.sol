@@ -23,6 +23,7 @@ contract TestAMINTStablecoin is Initializable, OFT, UUPSUpgradeable, ERC20Burnab
         __OFT_init(_name, _symbol, _lzEndpoint, _delegate);
         __ERC20Burnable_init();
         __ERC20Pausable_init();
+        __UUPSUpgradeable_init();
         __Ownable_init(msg.sender);
     }
 

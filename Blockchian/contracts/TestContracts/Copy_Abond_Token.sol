@@ -10,15 +10,22 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import { State } from "../interface/IAbond.sol";
 import "../lib/Colors.sol";
 import "hardhat/console.sol";
+import { OFT } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/OFT.sol";
 
-contract TestABONDToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
+contract TestABONDToken is Initializable, OFT, UUPSUpgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable{
 
     mapping(address user => State) public userStates;
     mapping(address user => mapping(uint64 index => State)) public userStatesAtDeposits;
     uint128 PRECISION;
+    uint32 private dstEid;
 
-    function initialize() initializer public {
-        __ERC20_init("Test ABOND Token", "TABOND");
+    function initialize(        
+        string memory _name,
+        string memory _symbol,
+        address _lzEndpoint,
+        address _delegate
+    ) initializer public {
+        __OFT_init(_name, _symbol, _lzEndpoint, _delegate);
         __ERC20Burnable_init();
         __ERC20Pausable_init();
         __Ownable_init(msg.sender);
@@ -38,6 +45,11 @@ contract TestABONDToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgrade
 
     function isContract(address account) internal view returns (bool) {
         return account.code.length > 0;
+    }
+
+    function setDstEid(uint32 _eid) external {
+        require(_eid != 0, "EID can't be zero");
+        dstEid = _eid;
     }
 
     function setBorrowingContract(address _address) external onlyOwner {

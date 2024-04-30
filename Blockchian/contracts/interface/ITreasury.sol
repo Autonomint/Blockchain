@@ -116,6 +116,9 @@ interface ITreasury{
         function amintGainedFromLiquidation() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinWei() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinUSD() external view returns(uint256);
+        function omniChainTreasuryNoOfBorrowers() external view returns(uint128);
+        function omniChainTreasuryTotalVolumeOfBorrowersAmountinWei() external view returns(uint256);
+        function omniChainTreasuryTotalVolumeOfBorrowersAmountinUSD() external view returns(uint256);
 
         function updateHasBorrowed(address borrower,bool _bool) external;
         function updateTotalDepositedAmount(address borrower,uint128 amount) external;

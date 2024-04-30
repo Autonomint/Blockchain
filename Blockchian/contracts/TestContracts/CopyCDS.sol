@@ -14,6 +14,7 @@ import "../interface/IBorrowing.sol";
 import "../interface/ITreasury.sol";
 import "../interface/CDSInterface.sol";
 import "../interface/IMultiSign.sol";
+import "../lib/CDSLib.sol";
 import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
@@ -47,8 +48,6 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
     uint256 public burnedAmintInRedeem;
     uint128 public cumulativeValue;
     bool    public cumulativeValueSign;
-    uint128 public PRECISION;
-    uint128 RATIO_PRECISION;
 
     mapping (address => CdsDetails) public cdsDetails;
 
@@ -76,9 +75,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         dataFeed = AggregatorV3Interface(priceFeed);
         lastEthPrice = getLatestData();
         fallbackEthPrice = lastEthPrice;
-        PRECISION = 1e12;
-        RATIO_PRECISION = 1e4;
-        lastCumulativeRate = PRECISION;
+        lastCumulativeRate = CDSLib.PRECISION;
         cumulativeValueSign = true;
     }
 
@@ -209,7 +206,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
 
         //! updating global data 
         omniChainCDS.totalCdsDepositedAmount += totalDepositingAmount;
-        omniChainCDS.totalCdsDepositedAmount += totalDepositingAmount;
+        omniChainCDS.totalCdsDepositedAmountWithOptionFees += totalDepositingAmount;
 
         //increment usdtAmountDepositedTillNow
         usdtAmountDepositedTillNow += usdtAmount;
@@ -219,7 +216,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         
         //add deposited time of perticular index and amount in cdsAccountDetails
         cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = uint64(block.timestamp);
-        cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount = ((totalDepositingAmount * PRECISION)/lastCumulativeRate);
+        cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount = ((totalDepositingAmount * CDSLib.PRECISION)/omniChainCDS.lastCumulativeRate);
        
         cdsDetails[msg.sender].cdsAccountDetails[index].optedLiquidation = _liquidate;
         //If user opted for liquidation
@@ -276,7 +273,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
      * @dev withdraw amint
      * @param _index index of the deposit to withdraw
      */
-    function withdraw(uint64 _index) public nonReentrant whenNotPaused(IMultiSign.Functions(5)){
+    function withdraw(uint64 _index) public payable nonReentrant whenNotPaused(IMultiSign.Functions(5)){
         require(cdsDetails[msg.sender].index >= _index , "user doesn't have the specified index");
         require(cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawed == false,"Already withdrawn");
         
@@ -297,7 +294,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         // option fees
         uint256 returnAmount = 
             cdsAmountToReturn(msg.sender,_index, ethPrice)+
-            ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * lastCumulativeRate)/PRECISION)-(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount);
+            ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * omniChainCDS.lastCumulativeRate)/CDSLib.PRECISION)-(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount);
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedTime =  _withdrawTime;
 
@@ -341,9 +338,14 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                 console.log("cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount",cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount);
 
                 totalCdsDepositedAmount -= (cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
+                omniChainCDS.totalCdsDepositedAmount -= (
+                    cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount 
+                    - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
                 console.log("totalCdsDepositedAmountWithOptionFees",totalCdsDepositedAmountWithOptionFees);
 
                 totalCdsDepositedAmountWithOptionFees -= (returnAmountWithGains - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
+                omniChainCDS.totalCdsDepositedAmountWithOptionFees -= (
+                    returnAmountWithGains - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
                 cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
                 // Get approval from treasury 
                 treasury.approveAmint(address(this),returnAmountWithGains);
@@ -365,9 +367,11 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
             // amint.approve(msg.sender, returnAmount);
             totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
             totalCdsDepositedAmountWithOptionFees -= returnAmount;
+            omniChainCDS.totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
+            omniChainCDS.totalCdsDepositedAmountWithOptionFees -= returnAmount;
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
             if(treasury.totalVolumeOfBorrowersAmountinUSD() != 0){
-                require(borrowing.calculateRatio(0,ethPrice) > (2 * RATIO_PRECISION),"CDS: Not enough fund in CDS");
+                require(borrowing.calculateRatio(0,ethPrice) > (2 * CDSLib.RATIO_PRECISION),"CDS: Not enough fund in CDS");
             }
             treasury.approveAmint(address(this),returnAmount);
             bool transfer = amint.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
@@ -377,6 +381,16 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         if(ethPrice != lastEthPrice){
             updateLastEthPrice(ethPrice);
         }
+        
+        //! getting options since,the src don't know the dst state
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+
+        //! calculting fee 
+        MessagingFee memory fee = quote(dstEid, omniChainCDS, _options, false);
+
+        //! Calling Omnichain send function
+        send(dstEid, omniChainCDS, fee, _options);
+        
         emit Withdraw(returnAmount,0);
     }
    
@@ -504,45 +518,16 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
     }
 
     function calculateValue(uint128 _price) internal view returns(CalculateValueResult memory) {
-        uint128 _amount = 1000;
-        uint256 vaultBal = treasury.totalVolumeOfBorrowersAmountinWei();
-        uint128 priceDiff;
-        uint128 value;
-        bool gains;
 
-        if(totalCdsDepositedAmount == 0){
-            value = 0;
-            gains = true;
-        }else{
-            if(_price != lastEthPrice){
-                // If the current eth price is higher than last eth price,then it is gains
-                if(_price > lastEthPrice){
-                    priceDiff = _price - lastEthPrice;
-                    gains = true;    
-                }else{
-                    priceDiff = lastEthPrice - _price;
-                    gains = false;
-                }
-            }
-            else{
-                // If the current eth price is higher than fallback eth price,then it is gains
-                if(_price > fallbackEthPrice){
-                    priceDiff = _price - fallbackEthPrice;
-                    gains = true;   
-                }else{
-                    priceDiff = fallbackEthPrice - _price;
-                    gains = false;
-                }
-            }
-            console.log("_amount",_amount);
-            console.log("vaultBal",vaultBal);
-            console.log("priceDiff",priceDiff);
-            console.log("totalCdsDepositedAmount",totalCdsDepositedAmount);
+        uint256 vaultBal = treasury.omniChainTreasuryTotalVolumeOfBorrowersAmountinWei();
 
-            value = uint128((_amount * vaultBal * priceDiff * 1e6) / (PRECISION * totalCdsDepositedAmount));
-            console.log("value",value);
-        }
-        return CalculateValueResult(value,gains);
+        return CDSLib.calculateValue(
+            _price,
+            totalCdsDepositedAmount,
+            lastEthPrice,
+            fallbackEthPrice,
+            vaultBal
+        );
     }
 
     /**
@@ -552,16 +537,18 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
     function calculateCumulativeRate(uint128 fees) public onlyBorrowingContract{
         require(fees != 0,"Fees should not be zero");
         totalCdsDepositedAmountWithOptionFees += fees;
-        uint128 netCDSPoolValue = uint128(totalCdsDepositedAmountWithOptionFees);
-        uint128 percentageChange = (fees * PRECISION)/netCDSPoolValue;
+        omniChainCDS.totalCdsDepositedAmountWithOptionFees += fees;
+        uint128 netCDSPoolValue = uint128(omniChainCDS.totalCdsDepositedAmountWithOptionFees);
+        uint128 percentageChange = (fees * CDSLib.PRECISION)/netCDSPoolValue;
         uint128 currentCumulativeRate;
-        if(treasury.noOfBorrowers() == 0){
-            currentCumulativeRate = (1 * PRECISION) + percentageChange;
+        if(treasury.omniChainTreasuryNoOfBorrowers() == 0){
+            currentCumulativeRate = (1 * CDSLib.PRECISION) + percentageChange;
             lastCumulativeRate = currentCumulativeRate;
         }else{
-            currentCumulativeRate = lastCumulativeRate * ((1 * PRECISION) + percentageChange);
-            lastCumulativeRate = (currentCumulativeRate/PRECISION);
+            currentCumulativeRate = lastCumulativeRate * ((1 * CDSLib.PRECISION) + percentageChange);
+            lastCumulativeRate = (currentCumulativeRate/CDSLib.PRECISION);
         }
+        omniChainCDS.lastCumulativeRate = lastCumulativeRate;
     }
 
     /**
@@ -657,14 +644,21 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
 
     function updateTotalAvailableLiquidationAmount(uint256 amount) external onlyBorrowingContract{
         totalAvailableLiquidationAmount -= amount;
+        omniChainCDS.totalAvailableLiquidationAmount -= amount;
     }
 
     function updateTotalCdsDepositedAmount(uint128 _amount) external onlyBorrowingContract{
         totalCdsDepositedAmount -= _amount;
+        omniChainCDS.totalCdsDepositedAmount -= _amount;
     }
 
     function updateTotalCdsDepositedAmountWithOptionFees(uint128 _amount) external onlyBorrowingContract{
         totalCdsDepositedAmountWithOptionFees -= _amount;
+        omniChainCDS.totalCdsDepositedAmountWithOptionFees -= _amount;
+    }
+
+    function omniChainCDSTotalCdsDepositedAmount() external view returns(uint256){
+        return omniChainCDS.totalCdsDepositedAmount;
     }
 
     function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory,uint64){
