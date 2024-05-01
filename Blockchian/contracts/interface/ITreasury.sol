@@ -94,8 +94,13 @@ interface ITreasury{
 
     enum Protocol{Aave,Compound}
 
-        function deposit(address user,uint128 _ethPrice,uint64 _depositTime) external payable returns(DepositResult memory);
-        function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index) external returns(bool);
+        function deposit(
+            uint256 _depositingAmount,
+            address user,
+            uint128 _ethPrice,
+            uint64 _depositTime
+        ) external payable returns(DepositResult memory);
+        function withdraw(address borrower,address toAddress,uint256 _amount,uint64 index) external payable returns(bool);
         function withdrawFromExternalProtocol(address user, uint128 aBondAmount) external returns(uint256);
 
         // function depositToAave() external;
@@ -119,6 +124,7 @@ interface ITreasury{
         function omniChainTreasuryNoOfBorrowers() external view returns(uint128);
         function omniChainTreasuryTotalVolumeOfBorrowersAmountinWei() external view returns(uint256);
         function omniChainTreasuryTotalVolumeOfBorrowersAmountinUSD() external view returns(uint256);
+        function omniChainTreasuryEthProfitsOfLiquidators() external view returns(uint256);
 
         function updateHasBorrowed(address borrower,bool _bool) external;
         function updateTotalDepositedAmount(address borrower,uint128 amount) external;

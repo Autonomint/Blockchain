@@ -216,29 +216,38 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         uint64 _depositTime,
         IOptions.StrikePrice _strikePercent,
         uint64 _strikePrice,
-        uint256 _volatility
+        uint256 _volatility,
+        uint256 _depositingAmount
     ) internal nonReentrant whenNotPaused(IMultiSign.Functions(0)) {
         require(msg.value > 0, "Cannot deposit zero tokens");
+        require(msg.value > _depositingAmount,"Borrowing: Don't have enough LZ fee");
+
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+        uint8[] memory structIndex;
+        //! calculting fee 
+        MessagingFee memory fee = quote(dstEid, omniChainBorrowing, structIndex, _options, false);
 
         //Call calculateInverseOfRatio function to find ratio
-        uint64 ratio = calculateRatio(msg.value,uint128(_ethPrice));
+        uint64 ratio = calculateRatio(_depositingAmount,uint128(_ethPrice));
         require(ratio >= (2 * BorrowLib.RATIO_PRECISION),"Not enough fund in CDS");
 
         // Call calculateOptionPrice in options contract to get options fees
-        uint256 optionFees = options.calculateOptionPrice(_ethPrice,_volatility,msg.value,_strikePercent);
-        uint256 tokensToLend = BorrowLib.tokensToLend(msg.value, _ethPrice, LTV);
+        uint256 optionFees = options.calculateOptionPrice(_ethPrice,_volatility,_depositingAmount,_strikePercent);
+        uint256 tokensToLend = BorrowLib.tokensToLend(_depositingAmount, _ethPrice, LTV);
         uint256 borrowAmount = tokensToLend - optionFees;
         
         //Call the deposit function in Treasury contract
-        ITreasury.DepositResult memory depositResult = treasury.deposit{value:msg.value}(msg.sender,_ethPrice,_depositTime);
+        ITreasury.DepositResult memory depositResult = treasury.deposit{value:(msg.value - fee.nativeFee)}(
+                _depositingAmount,
+                msg.sender,_ethPrice,_depositTime);
         uint64 index = depositResult.borrowerIndex;
         //Check whether the deposit is successfull
         if(!depositResult.hasDeposited){
             revert Borrowing_DepositFailed();
         }
-        abond.setAbondData(msg.sender, index, (uint128(msg.value) * 50)/100, treasury.getExternalProtocolCumulativeRate(true));
+        abond.setAbondData(msg.sender, index, (uint128(_depositingAmount) * 50)/100, treasury.getExternalProtocolCumulativeRate(true));
         // Call the transfer function to mint AMINT
-        _transferToken(msg.sender,msg.value,_ethPrice,optionFees);
+        _transferToken(msg.sender,_depositingAmount,_ethPrice,optionFees);
 
         // Call calculateCumulativeRate in cds to split fees to cds users
         cds.calculateCumulativeRate(uint128(optionFees));
@@ -261,7 +270,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         uint256 normalizedAmount = (borrowAmount * BorrowLib.RATE_PRECISION)/currentCumulativeRate;
 
         depositDetail.normalizedAmount = uint128(normalizedAmount);
-        depositDetail.strikePrice = _strikePrice * uint128(msg.value);
+        depositDetail.strikePrice = _strikePrice * uint128(_depositingAmount);
 
         //Update the deposit details
         treasury.updateDepositDetails(msg.sender,index,depositDetail);
@@ -273,7 +282,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         //! updating global data 
         omniChainBorrowing.normalizedAmount += normalizedAmount;  
 
-        emit Deposit(index,msg.value,borrowAmount,normalizedAmount);
+        emit Deposit(index,_depositingAmount,borrowAmount,normalizedAmount);
     }
 
     /**
@@ -326,10 +335,10 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
                 treasury.updateAbondAmintPool(discountedETH,true);
                 // Calculate the amount of AMINT to burn and sent to the treasury
                 // uint256 halfValue = (50 *(depositDetail.borrowedAmount))/100;
-                console.log("BORROWED AMOUNT",depositDetail.borrowedAmount);
-                console.log("DISCOUNTED ETH",discountedETH);
+                //!console.log("BORROWED AMOUNT",depositDetail.borrowedAmount);
+                //!console.log("DISCOUNTED ETH",discountedETH);
                 uint256 burnValue = depositDetail.borrowedAmount - discountedETH;
-                console.log("BURN VALUE",burnValue);
+                //!console.log("BURN VALUE",burnValue);
                 // Burn the AMINT from the Borrower
                 bool success = amint.burnFromUser(msg.sender, burnValue);
                 if(!success){
@@ -344,7 +353,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
                 //Update totalNormalizedAmount
                 totalNormalizedAmount -= depositDetail.normalizedAmount;
                 omniChainBorrowing.normalizedAmount -= depositDetail.normalizedAmount;
-                console.log("borrowerDebt",borrowerDebt);
+                //!console.log("borrowerDebt",borrowerDebt);
                 treasury.updateTotalInterest(borrowerDebt - depositDetail.borrowedAmount);
 
                 // Mint the ABondTokens
@@ -378,8 +387,14 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
                     revert("BorrowingHealth is Low");
                 }
                 ethToReturn = (ethToReturn * 50)/100;
+
+                bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+                uint8[] memory structIndex;
+                //! calculting fee 
+                MessagingFee memory fee = quote(dstEid, omniChainBorrowing, structIndex, _options, false);
+
                 // Call withdraw in treasury
-                bool sent = treasury.withdraw(msg.sender,_toAddress,ethToReturn,_index);
+                bool sent = treasury.withdraw{value:(msg.value - fee.nativeFee)}(msg.sender,_toAddress,ethToReturn,_index);
                 if(!sent){
                     revert Borrowing_WithdrawEthTransferFailed();
                 }
@@ -431,7 +446,8 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         // uint256 externalProtocolInterest = treasury.withdrawFromExternalProtocol(borrower,10000); // + treasury.withdrawFromCompoundByUser(borrower,index);
 
         require(
-            depositDetail.depositedAmount <= (treasury.totalVolumeOfBorrowersAmountinWei() - treasury.ethProfitsOfLiquidators())
+            depositDetail.depositedAmount <= (
+                treasury.omniChainTreasuryTotalVolumeOfBorrowersAmountinWei() - treasury.omniChainTreasuryEthProfitsOfLiquidators())
             ,"Not enough funds in treasury");
 
         // Check whether the position is eligible or not for liquidation
@@ -451,10 +467,14 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         // CDS profits
         uint128 cdsProfits = (((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/BorrowLib.AMINT_PRECISION)/100) - returnToTreasury - returnToAbond;
         uint128 liquidationAmountNeeded = returnToTreasury + returnToAbond;
-        require(cds.totalAvailableLiquidationAmount() >= liquidationAmountNeeded,"Don't have enough AMINT in CDS to liquidate");
+        require(cds.omniChainCDSTotalAvailableLiquidationAmount() >= liquidationAmountNeeded,"Don't have enough AMINT in CDS to liquidate");
         
         CDSInterface.LiquidationInfo memory liquidationInfo;
-        liquidationInfo = CDSInterface.LiquidationInfo(liquidationAmountNeeded,cdsProfits,depositDetail.depositedAmount,cds.totalAvailableLiquidationAmount());
+        liquidationInfo = CDSInterface.LiquidationInfo(
+            liquidationAmountNeeded,
+            cdsProfits,
+            depositDetail.depositedAmount,
+            cds.omniChainCDSTotalAvailableLiquidationAmount());
 
         cds.updateLiquidationInfo(noOfLiquidations,liquidationInfo);
         cds.updateTotalCdsDepositedAmount(liquidationAmountNeeded - cdsProfits);
@@ -493,7 +513,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         LTV = _LTV;
     }
 
-    function setDstEid(uint32 _eid) external {
+    function setDstEid(uint32 _eid) external onlyAdmin{
         require(_eid != 0, "EID can't be zero");
         dstEid = _eid;
     }
@@ -665,6 +685,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         (        
             uint64 _ethPrice,
             uint64 _time,
+            uint256 _depositingAmount,
             IOptions.StrikePrice _strikePercent,
             uint64 _strikePrice,
             uint256 _volatility,
@@ -673,6 +694,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         ) = abi.decode(_data, (
             uint64,
             uint64,
+            uint256,
             IOptions.StrikePrice,
             uint64,
             uint256,
@@ -681,7 +703,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
 
         if(_borrowFunction == BorrowFunction.DEPOSIT){
 
-            depositTokens( _ethPrice, _time, _strikePercent, _strikePrice, _volatility);
+            depositTokens( _ethPrice, _time, _strikePercent, _strikePrice, _volatility, _depositingAmount);
 
         }else if(_borrowFunction == BorrowFunction.WITHDRAW){
 

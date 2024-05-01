@@ -76,6 +76,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         lastEthPrice = getLatestData();
         fallbackEthPrice = lastEthPrice;
         lastCumulativeRate = CDSLib.PRECISION;
+        omniChainCDS.lastCumulativeRate = lastCumulativeRate;
         cumulativeValueSign = true;
     }
 
@@ -127,7 +128,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         admin = _admin;    
     }
 
-    function setDstEid(uint32 _eid) external {
+    function setDstEid(uint32 _eid) external onlyAdmin{
         require(_eid != 0, "EID can't be zero");
         dstEid = _eid;
     }
@@ -302,46 +303,31 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         if(cdsDetails[msg.sender].cdsAccountDetails[_index].optedLiquidation){
             returnAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
             uint128 currentLiquidations = borrowing.noOfLiquidations();
-            console.log("returnAmount",returnAmount);
             uint128 liquidationIndexAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationindex;
-            console.log("2");
             uint128 ethAmount;
             if(currentLiquidations >= liquidationIndexAtDeposit){
-            console.log("3");
                 // Loop through the liquidations that were done after user enters
                 for(uint128 i = (liquidationIndexAtDeposit + 1); i <= currentLiquidations; i++){
-                    console.log("i",i);
                     uint128 liquidationAmount = cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
-                    console.log("liquidationAmount",liquidationAmount);
                     if(liquidationAmount > 0){
                         LiquidationInfo memory liquidationData = liquidationIndexToInfo[i];
-                        console.log("liquidationData.availableLiquidationAmount",liquidationData.availableLiquidationAmount);
 
                         uint128 share = (liquidationAmount * 1e10)/uint128(liquidationData.availableLiquidationAmount);
-                        console.log("share",share);
                         uint128 profit;
-                        console.log("liquidationData.profits",liquidationData.profits);
 
                         profit = (liquidationData.profits * share)/1e10;
-                        console.log("profit",profit);
                         cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount += profit;
                         //console.log("cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount",cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
-                        console.log("liquidationData.liquidationAmount*share)/1e10",((liquidationData.liquidationAmount*share)/1e10));
                         cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount -= ((liquidationData.liquidationAmount*share)/1e10);
                         ethAmount += (liquidationData.ethAmount * share)/1e10;
                     }
                 }
-                console.log("cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount",cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
                 uint256 returnAmountWithGains = returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
-                console.log("returnAmountWithGains",returnAmountWithGains);
-                console.log("totalCdsDepositedAmount",totalCdsDepositedAmount);
-                console.log("cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount",cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount);
 
                 totalCdsDepositedAmount -= (cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
                 omniChainCDS.totalCdsDepositedAmount -= (
                     cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount 
                     - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
-                console.log("totalCdsDepositedAmountWithOptionFees",totalCdsDepositedAmountWithOptionFees);
 
                 totalCdsDepositedAmountWithOptionFees -= (returnAmountWithGains - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
                 omniChainCDS.totalCdsDepositedAmountWithOptionFees -= (
@@ -407,7 +393,6 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         // Calculate current value
         CalculateValueResult memory result = calculateValue(_ethPrice);
         setCumulativeValue(result.currentValue,result.gains);
-        console.log("1111111");
         uint256 depositedAmount = cdsDetails[_user].cdsAccountDetails[index].depositedAmount;
         uint128 cumulativeValueAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[index].depositValue;
         // Get the cumulative value sign at the time of deposit
@@ -427,8 +412,6 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                 if(cumulativeValueAtDeposit > cumulativeValueAtWithdraw){
                     // Its loss since cumulative val is low
                     uint256 loss = (depositedAmount * valDiff) / 1e11;
-                    console.log("1 depositedAmount",depositedAmount);
-                    console.log("1 loss",loss);
                     return (depositedAmount - loss);
                 }else{
                     // Its gain since cumulative val is high
@@ -441,8 +424,6 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                     return (depositedAmount + profit);
                 }else{
                     uint256 loss = (depositedAmount * valDiff) / 1e11;
-                    console.log("2 depositedAmount",depositedAmount);
-                    console.log("2 loss",loss);
                     return (depositedAmount - loss);
                 }
             }
@@ -450,8 +431,6 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
             valDiff = cumulativeValueAtDeposit + cumulativeValueAtWithdraw;
             if(cumulativeValueSignAtDeposit){
                 uint256 loss = (depositedAmount * valDiff) / 1e11;
-                console.log("3 depositedAmount",depositedAmount);
-                console.log("3 loss",loss);
                 return (depositedAmount - loss);
             }else{
                 uint256 profit = (depositedAmount * valDiff)/1e11;
@@ -659,6 +638,10 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
 
     function omniChainCDSTotalCdsDepositedAmount() external view returns(uint256){
         return omniChainCDS.totalCdsDepositedAmount;
+    }
+
+    function omniChainCDSTotalAvailableLiquidationAmount() external view returns(uint256){
+        return omniChainCDS.totalAvailableLiquidationAmount;
     }
 
     function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory,uint64){

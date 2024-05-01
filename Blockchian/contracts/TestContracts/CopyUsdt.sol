@@ -32,7 +32,7 @@ contract TestUSDT is Initializable, OFT, UUPSUpgradeable, ERC20BurnableUpgradeab
 
     mapping(address => bool) private whitelist;
 
-    function setDstEid(uint32 _eid) external {
+    function setDstEid(uint32 _eid) external onlyOwner{
         require(_eid != 0, "EID can't be zero");
         dstEid = _eid;
     }

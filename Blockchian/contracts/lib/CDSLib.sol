@@ -53,13 +53,13 @@ library CDSLib {
                     gains = false;
                 }
             }
-            console.log("_amount",_amount);
-            console.log("vaultBal",vaultBal);
-            console.log("priceDiff",priceDiff);
-            console.log("totalCdsDepositedAmount",totalCdsDepositedAmount);
+            // console.log("_amount",_amount);
+            // console.log("vaultBal",vaultBal);
+            // console.log("priceDiff",priceDiff);
+            // console.log("totalCdsDepositedAmount",totalCdsDepositedAmount);
 
             value = uint128((_amount * vaultBal * priceDiff * 1e6) / (PRECISION * totalCdsDepositedAmount));
-            console.log("value",value);
+            // console.log("value",value);
         }
         return CDSInterface.CalculateValueResult(value,gains);
     }

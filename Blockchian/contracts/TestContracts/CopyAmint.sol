@@ -35,7 +35,7 @@ contract TestAMINTStablecoin is Initializable, OFT, UUPSUpgradeable, ERC20Burnab
         return account.code.length > 0;
     }
 
-    function setDstEid(uint32 _eid) external {
+    function setDstEid(uint32 _eid) external onlyOwner{
         require(_eid != 0, "EID can't be zero");
         dstEid = _eid;
     }

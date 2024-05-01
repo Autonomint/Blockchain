@@ -125,10 +125,13 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
      **/
 
     function deposit(
+        uint256 _depositingAmount,
         address user,
         uint128 _ethPrice,
         uint64 _depositTime
     ) external payable onlyBorrowingContract returns(DepositResult memory) {
+
+        require (msg.value > _depositingAmount,"Treasury: Don't have enough LZ fee");
 
         uint64 borrowerIndex;
         //check if borrower is depositing for the first time or not
@@ -148,18 +151,18 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         }
     
         // update total deposited amount of the user
-        borrowing[user].depositedAmount += msg.value;
+        borrowing[user].depositedAmount += _depositingAmount;
 
         // update deposited amount of the user
-        borrowing[user].depositDetails[borrowerIndex].depositedAmount = uint128(msg.value);
+        borrowing[user].depositDetails[borrowerIndex].depositedAmount = uint128(_depositingAmount);
 
         //Total volume of borrowers in USD
-        totalVolumeOfBorrowersAmountinUSD += (_ethPrice * msg.value);
-        omniChainTreasury.totalVolumeOfBorrowersAmountinUSD += (_ethPrice * msg.value);
+        totalVolumeOfBorrowersAmountinUSD += (_ethPrice * _depositingAmount);
+        omniChainTreasury.totalVolumeOfBorrowersAmountinUSD += (_ethPrice * _depositingAmount);
 
         //Total volume of borrowers in Wei
-        totalVolumeOfBorrowersAmountinWei += msg.value;
-        omniChainTreasury.totalVolumeOfBorrowersAmountinWei += msg.value;
+        totalVolumeOfBorrowersAmountinWei += _depositingAmount;
+        omniChainTreasury.totalVolumeOfBorrowersAmountinWei += _depositingAmount;
 
         //Adding depositTime to borrowing struct
         borrowing[user].depositDetails[borrowerIndex].depositedTime = _depositTime;
@@ -167,24 +170,27 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         //Adding ethprice to struct
         borrowing[user].depositDetails[borrowerIndex].ethPriceAtDeposit = _ethPrice;
 
-        borrowing[user].depositDetails[borrowerIndex].depositedAmountUsdValue = uint128(msg.value) * _ethPrice;
+        borrowing[user].depositDetails[borrowerIndex].depositedAmountUsdValue = uint128(_depositingAmount) * _ethPrice;
         
         //having the count of the deposit done to Aave/Compound in batched
         borrowing[user].depositDetails[borrowerIndex].externalProtocolCount = externalProtocolDepositCount;
 
-        externalProtocolCountTotalValue[externalProtocolDepositCount] += ((msg.value * 50)/100);
+        externalProtocolCountTotalValue[externalProtocolDepositCount] += ((_depositingAmount * 50)/100);
 
-        uint256 externalProtocolDepositEth = ((msg.value * 25)/100);
+        uint256 externalProtocolDepositEth = ((_depositingAmount * 25)/100);
 
-        // depositToAaveByUser(externalProtocolDepositEth);
-        // depositToCompoundByUser(externalProtocolDepositEth);
+        depositToAaveByUser(externalProtocolDepositEth);
+        depositToCompoundByUser(externalProtocolDepositEth);
 
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
-        
-        //! Calling omnichain send function
-        send(dstEid, omniChainTreasury, _options);
 
-        emit Deposit(user,msg.value);
+        //! calculting fee 
+        MessagingFee memory fee = quote(dstEid, omniChainTreasury, _options, false);
+
+        //! Calling omnichain send function
+        send(dstEid, omniChainTreasury, fee, _options);
+
+        emit Deposit(user,_depositingAmount);
         return DepositResult(borrowing[user].hasDeposited,borrowerIndex);
     }
 
@@ -200,7 +206,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         address toAddress,
         uint256 _amount,
         uint64 index
-    ) external onlyBorrowingContract returns(bool){
+    ) external payable onlyBorrowingContract returns(bool){
         // Check the _amount is non zero
         require(_amount > 0, "Cannot withdraw zero Ether");
         require(borrowing[borrower].depositDetails[index].withdrawed,"");
@@ -224,9 +230,12 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         }
         borrowing[borrower].depositDetails[index].withdrawAmount += uint128(amount);
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
-        
+
+        //! calculting fee 
+        MessagingFee memory fee = quote(dstEid, omniChainTreasury, _options, false);
+
         //! Calling omnichain send function
-        send(dstEid, omniChainTreasury, _options);
+        send(dstEid, omniChainTreasury, fee, _options);
         // Send the ETH to Borrower
         (bool sent,) = payable(toAddress).call{value: amount}("");
         require(sent, "Failed to send Ether");
@@ -712,6 +721,10 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         return omniChainTreasury.totalVolumeOfBorrowersAmountinUSD;
     }
 
+    function omniChainTreasuryEthProfitsOfLiquidators() external view returns(uint256){
+        return omniChainTreasury.ethProfitsOfLiquidators;
+    }
+
     function getAaveCumulativeRate() private view returns(uint128){
         return uint128(protocolDeposit[Protocol.Aave].cumulativeRate);
     }
@@ -887,7 +900,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         return amount;
     }
 
-    function setDstEid(uint32 _eid) external {
+    function setDstEid(uint32 _eid) external onlyOwner{
         require(_eid != 0, "EID can't be zero");
         dstEid = _eid;
     }
@@ -895,12 +908,13 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
     function send(
         uint32 _dstEid,
         OmniChainTreasuryData memory _message,
+        MessagingFee memory _fee,
         bytes memory _options
     ) internal onlyBorrowingContract returns (MessagingReceipt memory receipt) {
         bytes memory _payload = abi.encode(_message);
         
         //! Calling layer zero send function to send to dst chain
-        receipt = _lzSend(_dstEid, _payload, _options, MessagingFee(msg.value,0), payable(msg.sender));
+        receipt = _lzSend(_dstEid, _payload, _options, _fee, payable(msg.sender));
     }
 
     function quote(
