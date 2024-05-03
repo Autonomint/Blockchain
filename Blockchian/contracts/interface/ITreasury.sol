@@ -2,6 +2,7 @@
 
 pragma solidity 0.8.20;
 
+import { MessagingReceipt, MessagingFee } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
 interface ITreasury{
 
     error Treasury_ZeroDeposit();
@@ -92,7 +93,13 @@ interface ITreasury{
         uint256  amintGainedFromLiquidation;
     }
 
+    struct AmintOftTransferData {
+        address recipient;
+        uint256 tokensToSend;
+    }
+
     enum Protocol{Aave,Compound}
+    enum FunctionToDo { DUMMY, UPDATE, TRANSFER }
 
         function deposit(
             uint256 _depositingAmount,
@@ -125,6 +132,11 @@ interface ITreasury{
         function omniChainTreasuryTotalVolumeOfBorrowersAmountinWei() external view returns(uint256);
         function omniChainTreasuryTotalVolumeOfBorrowersAmountinUSD() external view returns(uint256);
         function omniChainTreasuryEthProfitsOfLiquidators() external view returns(uint256);
+
+        function oftReceiveFromOtherChains(
+            FunctionToDo _functionToDo,
+            AmintOftTransferData memory _oftTransferData
+        ) external payable returns (MessagingReceipt memory receipt);
 
         function updateHasBorrowed(address borrower,bool _bool) external;
         function updateTotalDepositedAmount(address borrower,uint128 amount) external;

@@ -14,8 +14,8 @@ import "hardhat/console.sol";
 
 library CDSLib {
 
-        uint128 constant PRECISION = 1e12;
-        uint128 constant RATIO_PRECISION = 1e4;
+    uint128 constant PRECISION = 1e12;
+    uint128 constant RATIO_PRECISION = 1e4;
 
     function calculateValue(
         uint128 _price,

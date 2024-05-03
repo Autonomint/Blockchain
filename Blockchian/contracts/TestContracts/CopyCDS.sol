@@ -262,7 +262,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
         //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, omniChainCDS, _options, false);
+        MessagingFee memory fee = quote(dstEid, _options, false);
 
         //! Calling Omnichain send function
         send(dstEid, omniChainCDS, fee, _options);
@@ -299,6 +299,12 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedTime =  _withdrawTime;
 
+        //! getting options since,the src don't know the dst state
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+
+        //! calculting fee 
+        MessagingFee memory fee = quote(dstEid, _options, false);
+
         // If user opted for liquidation
         if(cdsDetails[msg.sender].cdsAccountDetails[_index].optedLiquidation){
             returnAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
@@ -328,11 +334,20 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                 omniChainCDS.totalCdsDepositedAmount -= (
                     cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount 
                     - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
+                console.log("AMINT BALANCE BEFORE 1",amint.balanceOf(treasuryAddress));
+
+                if(totalCdsDepositedAmountWithOptionFees < returnAmountWithGains){
+                    treasury.oftReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
+                        ITreasury.FunctionToDo(2),
+                        ITreasury.AmintOftTransferData( treasuryAddress, returnAmountWithGains - totalCdsDepositedAmountWithOptionFees));
+                }
+                console.log("AMINT BALANCE AFTER 1",amint.balanceOf(treasuryAddress));
 
                 totalCdsDepositedAmountWithOptionFees -= (returnAmountWithGains - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
                 omniChainCDS.totalCdsDepositedAmountWithOptionFees -= (
                     returnAmountWithGains - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
                 cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
+
                 // Get approval from treasury 
                 treasury.approveAmint(address(this),returnAmountWithGains);
 
@@ -350,29 +365,36 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
             }
 
         }else{
+
+            console.log("AMINT BALANCE BEFORE 2",amint.balanceOf(treasuryAddress));
+
+            if(totalCdsDepositedAmountWithOptionFees < returnAmount){
+                treasury.oftReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
+                    ITreasury.FunctionToDo(2),
+                    ITreasury.AmintOftTransferData( treasuryAddress, returnAmount - totalCdsDepositedAmountWithOptionFees));
+            }
+            
+            console.log("AMINT BALANCE AFTER 2",amint.balanceOf(treasuryAddress));
+
             // amint.approve(msg.sender, returnAmount);
             totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
             totalCdsDepositedAmountWithOptionFees -= returnAmount;
             omniChainCDS.totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
             omniChainCDS.totalCdsDepositedAmountWithOptionFees -= returnAmount;
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
-            if(treasury.totalVolumeOfBorrowersAmountinUSD() != 0){
-                require(borrowing.calculateRatio(0,ethPrice) > (2 * CDSLib.RATIO_PRECISION),"CDS: Not enough fund in CDS");
-            }
+
             treasury.approveAmint(address(this),returnAmount);
             bool transfer = amint.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
             require(transfer == true, "Transfer failed in cds withdraw");
         }
 
+        if(treasury.omniChainTreasuryTotalVolumeOfBorrowersAmountinUSD() != 0){
+            require(borrowing.calculateRatio(0,ethPrice) > (2 * CDSLib.RATIO_PRECISION),"CDS: Not enough fund in CDS");
+        }
+
         if(ethPrice != lastEthPrice){
             updateLastEthPrice(ethPrice);
         }
-        
-        //! getting options since,the src don't know the dst state
-        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
-
-        //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, omniChainCDS, _options, false);
 
         //! Calling Omnichain send function
         send(dstEid, omniChainCDS, fee, _options);
@@ -513,7 +535,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
      * @dev calculate cumulative rate
      * @param fees fees to split
      */
-    function calculateCumulativeRate(uint128 fees) public onlyBorrowingContract{
+    function calculateCumulativeRate(uint128 fees) external payable onlyBorrowingContract{
         require(fees != 0,"Fees should not be zero");
         totalCdsDepositedAmountWithOptionFees += fees;
         omniChainCDS.totalCdsDepositedAmountWithOptionFees += fees;
@@ -524,9 +546,18 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
             currentCumulativeRate = (1 * CDSLib.PRECISION) + percentageChange;
             lastCumulativeRate = currentCumulativeRate;
         }else{
-            currentCumulativeRate = lastCumulativeRate * ((1 * CDSLib.PRECISION) + percentageChange);
+            currentCumulativeRate = omniChainCDS.lastCumulativeRate * ((1 * CDSLib.PRECISION) + percentageChange);
             lastCumulativeRate = (currentCumulativeRate/CDSLib.PRECISION);
         }
+
+        //! getting options since,the src don't know the dst state
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+
+        //! calculting fee 
+        MessagingFee memory fee = quote(dstEid, _options, false);
+
+        //! Calling Omnichain send function
+        send(dstEid, omniChainCDS, fee, _options);
         omniChainCDS.lastCumulativeRate = lastCumulativeRate;
     }
 
@@ -583,11 +614,10 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
 
     function quote(
         uint32 _dstEid,
-        OmniChainCDSData memory _message,
         bytes memory _options,
         bool _payInLzToken
     ) public view returns (MessagingFee memory fee) {
-        bytes memory payload = abi.encode(_message);
+        bytes memory payload = abi.encode(omniChainCDS);
         fee = _quote(_dstEid, payload, _options, _payInLzToken);
     }
 

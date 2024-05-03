@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: unlicensed
 pragma solidity 0.8.20;
 
+import {
+    SendParam, 
+    OFTReceipt, 
+    MessagingReceipt, 
+    MessagingFee  
+    } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
+
 interface IAMINT {
     function balanceOf(address account) external view returns (uint256);
     function mint(address to, uint256 amount) external returns(bool);
@@ -12,6 +19,16 @@ interface IAMINT {
     function allowance(address owner, address spender) external view returns (uint256);
 
     function totalSupply() external view returns (uint256);
+    function send(
+        SendParam calldata _sendParam,
+        MessagingFee calldata _fee,
+        address _refundAddress
+    ) external payable returns (MessagingReceipt memory msgReceipt, OFTReceipt memory oftReceipt);
+
+    function quoteSend(
+        SendParam calldata _sendParam,
+        bool _payInLzToken
+    ) external view returns (MessagingFee memory msgFee);
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);

@@ -56,7 +56,6 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
 
     uint256 public ethRemainingInWithdraw;
     uint256 public ethValueRemainingInWithdraw;
-    uint256[8] public lzrecdata;
 
     uint32 private dstEid; //! dst id
     uint64 private nonce; 
@@ -226,6 +225,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         uint8[] memory structIndex;
         //! calculting fee 
         MessagingFee memory fee = quote(dstEid, omniChainBorrowing, structIndex, _options, false);
+        MessagingFee memory cdsLzFee = cds.quote(dstEid, _options, false);
 
         //Call calculateInverseOfRatio function to find ratio
         uint64 ratio = calculateRatio(_depositingAmount,uint128(_ethPrice));
@@ -233,11 +233,12 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
 
         // Call calculateOptionPrice in options contract to get options fees
         uint256 optionFees = options.calculateOptionPrice(_ethPrice,_volatility,_depositingAmount,_strikePercent);
+        console.log("OPTION FEES",optionFees);
         uint256 tokensToLend = BorrowLib.tokensToLend(_depositingAmount, _ethPrice, LTV);
         uint256 borrowAmount = tokensToLend - optionFees;
         
         //Call the deposit function in Treasury contract
-        ITreasury.DepositResult memory depositResult = treasury.deposit{value:(msg.value - fee.nativeFee)}(
+        ITreasury.DepositResult memory depositResult = treasury.deposit{value:(msg.value - fee.nativeFee - cdsLzFee.nativeFee)}(
                 _depositingAmount,
                 msg.sender,_ethPrice,_depositTime);
         uint64 index = depositResult.borrowerIndex;
@@ -250,7 +251,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         _transferToken(msg.sender,_depositingAmount,_ethPrice,optionFees);
 
         // Call calculateCumulativeRate in cds to split fees to cds users
-        cds.calculateCumulativeRate(uint128(optionFees));
+        cds.calculateCumulativeRate{ value: cdsLzFee.nativeFee}(uint128(optionFees));
 
         //Get the deposit details from treasury
         ITreasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(msg.sender,index);

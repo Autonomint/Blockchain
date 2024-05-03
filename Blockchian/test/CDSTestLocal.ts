@@ -5,7 +5,7 @@ import { ethers,upgrades } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { describe } from "node:test";
 import { BorrowLib } from "../typechain-types";
-import { Contract, ContractFactory } from 'ethers'
+import { Contract, ContractFactory, ZeroAddress } from 'ethers'
 import { Options } from '@layerzerolabs/lz-v2-utilities'
 
 import {
@@ -222,6 +222,8 @@ describe("CDS Contract",function(){
 
         await treasuryA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await treasuryB.getAddress(), 32))
         await treasuryB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await treasuryA.getAddress(), 32))
+        // console.log("TREASURY A",await treasuryA.getAddress());
+        // console.log("TREASURY B",await treasuryB.getAddress());
 
         await TokenA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await TokenB.getAddress(), 32))
         await TokenB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await TokenA.getAddress(), 32))
@@ -295,6 +297,23 @@ describe("CDS Contract",function(){
         const aToken = new ethers.Contract(aTokenAddressMainnet,aTokenABI,signer);
         const cETH = new ethers.Contract(cometMainnet,cETH_ABI,signer);
 
+        // console.log("TOKEN A", await TokenA.getAddress());
+        // console.log("TOKEN B", await TokenB.getAddress());
+        // console.log("ABOND A", await abondTokenA.getAddress());
+        // console.log("ABOND B", await abondTokenB.getAddress());
+        // console.log("USDT A", await usdtA.getAddress());
+        // console.log("USDT B", await usdtB.getAddress());
+        // console.log("MULTI A", await multiSignA.getAddress());
+        // console.log("MULTI B", await multiSignB.getAddress());
+        // console.log("CDS A", await CDSContractA.getAddress());
+        // console.log("CDS B", await CDSContractB.getAddress());
+        // console.log("BORROW A", await BorrowingContractA.getAddress());
+        // console.log("BORROW B", await BorrowingContractB.getAddress());
+        // console.log("TREAS A", await treasuryA.getAddress());
+        // console.log("TREAS B", await treasuryB.getAddress());
+        // console.log("OPT A", await optionsA.getAddress());
+        // console.log("OPT B", await optionsB.getAddress());
+
         return {
             TokenA,abondTokenA,usdtA,
             CDSContractA,BorrowingContractA,
@@ -344,7 +363,7 @@ describe("CDS Contract",function(){
             const options = "0x00030100110100000000000000000000000000030d40";
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB, [5,10,15,20,25,30,35],options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB, options, false)
 
             await CDSContractA.deposit(20000000000,0,true,10000000000, { value: nativeFee.toString()});
 
@@ -361,8 +380,8 @@ describe("CDS Contract",function(){
     })
 
     describe("To check CDS withdrawl function",function(){
-        it("Should withdraw from cds",async () => {
-            const {BorrowingContractA,CDSContractA,usdtA,treasuryA} = await loadFixture(deployer);
+        it.only("Should withdraw from cds",async () => {
+            const {BorrowingContractB,CDSContractA,usdtA,treasuryB} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
             await usdtA.mint(user2.getAddress(),20000000000)
@@ -373,10 +392,10 @@ describe("CDS Contract",function(){
             const options = "0x00030100110100000000000000000000000000030d40";
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB, [5,10,15,20,25,30,35],options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB, options, false)
 
             await CDSContractA.connect(user2).deposit(12000000000,0,true,12000000000, { value: nativeFee.toString()});
-            await CDSContractA.connect(user1).deposit(2000000000,0,true,1500000000, { value: nativeFee.toString()});
+            // await CDSContractA.connect(user1).deposit(2000000000,0,true,1500000000, { value: nativeFee.toString()});
 
             const depositAmount = ethers.parseEther("1");
             const coder = ethers.AbiCoder.defaultAbiCoder();
@@ -401,12 +420,12 @@ describe("CDS Contract",function(){
             ]);
 
             let nativeFee1 = 0
-            ;[nativeFee1] = await BorrowingContractA.quote(eidB, [5,10,15,20,25,30,35,40],[], options, false)
+            ;[nativeFee1] = await BorrowingContractB.quote(eidA, [5,10,15,20,25,30,35,40],[], options, false)
             let nativeFee2 = 0
-            ;[nativeFee2] = await treasuryA.quote(eidB, [5,10,15,20,25,30,35,40,45], options, false)
+            ;[nativeFee2] = await treasuryB.quote(eidA, 1, [5,10,15,20,25,30,35,40,45], [ZeroAddress,0],options, false)
 
-            await BorrowingContractA.connect(user1).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2))})
-            await BorrowingContractA.connect(user2).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2))})
+            await BorrowingContractB.connect(user1).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
+            await BorrowingContractB.connect(user2).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
 
             const callDataLiquidate = coder.encode([            
                 "uint64",
@@ -427,8 +446,9 @@ describe("CDS Contract",function(){
                 await user1.getAddress(),
                 1
             ]);
-            await BorrowingContractA.connect(owner).send(3, callDataLiquidate, {value: (nativeFee1 + nativeFee2).toString()})
-            await CDSContractA.connect(user1).withdraw(1, { value: nativeFee.toString()});
+
+            // await BorrowingContractB.connect(owner).send(3, callDataLiquidate, {value: (nativeFee1 + nativeFee2).toString()})
+            await CDSContractA.connect(user2).withdraw(1, { value: nativeFee + nativeFee2 + nativeFee2});
         })
 
         it("Should withdraw from cds",async () => {

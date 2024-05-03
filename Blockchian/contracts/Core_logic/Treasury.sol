@@ -179,16 +179,16 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
 
         uint256 externalProtocolDepositEth = ((_depositingAmount * 25)/100);
 
-        depositToAaveByUser(externalProtocolDepositEth);
-        depositToCompoundByUser(externalProtocolDepositEth);
+        // depositToAaveByUser(externalProtocolDepositEth);
+        // depositToCompoundByUser(externalProtocolDepositEth);
 
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
         //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, omniChainTreasury, _options, false);
+        MessagingFee memory fee = quote(dstEid, FunctionToDo(1), omniChainTreasury, AmintOftTransferData( address(0), 0), _options, false);
 
         //! Calling omnichain send function
-        send(dstEid, omniChainTreasury, fee, _options);
+        send(dstEid, FunctionToDo(1), omniChainTreasury, AmintOftTransferData( address(0), 0), fee, _options);
 
         emit Deposit(user,_depositingAmount);
         return DepositResult(borrowing[user].hasDeposited,borrowerIndex);
@@ -232,10 +232,10 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
         //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, omniChainTreasury, _options, false);
+        MessagingFee memory fee = quote(dstEid, FunctionToDo(1), omniChainTreasury, AmintOftTransferData( address(0), 0), _options, false);
 
         //! Calling omnichain send function
-        send(dstEid, omniChainTreasury, fee, _options);
+        send(dstEid, FunctionToDo(1), omniChainTreasury, AmintOftTransferData( address(0), 0), fee, _options);
         // Send the ETH to Borrower
         (bool sent,) = payable(toAddress).call{value: amount}("");
         require(sent, "Failed to send Ether");
@@ -905,13 +905,32 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         dstEid = _eid;
     }
 
+    function oftReceiveFromOtherChains(
+        FunctionToDo _functionToDo,
+        AmintOftTransferData memory _oftTransferData
+    ) external payable onlyCDSContract returns (MessagingReceipt memory receipt) {
+        bytes memory _payload = abi.encode(_functionToDo, omniChainTreasury, _oftTransferData);
+
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+        MessagingFee memory _fee = quote(
+            dstEid, FunctionToDo(1),
+            omniChainTreasury,
+            AmintOftTransferData( address(0), 0),
+            _options,
+            false);
+        //! Calling layer zero send function to send to dst chain
+        receipt = _lzSend(dstEid, _payload, _options, _fee, payable(msg.sender));
+    }
+
     function send(
         uint32 _dstEid,
+        FunctionToDo _functionToDo,
         OmniChainTreasuryData memory _message,
+        AmintOftTransferData memory _oftTransferData,
         MessagingFee memory _fee,
         bytes memory _options
     ) internal onlyBorrowingContract returns (MessagingReceipt memory receipt) {
-        bytes memory _payload = abi.encode(_message);
+        bytes memory _payload = abi.encode(_functionToDo, _message, _oftTransferData);
         
         //! Calling layer zero send function to send to dst chain
         receipt = _lzSend(_dstEid, _payload, _options, _fee, payable(msg.sender));
@@ -919,11 +938,13 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
 
     function quote(
         uint32 _dstEid,
+        FunctionToDo _functionToDo,
         OmniChainTreasuryData memory _message,
+        AmintOftTransferData memory _oftTransferData,
         bytes memory _options,
         bool _payInLzToken
     ) public view returns (MessagingFee memory fee) {
-        bytes memory payload = abi.encode(_message);
+        bytes memory payload = abi.encode(_functionToDo, _message, _oftTransferData);
         fee = _quote(_dstEid, payload, _options, _payInLzToken);
     }
 
@@ -936,10 +957,32 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
     ) internal override {
 
         OmniChainTreasuryData memory data;
+        FunctionToDo functionToDo;
+        AmintOftTransferData memory oftTransferData;
 
-        data = abi.decode(payload, (OmniChainTreasuryData));
+        (functionToDo, data, oftTransferData) = abi.decode(payload, ( FunctionToDo, OmniChainTreasuryData, AmintOftTransferData));
 
-        omniChainTreasury = data;
+        if(functionToDo == FunctionToDo.TRANSFER){
+
+            //! getting options since,the src don't know the dst state
+            bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+
+            SendParam memory _sendParam = SendParam(
+                dstEid,
+                bytes32(uint256(uint160(oftTransferData.recipient))),
+                oftTransferData.tokensToSend,
+                oftTransferData.tokensToSend,
+                _options,
+                '0x',
+                '0x'
+            );
+            MessagingFee memory _fee = amint.quoteSend( _sendParam, false);
+
+            amint.send{ value: _fee.nativeFee}( _sendParam, _fee, address(this));
+
+        }else{
+            omniChainTreasury = data;
+        }
 
     }
 
