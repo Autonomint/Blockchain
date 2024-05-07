@@ -233,7 +233,6 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
 
         // Call calculateOptionPrice in options contract to get options fees
         uint256 optionFees = options.calculateOptionPrice(_ethPrice,_volatility,_depositingAmount,_strikePercent);
-        console.log("OPTION FEES",optionFees);
         uint256 tokensToLend = BorrowLib.tokensToLend(_depositingAmount, _ethPrice, LTV);
         uint256 borrowAmount = tokensToLend - optionFees;
         
@@ -676,6 +675,10 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         return omniChainBorrowing.cdsPoolValue;
     }
 
+    function getOmniChainBorrowing() external view returns(OmniChainBorrowingData memory){
+        return omniChainBorrowing;
+    }
+
     /**
      * @dev only user interaction function
      */
@@ -715,7 +718,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         }
 
         //! getting options since,the src don't know the dst state
-        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(150000, 0);
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
         uint8[] memory structIndex;
 
         //! calculting fee 

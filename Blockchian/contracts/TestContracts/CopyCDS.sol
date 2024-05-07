@@ -294,8 +294,13 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         // eth Price difference gain or loss
         // option fees
         uint256 returnAmount = 
-            cdsAmountToReturn(msg.sender,_index, ethPrice)+
+            cdsAmountToReturn(msg.sender,_index, ethPrice) +
             ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * omniChainCDS.lastCumulativeRate)/CDSLib.PRECISION)-(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount);
+        
+        uint256 optionsFeesToGetFromOtherChain = getOptionsFeesProportions(
+            ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * omniChainCDS.lastCumulativeRate)/CDSLib.PRECISION) - 
+            cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount);
+
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedTime =  _withdrawTime;
 
@@ -334,15 +339,12 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                 omniChainCDS.totalCdsDepositedAmount -= (
                     cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount 
                     - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
-                console.log("AMINT BALANCE BEFORE 1",amint.balanceOf(treasuryAddress));
-
-                if(totalCdsDepositedAmountWithOptionFees < returnAmountWithGains){
+                if(optionsFeesToGetFromOtherChain > 0){
                     treasury.oftReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
                         ITreasury.FunctionToDo(2),
-                        ITreasury.AmintOftTransferData( treasuryAddress, returnAmountWithGains - totalCdsDepositedAmountWithOptionFees));
+                        ITreasury.AmintOftTransferData( treasuryAddress, optionsFeesToGetFromOtherChain));
                 }
-                console.log("AMINT BALANCE AFTER 1",amint.balanceOf(treasuryAddress));
-
+                
                 totalCdsDepositedAmountWithOptionFees -= (returnAmountWithGains - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
                 omniChainCDS.totalCdsDepositedAmountWithOptionFees -= (
                     returnAmountWithGains - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
@@ -366,16 +368,12 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
 
         }else{
 
-            console.log("AMINT BALANCE BEFORE 2",amint.balanceOf(treasuryAddress));
-
-            if(totalCdsDepositedAmountWithOptionFees < returnAmount){
+            if(optionsFeesToGetFromOtherChain > 0){
                 treasury.oftReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
                     ITreasury.FunctionToDo(2),
-                    ITreasury.AmintOftTransferData( treasuryAddress, returnAmount - totalCdsDepositedAmountWithOptionFees));
+                    ITreasury.AmintOftTransferData( treasuryAddress, optionsFeesToGetFromOtherChain));
             }
             
-            console.log("AMINT BALANCE AFTER 2",amint.balanceOf(treasuryAddress));
-
             // amint.approve(msg.sender, returnAmount);
             totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
             totalCdsDepositedAmountWithOptionFees -= returnAmount;
@@ -394,6 +392,11 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
 
         if(ethPrice != lastEthPrice){
             updateLastEthPrice(ethPrice);
+        }
+
+        if(optionsFeesToGetFromOtherChain == 0){
+            (bool sent,) = payable(msg.sender).call{value: msg.value - fee.nativeFee}("");
+            require(sent, "Failed to send Ether");
         }
 
         //! Calling Omnichain send function
@@ -598,6 +601,31 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                 cumulativeValue += value;
             }
         }
+    }
+
+    function getOptionsFeesProportions(uint256 optionsFees) internal view returns (uint256){
+        uint256 otherChainCDSAmount = omniChainCDS.totalCdsDepositedAmount - totalCdsDepositedAmount;
+        uint256 totalOptionFeesInOtherChain = omniChainCDS.totalCdsDepositedAmountWithOptionFees
+                - totalCdsDepositedAmountWithOptionFees - otherChainCDSAmount;
+
+        uint256 share = (otherChainCDSAmount * 1e10)/omniChainCDS.totalCdsDepositedAmount;
+        uint256 optionsfeesToGet = (optionsFees * share)/1e10;
+
+        if(otherChainCDSAmount == 0){
+            if(totalOptionFeesInOtherChain == 0){
+                optionsfeesToGet = 0;
+            }else{
+                optionsfeesToGet = totalOptionFeesInOtherChain;
+            }
+        }else{
+            if(totalOptionFeesInOtherChain < optionsfeesToGet) {
+                optionsfeesToGet = omniChainCDS.totalCdsDepositedAmountWithOptionFees - 
+                totalCdsDepositedAmountWithOptionFees - otherChainCDSAmount;
+            }else{
+                optionsfeesToGet = optionsfeesToGet;
+            }  
+        }
+        return optionsfeesToGet;
     }
 
     function send(

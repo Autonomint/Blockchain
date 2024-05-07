@@ -39,6 +39,7 @@ interface IBorrowing{
     function lastEthVaultValue() external view returns(uint256);
     function lastCDSPoolValue() external view returns(uint256);
     function omniChainBorrowingCDSPoolValue() external view returns(uint256);
+    function getOmniChainBorrowing() external view returns(OmniChainBorrowingData memory);
 
 
     function updateLastEthVaultValue(uint256 _amount) external;

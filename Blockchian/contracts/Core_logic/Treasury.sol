@@ -911,7 +911,25 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
     ) external payable onlyCDSContract returns (MessagingReceipt memory receipt) {
         bytes memory _payload = abi.encode(_functionToDo, omniChainTreasury, _oftTransferData);
 
-        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+        //! getting options since,the src don't know the dst state
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
+
+        SendParam memory _sendParam = SendParam(
+            dstEid,
+            bytes32(uint256(uint160(_oftTransferData.recipient))),
+            _oftTransferData.tokensToSend,
+            _oftTransferData.tokensToSend,
+            options,
+            '0x',
+            '0x'
+        );
+        MessagingFee memory fee = amint.quoteSend( _sendParam, false);
+
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(250000, 0).addExecutorNativeDropOption(
+            uint128(fee.nativeFee), 
+            bytes32(uint256(uint160(0x7a2088a1bFc9d81c55368AE168C2C02570cB814F)))
+        );
+
         MessagingFee memory _fee = quote(
             dstEid, FunctionToDo(1),
             omniChainTreasury,
@@ -965,7 +983,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         if(functionToDo == FunctionToDo.TRANSFER){
 
             //! getting options since,the src don't know the dst state
-            bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+            bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
 
             SendParam memory _sendParam = SendParam(
                 dstEid,
