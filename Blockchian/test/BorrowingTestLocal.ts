@@ -5,7 +5,7 @@ import { ethers,upgrades } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { describe } from "node:test";
 import { BorrowLib } from "../typechain-types";
-import { Contract, ContractFactory } from 'ethers'
+import { Contract, ContractFactory,ZeroAddress } from 'ethers'
 import { Options } from '@layerzerolabs/lz-v2-utilities'
 
 import {
@@ -325,7 +325,7 @@ describe("Borrowing Contract",function(){
             const options = "0x00030100110100000000000000000000000000030d40";
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB, [5,10,15,20,25,30,35],options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB,options, false)
             await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
 
             await usdtB.connect(user1).mint(user1.getAddress(),10000000000);
@@ -357,7 +357,7 @@ describe("Borrowing Contract",function(){
             let nativeFee1 = 0
             ;[nativeFee1] = await BorrowingContractA.quote(eidB, [5,10,15,20,25,30,35,40],[], options, false)
             let nativeFee2 = 0
-            ;[nativeFee2] = await treasuryA.quote(eidB, [5,10,15,20,25,30,35,40,45], options, false)
+            ;[nativeFee2] = await treasuryA.quote(eidB,1, [5,10,15,20,25,30,35,40,45],[ZeroAddress,0], options, false)
 
             await BorrowingContractB.connect(user2).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2))})
             // const tx1 = await BorrowingContractA.omniChainBorrowing();
@@ -426,7 +426,7 @@ describe("Borrowing Contract",function(){
 
             const options = "0x00030100110100000000000000000000000000030d40";
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB, [5,10,15,20,25,30,35],options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB,options, false)
             await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
 
             const depositAmount = ethers.parseEther("1");
@@ -454,7 +454,7 @@ describe("Borrowing Contract",function(){
             let nativeFee1 = 0
             ;[nativeFee1] = await BorrowingContractA.quote(eidB, [5,10,15,20,25,30,35,40],[], options, false)
             let nativeFee2 = 0
-            ;[nativeFee2] = await treasuryA.quote(eidB, [5,10,15,20,25,30,35,40,45], options, false)
+            ;[nativeFee2] = await treasuryA.quote(eidB,1, [5,10,15,20,25,30,35,40,45],[ZeroAddress,0], options, false)
 
             // console.log("NATIVE FEE",`${nativeFee1 + nativeFee2}`);
 
@@ -505,7 +505,7 @@ describe("Borrowing Contract",function(){
             const options = "0x00030100110100000000000000000000000000030d40";
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB, [5,10,15,20,25,30,35],options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB,options, false)
             await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
 
             await usdtB.connect(user1).mint(user1.getAddress(),10000000000);
@@ -537,7 +537,7 @@ describe("Borrowing Contract",function(){
             let nativeFee1 = 0
             ;[nativeFee1] = await BorrowingContractA.quote(eidB, [5,10,15,20,25,30,35,40],[], options, false)
             let nativeFee2 = 0
-            ;[nativeFee2] = await treasuryA.quote(eidB, [5,10,15,20,25,30,35,40,45], options, false)
+            ;[nativeFee2] = await treasuryA.quote(eidB,1, [5,10,15,20,25,30,35,40,45], [ZeroAddress,0],options, false)
 
             await BorrowingContractB.connect(user2).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2))})
             

@@ -75,8 +75,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         dataFeed = AggregatorV3Interface(priceFeed);
         lastEthPrice = getLatestData();
         fallbackEthPrice = lastEthPrice;
-        lastCumulativeRate = CDSLib.PRECISION;
-        omniChainCDS.lastCumulativeRate = lastCumulativeRate;
+        omniChainCDS.lastCumulativeRate = CDSLib.PRECISION;
         cumulativeValueSign = true;
     }
 
@@ -293,13 +292,11 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         // Calculate return amount includes
         // eth Price difference gain or loss
         // option fees
-        uint256 returnAmount = 
-            cdsAmountToReturn(msg.sender,_index, ethPrice) +
-            ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * omniChainCDS.lastCumulativeRate)/CDSLib.PRECISION)-(cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount);
+        uint256 optionFees = ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * omniChainCDS.lastCumulativeRate)/CDSLib.PRECISION) - 
+            cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
+        uint256 returnAmount = cdsAmountToReturn(msg.sender,_index, ethPrice) + optionFees;
         
-        uint256 optionsFeesToGetFromOtherChain = getOptionsFeesProportions(
-            ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * omniChainCDS.lastCumulativeRate)/CDSLib.PRECISION) - 
-            cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount);
+        uint256 optionsFeesToGetFromOtherChain = getOptionsFeesProportions(optionFees);
 
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedTime =  _withdrawTime;
@@ -339,13 +336,14 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                 omniChainCDS.totalCdsDepositedAmount -= (
                     cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount 
                     - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
+
                 if(optionsFeesToGetFromOtherChain > 0){
                     treasury.oftReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
                         ITreasury.FunctionToDo(2),
                         ITreasury.AmintOftTransferData( treasuryAddress, optionsFeesToGetFromOtherChain));
                 }
                 
-                totalCdsDepositedAmountWithOptionFees -= (returnAmountWithGains - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
+                totalCdsDepositedAmountWithOptionFees -= (returnAmountWithGains - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount - optionsFeesToGetFromOtherChain);
                 omniChainCDS.totalCdsDepositedAmountWithOptionFees -= (
                     returnAmountWithGains - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
                 cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
@@ -376,9 +374,11 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
             
             // amint.approve(msg.sender, returnAmount);
             totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
-            totalCdsDepositedAmountWithOptionFees -= returnAmount;
+            totalCdsDepositedAmountWithOptionFees -= returnAmount - optionsFeesToGetFromOtherChain;
+
             omniChainCDS.totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
             omniChainCDS.totalCdsDepositedAmountWithOptionFees -= returnAmount;
+            
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
 
             treasury.approveAmint(address(this),returnAmount);
@@ -540,17 +540,19 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
      */
     function calculateCumulativeRate(uint128 fees) external payable onlyBorrowingContract{
         require(fees != 0,"Fees should not be zero");
-        totalCdsDepositedAmountWithOptionFees += fees;
+        if(totalCdsDepositedAmount > 0){
+            totalCdsDepositedAmountWithOptionFees += fees;
+        }
         omniChainCDS.totalCdsDepositedAmountWithOptionFees += fees;
         uint128 netCDSPoolValue = uint128(omniChainCDS.totalCdsDepositedAmountWithOptionFees);
         uint128 percentageChange = (fees * CDSLib.PRECISION)/netCDSPoolValue;
         uint128 currentCumulativeRate;
         if(treasury.omniChainTreasuryNoOfBorrowers() == 0){
             currentCumulativeRate = (1 * CDSLib.PRECISION) + percentageChange;
-            lastCumulativeRate = currentCumulativeRate;
+            omniChainCDS.lastCumulativeRate = currentCumulativeRate;
         }else{
             currentCumulativeRate = omniChainCDS.lastCumulativeRate * ((1 * CDSLib.PRECISION) + percentageChange);
-            lastCumulativeRate = (currentCumulativeRate/CDSLib.PRECISION);
+            omniChainCDS.lastCumulativeRate = (currentCumulativeRate/CDSLib.PRECISION);
         }
 
         //! getting options since,the src don't know the dst state
@@ -561,7 +563,6 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
 
         //! Calling Omnichain send function
         send(dstEid, omniChainCDS, fee, _options);
-        omniChainCDS.lastCumulativeRate = lastCumulativeRate;
     }
 
     /**
@@ -605,25 +606,28 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
 
     function getOptionsFeesProportions(uint256 optionsFees) internal view returns (uint256){
         uint256 otherChainCDSAmount = omniChainCDS.totalCdsDepositedAmount - totalCdsDepositedAmount;
+
         uint256 totalOptionFeesInOtherChain = omniChainCDS.totalCdsDepositedAmountWithOptionFees
                 - totalCdsDepositedAmountWithOptionFees - otherChainCDSAmount;
 
+        uint256 totalOptionFeesInThisChain = totalCdsDepositedAmountWithOptionFees - totalCdsDepositedAmount; 
+
         uint256 share = (otherChainCDSAmount * 1e10)/omniChainCDS.totalCdsDepositedAmount;
         uint256 optionsfeesToGet = (optionsFees * share)/1e10;
+        uint256 optionsFeesRemaining = optionsFees - optionsfeesToGet;
 
-        if(otherChainCDSAmount == 0){
-            if(totalOptionFeesInOtherChain == 0){
-                optionsfeesToGet = 0;
-            }else{
-                optionsfeesToGet = totalOptionFeesInOtherChain;
-            }
+        if(totalOptionFeesInOtherChain == 0){
+            optionsfeesToGet = 0;
         }else{
             if(totalOptionFeesInOtherChain < optionsfeesToGet) {
-                optionsfeesToGet = omniChainCDS.totalCdsDepositedAmountWithOptionFees - 
-                totalCdsDepositedAmountWithOptionFees - otherChainCDSAmount;
+                optionsfeesToGet = totalOptionFeesInOtherChain;
             }else{
-                optionsfeesToGet = optionsfeesToGet;
-            }  
+                if(totalOptionFeesInOtherChain > optionsfeesToGet && totalOptionFeesInThisChain < optionsFeesRemaining){
+                    optionsfeesToGet += optionsFeesRemaining - totalOptionFeesInThisChain;
+                }else{
+                    optionsfeesToGet = optionsfeesToGet;
+                }
+            }
         }
         return optionsfeesToGet;
     }

@@ -341,7 +341,7 @@ describe("CDS Contract",function(){
             const options = "0x00030100110100000000000000000000000000030d40";
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB, [5,10,15,20,25,30,35],options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB,options, false)
             await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
 
             await usdtB.connect(user1).mint(user1.getAddress(),10000000000);
@@ -380,7 +380,7 @@ describe("CDS Contract",function(){
     })
 
     describe("To check CDS withdrawl function",function(){
-        it.only("Should withdraw from cds,both chains have cds amount and eth deposit",async () => {
+        it("Should withdraw from cds,both chains have cds amount and eth deposit",async () => {
             const {BorrowingContractB,BorrowingContractA,CDSContractA,CDSContractB,usdtA,usdtB,treasuryB} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
@@ -401,8 +401,7 @@ describe("CDS Contract",function(){
             await usdtB.connect(user2).approve(CDSContractB.getAddress(),20000000000);
             await usdtB.connect(user1).approve(CDSContractB.getAddress(),50000000000);
 
-            await CDSContractB.connect(user2).deposit(12000000000,0,true,12000000000, { value: nativeFee.toString()});
-            // await CDSContractA.connect(user1).deposit(2000000000,0,true,1500000000, { value: nativeFee.toString()});
+            await CDSContractB.connect(user1).deposit(2000000000,0,true,1500000000, { value: nativeFee.toString()});
 
             const depositAmount = ethers.parseEther("1");
             const coder = ethers.AbiCoder.defaultAbiCoder();
@@ -479,6 +478,348 @@ describe("CDS Contract",function(){
 
             // await BorrowingContractB.connect(owner).send(3, callDataLiquidate, {value: (nativeFee1 + nativeFee2).toString()})
             await CDSContractA.connect(user2).withdraw(1, { value: nativeFee + nativeFee2a});
+            // await CDSContractB.connect(user1).withdraw(1, { value: nativeFee + nativeFee2a});
+
+        })
+
+        it("Should withdraw from cds,both chains have cds amount and one chain have eth deposit",async () => {
+            const {BorrowingContractB,CDSContractA,CDSContractB,usdtA,usdtB,treasuryB} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await usdtA.mint(user2.getAddress(),20000000000)
+            await usdtA.mint(user1.getAddress(),50000000000)
+            await usdtA.connect(user2).approve(CDSContractA.getAddress(),20000000000);
+            await usdtA.connect(user1).approve(CDSContractA.getAddress(),50000000000);
+
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB, options, false)
+
+            await CDSContractA.connect(user2).deposit(12000000000,0,true,12000000000, { value: nativeFee.toString()});
+
+            await usdtB.mint(user2.getAddress(),20000000000)
+            await usdtB.mint(user1.getAddress(),50000000000)
+            await usdtB.connect(user2).approve(CDSContractB.getAddress(),20000000000);
+            await usdtB.connect(user1).approve(CDSContractB.getAddress(),50000000000);
+
+            await CDSContractB.connect(user1).deposit(2000000000,0,true,1500000000, { value: nativeFee.toString()});
+
+            const depositAmount = ethers.parseEther("1");
+            const coder = ethers.AbiCoder.defaultAbiCoder();
+            const callDataDeposit = coder.encode([            
+                "uint64",
+                "uint64",
+                "uint256",
+                "uint64",
+                "uint64",
+                "uint256",
+                "address",
+                'uint64'
+            ],[
+                100000,
+                timeStamp,
+                depositAmount,
+                1,
+                110000,
+                ethVolatility,
+                await user1.getAddress(),
+                1
+            ]);
+
+            let nativeFee1 = 0
+            ;[nativeFee1] = await BorrowingContractB.quote(eidA, [5,10,15,20,25,30,35,40],[], options, false)
+            let nativeFee2 = 0
+            ;[nativeFee2] = await treasuryB.quote(eidA, 1, [5,10,15,20,25,30,35,40,45], [ZeroAddress,0],options, false)
+            
+            await BorrowingContractB.connect(user1).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
+            await BorrowingContractB.connect(user2).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
+
+            const callDataLiquidate = coder.encode([            
+                "uint64",
+                "uint64",
+                "uint256",
+                "uint64",
+                "uint64",
+                "uint256",
+                "address",
+                'uint64'
+            ],[
+                80000,
+                timeStamp,
+                depositAmount,
+                1,
+                110000,
+                ethVolatility,
+                await user1.getAddress(),
+                1
+            ]);
+
+            // const sendParam = [
+            //     eidB,
+            //     ethers.zeroPadValue(await treasuryB.getAddress(), 32),
+            //     ethers.parseEther("0.002"),
+            //     ethers.parseEther("0.002"),
+            //     Options.newOptions().addExecutorLzReceiveOption(60000, 0),
+            //     '0x',
+            //     '0x',
+            // ]
+
+            // let nativeFee3 = 0
+            // ;[nativeFee3] = await TokenA.quoteSend(sendParam, false)
+
+            // const optionsA = Options.newOptions().addExecutorLzReceiveOption(250000, 0).addExecutorNativeDropOption(
+            //     nativeFee3, 
+            //     ethers.zeroPadValue(await treasuryB.getAddress(), 32).toString()
+            // ).toHex().toString();
+            
+            const optionsA = Options.newOptions().addExecutorLzReceiveOption(420000, 0).toHex().toString()
+            let nativeFee2a = 0
+            ;[nativeFee2a] = await treasuryB.quote(eidA, 1, [5,10,15,20,25,30,35,40,45], [ZeroAddress,0],optionsA, false)
+
+            // await BorrowingContractB.connect(owner).send(3, callDataLiquidate, {value: (nativeFee1 + nativeFee2).toString()})
+            await CDSContractA.connect(user2).withdraw(1, { value: nativeFee + nativeFee2a});
+        })
+
+        it.only("Should withdraw from cds,one chain have cds amount and both chains have eth deposit",async () => {
+            const {BorrowingContractB,BorrowingContractA,CDSContractA,usdtA,treasuryB} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await usdtA.mint(user2.getAddress(),20000000000)
+            await usdtA.mint(user1.getAddress(),50000000000)
+            await usdtA.connect(user2).approve(CDSContractA.getAddress(),20000000000);
+            await usdtA.connect(user1).approve(CDSContractA.getAddress(),50000000000);
+
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB, options, false)
+
+            await CDSContractA.connect(user2).deposit(12000000000,0,true,12000000000, { value: nativeFee.toString()});
+
+            const depositAmount = ethers.parseEther("1");
+            const coder = ethers.AbiCoder.defaultAbiCoder();
+            const callDataDeposit = coder.encode([            
+                "uint64",
+                "uint64",
+                "uint256",
+                "uint64",
+                "uint64",
+                "uint256",
+                "address",
+                'uint64'
+            ],[
+                100000,
+                timeStamp,
+                depositAmount,
+                1,
+                110000,
+                ethVolatility,
+                await user1.getAddress(),
+                1
+            ]);
+
+            let nativeFee1 = 0
+            ;[nativeFee1] = await BorrowingContractB.quote(eidA, [5,10,15,20,25,30,35,40],[], options, false)
+            let nativeFee2 = 0
+            ;[nativeFee2] = await treasuryB.quote(eidA, 1, [5,10,15,20,25,30,35,40,45], [ZeroAddress,0],options, false)
+            
+            await BorrowingContractB.connect(user1).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
+            await BorrowingContractB.connect(user2).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
+            await BorrowingContractA.connect(user2).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
+
+            const callDataLiquidate = coder.encode([            
+                "uint64",
+                "uint64",
+                "uint256",
+                "uint64",
+                "uint64",
+                "uint256",
+                "address",
+                'uint64'
+            ],[
+                80000,
+                timeStamp,
+                depositAmount,
+                1,
+                110000,
+                ethVolatility,
+                await user1.getAddress(),
+                1
+            ]);
+
+            // const sendParam = [
+            //     eidB,
+            //     ethers.zeroPadValue(await treasuryB.getAddress(), 32),
+            //     ethers.parseEther("0.002"),
+            //     ethers.parseEther("0.002"),
+            //     Options.newOptions().addExecutorLzReceiveOption(60000, 0),
+            //     '0x',
+            //     '0x',
+            // ]
+
+            // let nativeFee3 = 0
+            // ;[nativeFee3] = await TokenA.quoteSend(sendParam, false)
+
+            // const optionsA = Options.newOptions().addExecutorLzReceiveOption(250000, 0).addExecutorNativeDropOption(
+            //     nativeFee3, 
+            //     ethers.zeroPadValue(await treasuryB.getAddress(), 32).toString()
+            // ).toHex().toString();
+            
+            const optionsA = Options.newOptions().addExecutorLzReceiveOption(420000, 0).toHex().toString()
+            let nativeFee2a = 0
+            ;[nativeFee2a] = await treasuryB.quote(eidA, 1, [5,10,15,20,25,30,35,40,45], [ZeroAddress,0],optionsA, false)
+
+            await BorrowingContractB.connect(owner).send(3, callDataLiquidate, {value: (nativeFee1 + nativeFee2).toString()})
+            await CDSContractA.connect(user2).withdraw(1, { value: nativeFee + nativeFee2a});
+        })
+
+        it("Should withdraw from cds,one chain have cds amount and one chain have eth deposit",async () => {
+            const {BorrowingContractB,CDSContractA,usdtA,treasuryB} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await usdtA.mint(user2.getAddress(),20000000000)
+            await usdtA.mint(user1.getAddress(),50000000000)
+            await usdtA.connect(user2).approve(CDSContractA.getAddress(),20000000000);
+            await usdtA.connect(user1).approve(CDSContractA.getAddress(),50000000000);
+
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB, options, false)
+
+            await CDSContractA.connect(user2).deposit(12000000000,0,true,12000000000, { value: nativeFee.toString()});
+
+            const depositAmount = ethers.parseEther("1");
+            const coder = ethers.AbiCoder.defaultAbiCoder();
+            const callDataDeposit = coder.encode([            
+                "uint64",
+                "uint64",
+                "uint256",
+                "uint64",
+                "uint64",
+                "uint256",
+                "address",
+                'uint64'
+            ],[
+                100000,
+                timeStamp,
+                depositAmount,
+                1,
+                110000,
+                ethVolatility,
+                await user1.getAddress(),
+                1
+            ]);
+
+            let nativeFee1 = 0
+            ;[nativeFee1] = await BorrowingContractB.quote(eidA, [5,10,15,20,25,30,35,40],[], options, false)
+            let nativeFee2 = 0
+            ;[nativeFee2] = await treasuryB.quote(eidA, 1, [5,10,15,20,25,30,35,40,45], [ZeroAddress,0],options, false)
+            
+            await BorrowingContractB.connect(user1).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
+            await BorrowingContractB.connect(user2).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
+
+            const callDataLiquidate = coder.encode([            
+                "uint64",
+                "uint64",
+                "uint256",
+                "uint64",
+                "uint64",
+                "uint256",
+                "address",
+                'uint64'
+            ],[
+                80000,
+                timeStamp,
+                depositAmount,
+                1,
+                110000,
+                ethVolatility,
+                await user1.getAddress(),
+                1
+            ]);
+            
+            const optionsA = Options.newOptions().addExecutorLzReceiveOption(420000, 0).toHex().toString()
+            let nativeFee2a = 0
+            ;[nativeFee2a] = await treasuryB.quote(eidA, 1, [5,10,15,20,25,30,35,40,45], [ZeroAddress,0],optionsA, false)
+
+            // await BorrowingContractB.connect(owner).send(3, callDataLiquidate, {value: (nativeFee1 + nativeFee2).toString()})
+            await CDSContractA.connect(user2).withdraw(1, { value: nativeFee + nativeFee2a});
+        })
+
+        it("Should withdraw from cds,one chain have cds amount and one chain have eth deposit",async () => {
+            const {BorrowingContractA,CDSContractA,usdtA,treasuryA} = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await usdtA.mint(user2.getAddress(),20000000000)
+            await usdtA.mint(user1.getAddress(),50000000000)
+            await usdtA.connect(user2).approve(CDSContractA.getAddress(),20000000000);
+            await usdtA.connect(user1).approve(CDSContractA.getAddress(),50000000000);
+
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB, options, false)
+
+            await CDSContractA.connect(user2).deposit(12000000000,0,true,12000000000, { value: nativeFee.toString()});
+
+            const depositAmount = ethers.parseEther("1");
+            const coder = ethers.AbiCoder.defaultAbiCoder();
+            const callDataDeposit = coder.encode([            
+                "uint64",
+                "uint64",
+                "uint256",
+                "uint64",
+                "uint64",
+                "uint256",
+                "address",
+                'uint64'
+            ],[
+                100000,
+                timeStamp,
+                depositAmount,
+                1,
+                110000,
+                ethVolatility,
+                await user1.getAddress(),
+                1
+            ]);
+
+            let nativeFee1 = 0
+            ;[nativeFee1] = await BorrowingContractA.quote(eidB, [5,10,15,20,25,30,35,40],[], options, false)
+            let nativeFee2 = 0
+            ;[nativeFee2] = await treasuryA.quote(eidB, 1, [5,10,15,20,25,30,35,40,45], [ZeroAddress,0],options, false)
+            
+            await BorrowingContractA.connect(user1).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
+            await BorrowingContractA.connect(user2).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
+
+            const callDataLiquidate = coder.encode([            
+                "uint64",
+                "uint64",
+                "uint256",
+                "uint64",
+                "uint64",
+                "uint256",
+                "address",
+                'uint64'
+            ],[
+                80000,
+                timeStamp,
+                depositAmount,
+                1,
+                110000,
+                ethVolatility,
+                await user1.getAddress(),
+                1
+            ]);
+            
+            const optionsA = Options.newOptions().addExecutorLzReceiveOption(420000, 0).toHex().toString()
+            let nativeFee2a = 0
+            ;[nativeFee2a] = await treasuryA.quote(eidB, 1, [5,10,15,20,25,30,35,40,45], [ZeroAddress,0],optionsA, false)
+
+            // await BorrowingContractB.connect(owner).send(3, callDataLiquidate, {value: (nativeFee1 + nativeFee2).toString()})
+            await CDSContractA.connect(user2).withdraw(1, { value: nativeFee + nativeFee2a});
         })
 
         it("Should withdraw from cds",async () => {
@@ -489,7 +830,7 @@ describe("CDS Contract",function(){
             const options = "0x00030100110100000000000000000000000000030d40";
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB, [5,10,15,20,25,30,35],options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB,options, false)
             await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
 
             await CDSContractA.connect(user1).withdraw(1, { value: nativeFee.toString()});
