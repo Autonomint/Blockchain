@@ -225,7 +225,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         uint8[] memory structIndex;
         //! calculting fee 
         MessagingFee memory fee = quote(dstEid, omniChainBorrowing, structIndex, _options, false);
-        MessagingFee memory cdsLzFee = cds.quote(dstEid, _options, false);
+        MessagingFee memory cdsLzFee = cds.quote(dstEid, CDSInterface.FunctionToDo(1), 0, _options, false);
 
         //Call calculateInverseOfRatio function to find ratio
         uint64 ratio = calculateRatio(_depositingAmount,uint128(_ethPrice));

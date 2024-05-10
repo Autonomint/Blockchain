@@ -325,7 +325,7 @@ describe("Borrowing Contract",function(){
             const options = "0x00030100110100000000000000000000000000030d40";
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB,options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,options, false)
             await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
 
             await usdtB.connect(user1).mint(user1.getAddress(),10000000000);
@@ -426,7 +426,7 @@ describe("Borrowing Contract",function(){
 
             const options = "0x00030100110100000000000000000000000000030d40";
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB,options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,options, false)
             await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
 
             const depositAmount = ethers.parseEther("1");
@@ -505,7 +505,7 @@ describe("Borrowing Contract",function(){
             const options = "0x00030100110100000000000000000000000000030d40";
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB,options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,options, false)
             await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
 
             await usdtB.connect(user1).mint(user1.getAddress(),10000000000);

@@ -261,10 +261,10 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
         //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, _options, false);
+        MessagingFee memory fee = quote(dstEid, FunctionToDo(1), 0, _options, false);
 
         //! Calling Omnichain send function
-        send(dstEid, omniChainCDS, fee, _options);
+        send(dstEid, FunctionToDo(1), omniChainCDS, 0, fee, _options);
 
         emit Deposit(totalDepositingAmount,index,_liquidationAmount,cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount,cdsDetails[msg.sender].cdsAccountDetails[index].depositValue);
     }
@@ -305,7 +305,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
         //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, _options, false);
+        MessagingFee memory fee = quote(dstEid, FunctionToDo(2), optionsFeesToGetFromOtherChain, _options, false);
 
         // If user opted for liquidation
         if(cdsDetails[msg.sender].cdsAccountDetails[_index].optedLiquidation){
@@ -332,20 +332,31 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                 }
                 uint256 returnAmountWithGains = returnAmount + cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
 
-                totalCdsDepositedAmount -= (cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
-                omniChainCDS.totalCdsDepositedAmount -= (
-                    cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount 
-                    - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
+                if(ethAmount == 0){
+                    totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
+                    omniChainCDS.totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
+
+                    totalCdsDepositedAmountWithOptionFees -= (
+                        cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount + (optionFees - optionsFeesToGetFromOtherChain));
+                    omniChainCDS.totalCdsDepositedAmountWithOptionFees -= (
+                        cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount + optionFees);
+                }else{
+                    totalCdsDepositedAmount -= (cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
+                    omniChainCDS.totalCdsDepositedAmount -= (
+                        cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount 
+                        - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
+                    totalCdsDepositedAmountWithOptionFees -= (
+                        cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount + optionsFeesToGetFromOtherChain);
+                    omniChainCDS.totalCdsDepositedAmountWithOptionFees -= (
+                        cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount + optionFees);
+                }
 
                 if(optionsFeesToGetFromOtherChain > 0){
                     treasury.oftReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
                         ITreasury.FunctionToDo(2),
                         ITreasury.AmintOftTransferData( treasuryAddress, optionsFeesToGetFromOtherChain));
                 }
-                
-                totalCdsDepositedAmountWithOptionFees -= (returnAmountWithGains - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount - optionsFeesToGetFromOtherChain);
-                omniChainCDS.totalCdsDepositedAmountWithOptionFees -= (
-                    returnAmountWithGains - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
+
                 cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
 
                 // Get approval from treasury 
@@ -400,7 +411,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         }
 
         //! Calling Omnichain send function
-        send(dstEid, omniChainCDS, fee, _options);
+        send(dstEid, FunctionToDo(2), omniChainCDS, optionsFeesToGetFromOtherChain, fee, _options);
         
         emit Withdraw(returnAmount,0);
     }
@@ -474,7 +485,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         uint128 _amintAmount,
         uint64 amintPrice,
         uint64 usdtPrice
-    ) public nonReentrant whenNotPaused(IMultiSign.Functions(6)){
+    ) external payable nonReentrant whenNotPaused(IMultiSign.Functions(6)){
         require(_amintAmount != 0,"Amount should not be zero");
 
         require(amint.balanceOf(msg.sender) >= _amintAmount,"Insufficient balance");
@@ -488,6 +499,15 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         treasury.approveUsdt(address(this),_usdtAmount);
         bool success = usdt.transferFrom(treasuryAddress,msg.sender,_usdtAmount);
         require(success == true, "USDT Transfer failed in redeemUSDT");
+
+        //! getting options since,the src don't know the dst state
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+
+        //! calculting fee 
+        MessagingFee memory fee = quote(dstEid, FunctionToDo(1), 0, _options, false);
+
+        //! Calling Omnichain send function
+        send(dstEid, FunctionToDo(1), omniChainCDS, 0, fee, _options);
     }
 
     function setWithdrawTimeLimit(uint64 _timeLimit) external onlyAdmin {
@@ -559,10 +579,10 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
         //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, _options, false);
+        MessagingFee memory fee = quote(dstEid, FunctionToDo(1), 0, _options, false);
 
         //! Calling Omnichain send function
-        send(dstEid, omniChainCDS, fee, _options);
+        send(dstEid, FunctionToDo(1), omniChainCDS, 0, fee, _options);
     }
 
     /**
@@ -634,11 +654,13 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
 
     function send(
         uint32 _dstEid,
+        FunctionToDo _functionToDo,
         OmniChainCDSData memory _message,
+        uint256 optionsFeesToGetFromOtherChain,
         MessagingFee memory fee,
         bytes memory _options
     ) internal returns (MessagingReceipt memory receipt) {
-        bytes memory _payload = abi.encode(_message);
+        bytes memory _payload = abi.encode(_functionToDo, _message, optionsFeesToGetFromOtherChain);
         
         //! Calling layer zero send function to send to dst chain
         receipt = _lzSend(_dstEid, _payload, _options, fee, payable(msg.sender));
@@ -646,10 +668,15 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
 
     function quote(
         uint32 _dstEid,
+        FunctionToDo _functionToDo,
+        uint256 optionsFeesToGetFromOtherChain,
         bytes memory _options,
         bool _payInLzToken
     ) public view returns (MessagingFee memory fee) {
-        bytes memory payload = abi.encode(omniChainCDS);
+        bytes memory payload = abi.encode(
+            _functionToDo,
+            omniChainCDS,
+            optionsFeesToGetFromOtherChain);
         fee = _quote(_dstEid, payload, _options, _payInLzToken);
     }
 
@@ -661,21 +688,17 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         bytes calldata /*_extraData*/
     ) internal override {
 
-        uint8[] memory index;
-
         OmniChainCDSData memory data;
+        FunctionToDo functionToDo;
+        uint256 optionsFeesToRemove;
 
-        data = abi.decode(payload, (OmniChainCDSData));
+        (functionToDo, data, optionsFeesToRemove) = abi.decode(payload, (FunctionToDo, OmniChainCDSData, uint256));
 
-        if(index.length > 0){
-            // bytes memory _payload = abi.encode();
-            // bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(50000, 0);
-            // MessagingFee memory fee = quote(dstEid, ,[], _options, false);
-            // _lzSend(dstEid, _payload, _options, fee, payable(msg.sender));
-        }else{
-
+        if(functionToDo == FunctionToDo.UPDATE_GLOBAL){
             omniChainCDS = data;
-
+        }else{
+            totalCdsDepositedAmountWithOptionFees -= optionsFeesToRemove;
+            omniChainCDS = data;
         }
     }
 

@@ -49,12 +49,16 @@ interface CDSInterface {
         uint128 lastCumulativeRate;
     }
 
+    enum FunctionToDo { DUMMY, UPDATE_GLOBAL, UPDATE_INDIVIDUAL }
+
     function totalCdsDepositedAmount() external view returns(uint256);
     function omniChainCDSTotalCdsDepositedAmount() external view returns(uint256);
     function totalAvailableLiquidationAmount() external returns(uint256);
     function omniChainCDSTotalAvailableLiquidationAmount() external view returns(uint256);
     function quote(
         uint32 _dstEid,
+        FunctionToDo _functionToDo,
+        uint256 optionsFeesToGetFromOtherChain,
         bytes memory _options,
         bool _payInLzToken
     ) external view returns (MessagingFee memory fee);

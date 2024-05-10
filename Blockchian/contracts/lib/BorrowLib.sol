@@ -62,8 +62,8 @@ library BorrowLib {
             }
 
             // Set the currentCDSPoolValue to lastCDSPoolValue for next deposit
-            currentCDSPoolValue = currentCDSPoolValue * AMINT_PRECISION;
             previousData.cdsPoolValue = currentCDSPoolValue;
+            currentCDSPoolValue = currentCDSPoolValue * AMINT_PRECISION;
 
         }else{
 
