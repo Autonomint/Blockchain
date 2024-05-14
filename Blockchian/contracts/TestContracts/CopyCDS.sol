@@ -36,7 +36,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
 
     uint128 private lastEthPrice;
     uint128 private fallbackEthPrice;
-    uint64  public cdsCount; // cds depositors count
+    uint64  private cdsCount; // cds depositors count
     uint64  private withdrawTimeLimit; // Fixed Time interval between deposit and withdraw
     uint256 public totalCdsDepositedAmount; // total amint and usdt deposited in cds
     uint256 public totalCdsDepositedAmountWithOptionFees;
@@ -44,8 +44,8 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
     uint128 private lastCumulativeRate; 
     uint8   private amintLimit; // amint limit in percent
     uint64  private usdtLimit; // usdt limit in number
-    uint256 public usdtAmountDepositedTillNow; // total usdt deposited till now
-    uint256 public burnedAmintInRedeem;
+    uint256 private usdtAmountDepositedTillNow; // total usdt deposited till now
+    uint256 private burnedAmintInRedeem;
     uint128 private cumulativeValue;
     bool    private cumulativeValueSign;
 
@@ -361,9 +361,10 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                 }
 
                 if(optionsFeesToGetFromOtherChain > 0){
-                    treasury.oftReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
+                    treasury.oftOrNativeReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
                         ITreasury.FunctionToDo(2),
-                        ITreasury.AmintOftTransferData( treasuryAddress, optionsFeesToGetFromOtherChain));
+                        ITreasury.AmintOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
+                        ITreasury.NativeTokenTransferData(treasuryAddress, ethAmount));
                 }
 
                 cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
@@ -387,9 +388,10 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         }else{
 
             if(optionsFeesToGetFromOtherChain > 0){
-                treasury.oftReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
+                treasury.oftOrNativeReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
                     ITreasury.FunctionToDo(2),
-                    ITreasury.AmintOftTransferData( treasuryAddress, optionsFeesToGetFromOtherChain));
+                    ITreasury.AmintOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
+                    ITreasury.NativeTokenTransferData(address(0), 0));
             }
             
             // amint.approve(msg.sender, returnAmount);

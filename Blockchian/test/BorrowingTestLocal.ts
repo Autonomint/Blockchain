@@ -511,9 +511,9 @@ describe("Borrowing Contract",function(){
             const depositAmount = ethers.parseEther("1");
 
             let nativeFee1 = 0
-            ;[nativeFee1] = await BorrowingContractA.quote(eidB, [5,10,15,20,25,30,35,40], options, false)
+            ;[nativeFee1] = await BorrowingContractB.quote(eidA, [5,10,15,20,25,30,35,40], options, false)
             let nativeFee2 = 0
-            ;[nativeFee2] = await treasuryA.quote(eidB,1, [ZeroAddress,0],options, false)
+            ;[nativeFee2] = await treasuryB.quote(eidA,1, [ZeroAddress,0],[ZeroAddress,0],options, false)
 
             await BorrowingContractB.connect(user2).depositTokens(
                 100000,
@@ -524,7 +524,6 @@ describe("Borrowing Contract",function(){
                 depositAmount,
                 {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2) + BigInt(nativeFee))})
 
-
             const blockNumber = await ethers.provider.getBlockNumber(); // Get latest block number
             const latestBlock = await ethers.provider.getBlock(blockNumber);
             const latestTimestamp1 = latestBlock.timestamp;
@@ -532,13 +531,13 @@ describe("Borrowing Contract",function(){
 
             const optionsA = Options.newOptions().addExecutorLzReceiveOption(450000, 0).toHex().toString()
             let nativeFee2a = 0
-            ;[nativeFee2a] = await treasuryB.quote(eidA, 2, [ZeroAddress,0],optionsA, false)
+            ;[nativeFee2a] = await treasuryB.quote(eidA, 1, [ZeroAddress,0],[ZeroAddress,0],optionsA, false)
             
             await BorrowingContractB.connect(owner).liquidate(
                 await user2.getAddress(),
                 1,
                 80000,
-                {value: (nativeFee1 + nativeFee2a + nativeFee).toString()})
+                {value: nativeFee1 + nativeFee2a + nativeFee})
         })
     })
 })

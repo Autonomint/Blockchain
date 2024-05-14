@@ -98,8 +98,13 @@ interface ITreasury{
         uint256 tokensToSend;
     }
 
+    struct NativeTokenTransferData{
+        address recipient;
+        uint256 nativeTokensToSend;
+    }
+
     enum Protocol{Aave,Compound}
-    enum FunctionToDo { DUMMY, UPDATE, TRANSFER }
+    enum FunctionToDo { DUMMY, UPDATE, TOKEN_TRANSFER, NATIVE_TRANSFER }
 
         function deposit(
             uint256 _depositingAmount,
@@ -137,13 +142,15 @@ interface ITreasury{
             uint32 _dstEid,
             FunctionToDo _functionToDo,
             AmintOftTransferData memory _oftTransferData,
+            NativeTokenTransferData memory _nativeTokenTransferData,
             bytes memory _options,
             bool _payInLzToken
         ) external view returns (MessagingFee memory fee);
 
-        function oftReceiveFromOtherChains(
+        function oftOrNativeReceiveFromOtherChains(
             FunctionToDo _functionToDo,
-            AmintOftTransferData memory _oftTransferData
+            AmintOftTransferData memory _oftTransferData,
+            NativeTokenTransferData memory nativeTokenTransferData
         ) external payable returns (MessagingReceipt memory receipt);
 
         function updateHasBorrowed(address borrower,bool _bool) external;

@@ -185,10 +185,16 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
         //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, FunctionToDo(1), AmintOftTransferData( address(0), 0), _options, false);
+        MessagingFee memory fee = quote(
+            dstEid, 
+            FunctionToDo(1), 
+            AmintOftTransferData( address(0), 0),
+            NativeTokenTransferData( address(0), 0),
+            _options, 
+            false);
 
         //! Calling omnichain send function
-        send(dstEid, FunctionToDo(1), omniChainTreasury, AmintOftTransferData( address(0), 0), fee, _options);
+        send(dstEid, FunctionToDo(1), omniChainTreasury, fee, _options);
 
         emit Deposit(user,_depositingAmount);
         return DepositResult(borrowing[user].hasDeposited,borrowerIndex);
@@ -232,10 +238,16 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
         //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, FunctionToDo(1), AmintOftTransferData( address(0), 0), _options, false);
+        MessagingFee memory fee = quote(
+            dstEid, 
+            FunctionToDo(1), 
+            AmintOftTransferData( address(0), 0), 
+            NativeTokenTransferData( address(0), 0),
+            _options, 
+            false);
 
         //! Calling omnichain send function
-        send(dstEid, FunctionToDo(1), omniChainTreasury, AmintOftTransferData( address(0), 0), fee, _options);
+        send(dstEid, FunctionToDo(1), omniChainTreasury, fee, _options);
         // Send the ETH to Borrower
         (bool sent,) = payable(toAddress).call{value: amount}("");
         require(sent, "Failed to send Ether");
@@ -905,37 +917,47 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         dstEid = _eid;
     }
 
-    function oftReceiveFromOtherChains(
+    function oftOrNativeReceiveFromOtherChains(
         FunctionToDo _functionToDo,
-        AmintOftTransferData memory _oftTransferData
+        AmintOftTransferData memory _oftTransferData,
+        NativeTokenTransferData memory _nativeTokenTransferData
     ) external payable onlyCDSOrBorrowingContract returns (MessagingReceipt memory receipt) {
-        bytes memory _payload = abi.encode(_functionToDo, omniChainTreasury, _oftTransferData);
 
-        //! getting options since,the src don't know the dst state
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
-
-        SendParam memory _sendParam = SendParam(
-            dstEid,
-            bytes32(uint256(uint160(_oftTransferData.recipient))),
-            _oftTransferData.tokensToSend,
-            _oftTransferData.tokensToSend,
-            options,
-            '0x',
-            '0x'
-        );
-        MessagingFee memory fee = amint.quoteSend( _sendParam, false);
-
-        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(260000, 0).addExecutorNativeDropOption(
-            uint128(fee.nativeFee), 
-            bytes32(uint256(uint160(_oftTransferData.recipient)))
-        );
-
-        MessagingFee memory _fee = quote(
-            dstEid, 
-            FunctionToDo(2),
+        bytes memory _payload = abi.encode(
+            _functionToDo, 
+            omniChainTreasury, 
             _oftTransferData,
-            _options,
-            false);
+            _nativeTokenTransferData);
+
+        MessagingFee memory _fee;
+        bytes memory _options;
+
+        if(_functionToDo == FunctionToDo.TOKEN_TRANSFER){
+
+            //! getting options since,the src don't know the dst state
+            bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
+
+            SendParam memory _sendParam = SendParam(
+                dstEid,
+                bytes32(uint256(uint160(_oftTransferData.recipient))),
+                _oftTransferData.tokensToSend,
+                _oftTransferData.tokensToSend,
+                options,
+                '0x',
+                '0x'
+            );
+            MessagingFee memory fee = amint.quoteSend( _sendParam, false);
+
+            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(260000, 0).addExecutorNativeDropOption(
+                uint128(fee.nativeFee), 
+                bytes32(uint256(uint160(_oftTransferData.recipient)))
+            );
+
+            _fee = quote( dstEid, FunctionToDo(2), _oftTransferData, _nativeTokenTransferData, _options, false);
+        }else if(_functionToDo == FunctionToDo.NATIVE_TRANSFER){
+            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(260000, 0);
+        }
+
         //! Calling layer zero send function to send to dst chain
         receipt = _lzSend(dstEid, _payload, _options, _fee, payable(msg.sender));
     }
@@ -944,11 +966,14 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         uint32 _dstEid,
         FunctionToDo _functionToDo,
         OmniChainTreasuryData memory _message,
-        AmintOftTransferData memory _oftTransferData,
         MessagingFee memory _fee,
         bytes memory _options
     ) internal onlyBorrowingContract returns (MessagingReceipt memory receipt) {
-        bytes memory _payload = abi.encode(_functionToDo, _message, _oftTransferData);
+        bytes memory _payload = abi.encode(
+            _functionToDo, 
+            _message, 
+            AmintOftTransferData(address(0),0),
+            NativeTokenTransferData(address(0), 0));
         
         //! Calling layer zero send function to send to dst chain
         receipt = _lzSend(_dstEid, _payload, _options, _fee, payable(msg.sender));
@@ -958,10 +983,11 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         uint32 _dstEid,
         FunctionToDo _functionToDo,
         AmintOftTransferData memory _oftTransferData,
+        NativeTokenTransferData memory _nativeTokenTransferData,
         bytes memory _options,
         bool _payInLzToken
     ) public view returns (MessagingFee memory fee) {
-        bytes memory payload = abi.encode(_functionToDo, omniChainTreasury, _oftTransferData);
+        bytes memory payload = abi.encode(_functionToDo, omniChainTreasury, _oftTransferData, _nativeTokenTransferData);
         fee = _quote(_dstEid, payload, _options, _payInLzToken);
     }
 
@@ -973,13 +999,19 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         bytes calldata /*_extraData*/
     ) internal override {
 
-        OmniChainTreasuryData memory data;
         FunctionToDo functionToDo;
+        OmniChainTreasuryData memory data;
         AmintOftTransferData memory oftTransferData;
+        NativeTokenTransferData memory nativeTokenTransferData;
 
-        (functionToDo, data, oftTransferData) = abi.decode(payload, ( FunctionToDo, OmniChainTreasuryData, AmintOftTransferData));
+        (
+            functionToDo,
+            data, 
+            oftTransferData, 
+            nativeTokenTransferData
+            ) = abi.decode(payload, ( FunctionToDo, OmniChainTreasuryData, AmintOftTransferData, NativeTokenTransferData));
 
-        if(functionToDo == FunctionToDo.TRANSFER){
+        if(functionToDo == FunctionToDo.TOKEN_TRANSFER){
 
             //! getting options since,the src don't know the dst state
             bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
@@ -996,10 +1028,47 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
             MessagingFee memory _fee = amint.quoteSend( _sendParam, false);
             
             omniChainTreasury = data;
+            // console.log("n fee", _fee.nativeFee);
+            // console.logBytes32(_sendParam.to);
+            console.log("send param", _sendParam.amountLD);
+            // console.log("send param", _sendParam.minAmountLD);
+            // console.log("tre address", address(this));
+            console.log("gas left", gasleft());
+            // console.log("amint address", address(amint));
+            // console.log("trea amint bal", amint.balanceOf(address(this)));
+
             amint.send{ value: _fee.nativeFee}( _sendParam, _fee, address(this));
+                        console.log("gas left 2", gasleft());
+
+        }else if(functionToDo == FunctionToDo.NATIVE_TRANSFER){
+
+            omniChainTreasury = data;
+
+            bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(260000, 0).addExecutorNativeDropOption(
+                uint128(nativeTokenTransferData.nativeTokensToSend), 
+                bytes32(uint256(uint160(nativeTokenTransferData.recipient)))
+            );
+
+            bytes memory _payload = abi.encode(
+                FunctionToDo(1), 
+                omniChainTreasury, 
+                AmintOftTransferData(address(0),0),
+                NativeTokenTransferData(address(0), 0));
+
+            MessagingFee memory _fee = quote( 
+                dstEid, 
+                FunctionToDo(1), 
+                AmintOftTransferData(address(0),0),
+                NativeTokenTransferData(address(0), 0), 
+                _options, 
+                false);
+
+            _lzSend(dstEid, _payload, _options, _fee, payable(msg.sender));
 
         }else{
+
             omniChainTreasury = data;
+
         }
 
     }
