@@ -496,8 +496,8 @@ describe("Borrowing Contract",function(){
 
     
     describe("Should Liquidate ETH from protocol",function(){
-        it("Should Liquidate ETH",async function(){
-            const {BorrowingContractA,BorrowingContractB,CDSContractA,CDSContractB,usdtA,usdtB,treasuryA} = await loadFixture(deployer);
+        it.only("Should Liquidate ETH",async function(){
+            const {BorrowingContractA,BorrowingContractB,CDSContractA,usdtA,treasuryA,treasuryB} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
             await usdtA.connect(user1).mint(user1.getAddress(),10000000000);
@@ -505,62 +505,40 @@ describe("Borrowing Contract",function(){
             const options = "0x00030100110100000000000000000000000000030d40";
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,123,123,[0,0,0,0],0,options, false)
             await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
-
-            await usdtB.connect(user1).mint(user1.getAddress(),10000000000);
-            await usdtB.connect(user1).approve(CDSContractB.getAddress(),10000000000);
-            await CDSContractB.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
             
             const depositAmount = ethers.parseEther("1");
-            const coder = ethers.AbiCoder.defaultAbiCoder();
-            const callDataDeposit = coder.encode([            
-                "uint64",
-                "uint64",
-                "uint256",
-                "uint64",
-                "uint64",
-                "uint256",
-                "address",
-                'uint64'
-            ],[
-                100000,
-                timeStamp,
-                depositAmount,
-                1,
-                110000,
-                ethVolatility,
-                await user1.getAddress(),
-                1
-            ]);
 
             let nativeFee1 = 0
-            ;[nativeFee1] = await BorrowingContractA.quote(eidB, [5,10,15,20,25,30,35,40],[], options, false)
+            ;[nativeFee1] = await BorrowingContractA.quote(eidB, [5,10,15,20,25,30,35,40], options, false)
             let nativeFee2 = 0
-            ;[nativeFee2] = await treasuryA.quote(eidB,1, [5,10,15,20,25,30,35,40,45], [ZeroAddress,0],options, false)
+            ;[nativeFee2] = await treasuryA.quote(eidB,1, [ZeroAddress,0],options, false)
 
-            await BorrowingContractB.connect(user2).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2))})
-            
-            const callDataLiquidate = coder.encode([            
-                "uint64",
-                "uint64",
-                "uint256",
-                "uint64",
-                "uint64",
-                "uint256",
-                "address",
-                'uint64'
-            ],[
-                80000,
+            await BorrowingContractB.connect(user2).depositTokens(
+                100000,
                 timeStamp,
-                depositAmount,
                 1,
                 110000,
                 ethVolatility,
+                depositAmount,
+                {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2) + BigInt(nativeFee))})
+
+
+            const blockNumber = await ethers.provider.getBlockNumber(); // Get latest block number
+            const latestBlock = await ethers.provider.getBlock(blockNumber);
+            const latestTimestamp1 = latestBlock.timestamp;
+            await time.increaseTo(latestTimestamp1 + 2592000);
+
+            const optionsA = Options.newOptions().addExecutorLzReceiveOption(450000, 0).toHex().toString()
+            let nativeFee2a = 0
+            ;[nativeFee2a] = await treasuryB.quote(eidA, 2, [ZeroAddress,0],optionsA, false)
+            
+            await BorrowingContractB.connect(owner).liquidate(
                 await user2.getAddress(),
-                1
-            ]);
-            await BorrowingContractB.connect(owner).send(3, callDataLiquidate, {value: (nativeFee1 + nativeFee2).toString()})
+                1,
+                80000,
+                {value: (nativeFee1 + nativeFee2a + nativeFee).toString()})
         })
     })
 })

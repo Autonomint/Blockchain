@@ -19,6 +19,7 @@ library BorrowLib {
     uint128 constant RATIO_PRECISION = 1e4;
     uint128 constant RATE_PRECISION = 1e27;
     uint128 constant AMINT_PRECISION = 1e12;
+    uint128 constant LIQ_AMOUNT_PRECISION = 1e10;
 
     function calculateRatio(
         uint256 _amount,
@@ -143,6 +144,50 @@ library BorrowLib {
         uint256 amintToTransfer = (amintToAbondRatioLiq * aBondAmount) / BorrowLib.RATE_PRECISION;
 
         return (depositedAmount,redeemableAmount,amintToTransfer);
+    }
+
+    function getLiquidationAmountProportions(
+        uint256 _liqAmount,
+        uint256 _totalCdsDepositedAmount,
+        uint256 _totalGlobalCdsDepositedAmount,
+        uint256 _totalAvailableLiqAmount,
+        uint256 _totalGlobalAvailableLiqAmountAmount
+    ) internal pure returns (uint256){
+
+        uint256 otherChainCDSAmount = _totalGlobalCdsDepositedAmount - _totalCdsDepositedAmount;
+
+        uint256 totalAvailableLiqAmountInOtherChain = _totalGlobalAvailableLiqAmountAmount - _totalAvailableLiqAmount;
+
+        uint256 share = (otherChainCDSAmount * LIQ_AMOUNT_PRECISION)/_totalGlobalCdsDepositedAmount;
+        uint256 liqAmountToGet = (_liqAmount * share)/LIQ_AMOUNT_PRECISION;
+        uint256 liqAmountRemaining = _liqAmount - liqAmountToGet;
+
+        if(totalAvailableLiqAmountInOtherChain == 0){
+            liqAmountToGet = 0;
+        }else{
+            if(totalAvailableLiqAmountInOtherChain < liqAmountToGet) {
+                liqAmountToGet = totalAvailableLiqAmountInOtherChain;
+            }else{
+                if(totalAvailableLiqAmountInOtherChain > liqAmountToGet && _totalAvailableLiqAmount < liqAmountRemaining){
+                    liqAmountToGet += liqAmountRemaining - _totalAvailableLiqAmount;
+                }else{
+                    liqAmountToGet = liqAmountToGet;
+                }
+            }
+        }
+        return liqAmountToGet;
+    }
+
+    function getCdsProfitsProportions(
+        uint128 _liqAmount,
+        uint128 _liqAmountToGetFromOtherChain,
+        uint128 _cdsProfits
+    ) internal pure returns (uint128){
+
+        uint128 share = (_liqAmountToGetFromOtherChain * LIQ_AMOUNT_PRECISION)/_liqAmount;
+        uint128 cdsProfitsForOtherChain = (_cdsProfits * share)/LIQ_AMOUNT_PRECISION;
+
+        return cdsProfitsForOtherChain;
     }
 
     function redeemYields(

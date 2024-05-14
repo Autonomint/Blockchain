@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: unlicensed
 pragma solidity 0.8.20;
 
-import { MessagingFee } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
+import { MessagingReceipt, MessagingFee } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
 
 interface CDSInterface {
 
@@ -59,9 +59,25 @@ interface CDSInterface {
         uint32 _dstEid,
         FunctionToDo _functionToDo,
         uint256 optionsFeesToGetFromOtherChain,
+        uint256 cdsAmountToGetFromOtherChain,
+        uint256 liqAmountToGetFromOtherChain,
+        LiquidationInfo memory liquidationInfo,
+        uint128 liqIndex,
         bytes memory _options,
         bool _payInLzToken
     ) external view returns (MessagingFee memory fee);
+
+    function callLzSendFromExternal(
+        uint32 _dstEid,
+        FunctionToDo functionToDo,
+        uint256 optionsFeesToGetFromOtherChain,
+        uint256 cdsAmountToGetFromOtherChain,
+        uint256 liqAmountToGetFromOtherChain,
+        LiquidationInfo memory liquidationInfo,
+        uint128 liqIndex,
+        MessagingFee memory fee,
+        bytes memory _options
+    ) external payable returns (MessagingReceipt memory receipt);
 
     function calculateCumulativeRate(uint128 fees) external payable;
 

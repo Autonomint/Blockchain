@@ -35,18 +35,18 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
     address private treasuryAddress; // treasury contract address
     address private admin; // admin address
     uint8   private LTV; // LTV is a percentage eg LTV = 60 is 60%, must be divided by 100 in calculations
-    uint8   public APY; 
-    uint256 public totalNormalizedAmount; // total normalized amount in protocol
-    address public priceFeedAddress; // ETH USD pricefeed address
+    uint8   private APY; 
+    uint256 private totalNormalizedAmount; // total normalized amount in protocol
+    address private priceFeedAddress; // ETH USD pricefeed address
     uint128 private lastEthprice; // previous eth price
-    uint256 public lastEthVaultValue; // previous eth vault value
-    uint256 public lastCDSPoolValue; // previous CDS pool value
+    uint256 private lastEthVaultValue; // previous eth vault value
+    uint256 private lastCDSPoolValue; // previous CDS pool value
     uint256 private lastTotalCDSPool;
     uint256 public lastCumulativeRate; // previous cumulative rate
     uint128 private lastEventTime;
-    uint128 public noOfLiquidations; // total number of liquidation happened till now
+    uint128 private noOfLiquidations; // total number of liquidation happened till now
     uint64  private withdrawTimeLimit; // withdraw time limit
-    uint128 public ratePerSec;
+    uint128 private ratePerSec;
     uint64  private bondRatio;
 
     string  public constant name = "AMINT Stablecoin";
@@ -54,8 +54,8 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
     bytes32 public DOMAIN_SEPARATOR;
     bytes32 public constant PERMIT_TYPEHASH = keccak256("Permit(address holder,address spender,uint256 allowedAmount,bool allowed,uint256 expiry)");
 
-    uint256 public ethRemainingInWithdraw;
-    uint256 public ethValueRemainingInWithdraw;
+    uint256 private ethRemainingInWithdraw;
+    uint256 private ethValueRemainingInWithdraw;
 
     uint32 private dstEid; //! dst id
     uint64 private nonce; 
@@ -217,15 +217,23 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         uint64 _strikePrice,
         uint256 _volatility,
         uint256 _depositingAmount
-    ) internal nonReentrant whenNotPaused(IMultiSign.Functions(0)) {
+    ) external payable nonReentrant whenNotPaused(IMultiSign.Functions(0)) {
         require(msg.value > 0, "Cannot deposit zero tokens");
         require(msg.value > _depositingAmount,"Borrowing: Don't have enough LZ fee");
 
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
-        uint8[] memory structIndex;
         //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, omniChainBorrowing, structIndex, _options, false);
-        MessagingFee memory cdsLzFee = cds.quote(dstEid, CDSInterface.FunctionToDo(1), 0, _options, false);
+        MessagingFee memory fee = quote(dstEid, omniChainBorrowing, _options, false);
+        MessagingFee memory cdsLzFee = cds.quote(
+            dstEid, 
+            CDSInterface.FunctionToDo(1), 
+            0, 
+            0, 
+            0,
+            CDSInterface.LiquidationInfo(0,0,0,0), 
+            0, 
+            _options, 
+            false);
 
         //Call calculateInverseOfRatio function to find ratio
         uint64 ratio = calculateRatio(_depositingAmount,uint128(_ethPrice));
@@ -234,7 +242,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         // Call calculateOptionPrice in options contract to get options fees
         uint256 optionFees = options.calculateOptionPrice(_ethPrice,_volatility,_depositingAmount,_strikePercent);
         uint256 tokensToLend = BorrowLib.tokensToLend(_depositingAmount, _ethPrice, LTV);
-        uint256 borrowAmount = tokensToLend - optionFees;
+        uint256 borrowAmount = tokensToLend;
         
         //Call the deposit function in Treasury contract
         ITreasury.DepositResult memory depositResult = treasury.deposit{value:(msg.value - fee.nativeFee - cdsLzFee.nativeFee)}(
@@ -282,6 +290,9 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         //! updating global data 
         omniChainBorrowing.normalizedAmount += normalizedAmount;  
 
+        //! Calling Omnichain send function
+        send( dstEid, omniChainBorrowing, fee, _options);
+
         emit Deposit(index,_depositingAmount,borrowAmount,normalizedAmount);
     }
 
@@ -298,7 +309,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         uint64 _index,
         uint64 _ethPrice,
         uint64 _withdrawTime
-    ) internal nonReentrant whenNotPaused(IMultiSign.Functions(1)){
+    ) external payable nonReentrant whenNotPaused(IMultiSign.Functions(1)){
         // check is _toAddress in not a zero address and isContract address
         require(_toAddress != address(0) && isContract(_toAddress) != true, "To address cannot be a zero and contract address");
         
@@ -389,9 +400,11 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
                 ethToReturn = (ethToReturn * 50)/100;
 
                 bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
-                uint8[] memory structIndex;
                 //! calculting fee 
-                MessagingFee memory fee = quote(dstEid, omniChainBorrowing, structIndex, _options, false);
+                MessagingFee memory fee = quote(dstEid, omniChainBorrowing, _options, false);
+
+                //! Calling Omnichain send function
+                send( dstEid, omniChainBorrowing, fee, _options);
 
                 // Call withdraw in treasury
                 bool sent = treasury.withdraw{value:(msg.value - fee.nativeFee)}(msg.sender,_toAddress,ethToReturn,_index);
@@ -428,7 +441,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         address _user,
         uint64 _index,
         uint64 currentEthPrice
-    ) internal whenNotPaused(IMultiSign.Functions(2)) onlyAdmin{
+    ) external payable whenNotPaused(IMultiSign.Functions(2)) onlyAdmin{
 
         // Check whether the liquidator 
         require(_user != address(0), "To address cannot be a zero address");
@@ -461,8 +474,9 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         calculateCumulativeRate();
         uint256 borrowerDebt = ((depositDetail.normalizedAmount * lastCumulativeRate)/BorrowLib.RATE_PRECISION);
         uint128 returnToTreasury = uint128(borrowerDebt);
+
         // 20% to abond amint pool
-        uint128 returnToAbond = (((((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/BorrowLib.AMINT_PRECISION)/100) - returnToTreasury) * 20)/100;
+        uint128 returnToAbond = (((((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/BorrowLib.AMINT_PRECISION)/100) - returnToTreasury) * 10)/100;
         treasury.updateAbondAmintPool(returnToAbond,true);
         // CDS profits
         uint128 cdsProfits = (((depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/BorrowLib.AMINT_PRECISION)/100) - returnToTreasury - returnToAbond;
@@ -476,17 +490,67 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
             depositDetail.depositedAmount,
             cds.omniChainCDSTotalAvailableLiquidationAmount());
 
-        cds.updateLiquidationInfo(noOfLiquidations,liquidationInfo);
-        cds.updateTotalCdsDepositedAmount(liquidationAmountNeeded - cdsProfits);
-        cds.updateTotalCdsDepositedAmountWithOptionFees(liquidationAmountNeeded - cdsProfits);
-        cds.updateTotalAvailableLiquidationAmount(liquidationAmountNeeded - cdsProfits);
+        uint256 liqAmountToGetFromOtherChain = BorrowLib.getLiquidationAmountProportions(
+            liquidationAmountNeeded,
+            cds.totalCdsDepositedAmount(),
+            cds.omniChainCDSTotalCdsDepositedAmount(),
+            cds.totalAvailableLiquidationAmount(),
+            cds.omniChainCDSTotalAvailableLiquidationAmount()
+        );
+
+        uint128 cdsProfitsForOtherChain = BorrowLib.getCdsProfitsProportions(
+            liquidationAmountNeeded,
+            uint128(liqAmountToGetFromOtherChain),
+            cdsProfits);
+
+        cds.updateLiquidationInfo(omniChainBorrowing.noOfLiquidations,liquidationInfo);
+        cds.updateTotalCdsDepositedAmount(
+            (liquidationAmountNeeded - uint128(liqAmountToGetFromOtherChain)) - (cdsProfits - cdsProfitsForOtherChain));
+        cds.updateTotalCdsDepositedAmountWithOptionFees(
+            (liquidationAmountNeeded - uint128(liqAmountToGetFromOtherChain)) - (cdsProfits - cdsProfitsForOtherChain));
+        cds.updateTotalAvailableLiquidationAmount(
+            (liquidationAmountNeeded - uint128(liqAmountToGetFromOtherChain)) - (cdsProfits - cdsProfitsForOtherChain));
         treasury.updateEthProfitsOfLiquidators(depositDetail.depositedAmount,true);
         //treasury.updateInterestFromExternalProtocol(externalProtocolInterest);
 
-        //Update totalInterestFromLiquidation
-        // uint256 totalInterestFromLiquidation = uint256(returnToTreasury - borrowerDebt + returnToAbond);
-        // treasury.updateTotalInterestFromLiquidation(totalInterestFromLiquidation);
+        // Update totalInterestFromLiquidation
+        uint256 totalInterestFromLiquidation = uint256(borrowerDebt - depositDetail.borrowedAmount);
+        treasury.updateTotalInterestFromLiquidation(totalInterestFromLiquidation);
         treasury.updateDepositDetails(borrower,index,depositDetail);
+
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+        MessagingFee memory fee = quote(dstEid, omniChainBorrowing, _options, false);
+        MessagingFee memory cdsLzFee = cds.quote(
+            dstEid, 
+            CDSInterface.FunctionToDo(2), 
+            0, 
+            0, 
+            0,
+            CDSInterface.LiquidationInfo(0,0,0,0), 
+            0,  
+            _options, 
+            false);
+
+        if(liqAmountToGetFromOtherChain > 0){
+            treasury.oftReceiveFromOtherChains{ value: msg.value - fee.nativeFee - cdsLzFee.nativeFee}(
+                ITreasury.FunctionToDo(2),
+                ITreasury.AmintOftTransferData( treasuryAddress, liqAmountToGetFromOtherChain));
+        }
+
+        cds.callLzSendFromExternal{ value: cdsLzFee.nativeFee}(
+            dstEid,
+            CDSInterface.FunctionToDo(2),
+            liqAmountToGetFromOtherChain,
+            liqAmountToGetFromOtherChain,
+            liqAmountToGetFromOtherChain,
+            liquidationInfo,
+            omniChainBorrowing.noOfLiquidations,
+            cdsLzFee,
+            _options
+        );
+
+        //! Calling Omnichain send function
+        send( dstEid, omniChainBorrowing, fee, _options);
 
         // Burn the borrow amount
         treasury.approveAmint(address(this),depositDetail.borrowedAmount);
@@ -575,81 +639,6 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         //! updating global data 
         omniChainBorrowing = omniChainBorrowingFromLib;
 
-        // uint256 netPLCdsPool;
-
-        // if(currentEthPrice == 0){
-        //     revert BorrowLib.Borrowing_GettingETHPriceFailed();
-        // }
-
-        // // Get the number of Borrowers
-        // uint128 noOfBorrowers = treasury.noOfBorrowers();
-
-        // // Calculate net P/L of CDS Pool
-        // if(currentEthPrice > lastEthprice){
-        //     netPLCdsPool = (currentEthPrice - lastEthprice) * noOfBorrowers;
-        // }else{
-        //     netPLCdsPool = (lastEthprice - currentEthPrice) * noOfBorrowers;
-        // }
-
-        // uint256 currentEthVaultValue;
-        // uint256 currentCDSPoolValue;
-        // BorrowLib.OmniChainBorrowingData memory previousData = omniChainBorrowing;
- 
-        // // Check it is the first deposit
-        // if(noOfBorrowers == 0){
-
-        //     // Calculate the ethVault value
-        //     // lastEthVaultValue = _amount * currentEthPrice;
-        //     omniChainBorrowing.ethVaultValue = _amount * currentEthPrice;
-        //     // Set the currentEthVaultValue to lastEthVaultValue for next deposit
-        //     currentEthVaultValue = omniChainBorrowing.ethVaultValue;
-
-        //     // Get the total amount in CDS
-        //     // lastTotalCDSPool = cds.totalCdsDepositedAmount();
-        //     omniChainBorrowing.totalCDSPool = cds.totalCdsDepositedAmount();
-
-        //     if (currentEthPrice >= lastEthprice){
-        //         currentCDSPoolValue = omniChainBorrowing.totalCDSPool + netPLCdsPool;
-        //     }else{
-        //         currentCDSPoolValue = omniChainBorrowing.totalCDSPool - netPLCdsPool;
-        //     }
-
-        //     // Set the currentCDSPoolValue to lastCDSPoolValue for next deposit
-        //     currentCDSPoolValue = currentCDSPoolValue * BorrowLib.AMINT_PRECISION;
-        //     omniChainBorrowing.cdsPoolValue = currentCDSPoolValue;
-
-        // }else{
-
-        //     currentEthVaultValue = previousData.ethVaultValue + (_amount * currentEthPrice);
-        //     omniChainBorrowing.ethVaultValue = currentEthVaultValue;
-
-        //     uint256 latestTotalCDSPool = cds.totalCdsDepositedAmount();
-
-        //     if(currentEthPrice >= lastEthprice){
-        //         if(latestTotalCDSPool > previousData.totalCDSPool){
-        //             omniChainBorrowing.cdsPoolValue = previousData.cdsPoolValue + (
-        //                 latestTotalCDSPool - previousData.totalCDSPool) + netPLCdsPool;  
-        //         }else{
-        //             omniChainBorrowing.cdsPoolValue = previousData.cdsPoolValue - (
-        //                 previousData.totalCDSPool - latestTotalCDSPool) + netPLCdsPool;
-        //         }
-        //     }else{
-        //         if(latestTotalCDSPool > previousData.totalCDSPool){
-        //             omniChainBorrowing.cdsPoolValue = previousData.cdsPoolValue + (
-        //                 latestTotalCDSPool - previousData.totalCDSPool) - netPLCdsPool;  
-        //         }else{
-        //             omniChainBorrowing.cdsPoolValue = previousData.cdsPoolValue - (
-        //                 previousData.totalCDSPool - latestTotalCDSPool) - netPLCdsPool;
-        //         }
-        //     }
-
-        //     omniChainBorrowing.totalCDSPool = latestTotalCDSPool;
-        //     currentCDSPoolValue = omniChainBorrowing.cdsPoolValue * BorrowLib.AMINT_PRECISION;
-        // }
-
-        // // Calculate ratio by dividing currentEthVaultValue by currentCDSPoolValue,
-        // // since it may return in decimals we multiply it by 1e6
-        // uint64 ratio = uint64((currentCDSPoolValue * BorrowLib.CUMULATIVE_PRECISION)/currentEthVaultValue);
         return ratio;
     }
 
@@ -675,6 +664,11 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         return omniChainBorrowing.cdsPoolValue;
     }
 
+    function omniChainBorrowingNoOfLiquidations() external view returns(uint128){
+        return omniChainBorrowing.noOfLiquidations;
+    }
+
+
     function getOmniChainBorrowing() external view returns(OmniChainBorrowingData memory){
         return omniChainBorrowing;
     }
@@ -683,62 +677,27 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
      * @dev only user interaction function
      */
 
-    function send( BorrowFunction _borrowFunction, bytes calldata _data )
-        external payable returns (MessagingReceipt memory receipt) {
-
-        (        
-            uint64 _ethPrice,
-            uint64 _time,
-            uint256 _depositingAmount,
-            IOptions.StrikePrice _strikePercent,
-            uint64 _strikePrice,
-            uint256 _volatility,
-            address _user,
-            uint64 _index
-        ) = abi.decode(_data, (
-            uint64,
-            uint64,
-            uint256,
-            IOptions.StrikePrice,
-            uint64,
-            uint256,
-            address,
-            uint64));
-
-        if(_borrowFunction == BorrowFunction.DEPOSIT){
-
-            depositTokens( _ethPrice, _time, _strikePercent, _strikePrice, _volatility, _depositingAmount);
-
-        }else if(_borrowFunction == BorrowFunction.WITHDRAW){
-
-            withDraw( _user, _index, _ethPrice, _time);
-
-        }else if(_borrowFunction == BorrowFunction.LIQUIDATION){
-            liquidate( _user, _index, _ethPrice);
-        }
-
-        //! getting options since,the src don't know the dst state
-        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
-        uint8[] memory structIndex;
-
-        //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, omniChainBorrowing, structIndex, _options, false);
+    function send(        
+        uint32 _dstEid,
+        OmniChainBorrowingData memory _message,
+        MessagingFee memory _fee,
+        bytes memory _options
+    ) internal returns (MessagingReceipt memory receipt) {
 
         //! encoding the message 
-        bytes memory _payload = abi.encode( omniChainBorrowing, structIndex);
+        bytes memory _payload = abi.encode( _message);
 
         //! Calling layer zero send function to send to dst chain
-        receipt = _lzSend(dstEid, _payload, _options, fee, payable(msg.sender));
+        receipt = _lzSend(_dstEid, _payload, _options, _fee, payable(msg.sender));
     }
 
     function quote(
         uint32 _dstEid,
         OmniChainBorrowingData memory _message,
-        uint8[] memory indices,
         bytes memory _options,
         bool _payInLzToken
     ) public view returns (MessagingFee memory fee) {
-        bytes memory payload = abi.encode(_message,indices);
+        bytes memory payload = abi.encode(_message);
         fee = _quote(_dstEid, payload, _options, _payInLzToken);
     }
 
@@ -753,23 +712,11 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         bytes calldata /*_extraData*/
     ) internal override{
 
-        uint8[] memory index;
-
         OmniChainBorrowingData memory data;
 
         //! Decoding the message from src
-        (data,index) = abi.decode(payload, (OmniChainBorrowingData, uint8[]));
+        data = abi.decode(payload, (OmniChainBorrowingData));
 
-
-        if(index.length > 0){
-            // bytes memory _payload = abi.encode();
-            // bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(50000, 0);
-            // MessagingFee memory fee = quote(dstEid, ,[], _options, false);
-            // _lzSend(dstEid, _payload, _options, fee, payable(msg.sender));
-        }else{
-
-            omniChainBorrowing = data;
-        }
+        omniChainBorrowing = data;
     }
-    receive() external payable{}
 }

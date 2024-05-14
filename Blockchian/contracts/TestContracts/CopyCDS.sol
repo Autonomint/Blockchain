@@ -23,36 +23,36 @@ import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/lib
 
 contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp{
 
-    IAMINT      public amint; // our stablecoin
-    IBorrowing  public borrowing; // Borrowing contract interface
-    ITreasury   public treasury; // Treasury contrcat interface
+    IAMINT      private amint; // our stablecoin
+    IBorrowing  private borrowing; // Borrowing contract interface
+    ITreasury   private treasury; // Treasury contrcat interface
     AggregatorV3Interface internal dataFeed;
-    IMultiSign  public multiSign;
-    IERC20      public usdt; // USDT interface
+    IMultiSign  private multiSign;
+    IERC20      private usdt; // USDT interface
 
     address private admin; // admin address
-    address public borrowingContract; // borrowing contract address
-    address public treasuryAddress; // treasury contract address
+    address private borrowingContract; // borrowing contract address
+    address private treasuryAddress; // treasury contract address
 
-    uint128 public lastEthPrice;
-    uint128 public fallbackEthPrice;
+    uint128 private lastEthPrice;
+    uint128 private fallbackEthPrice;
     uint64  public cdsCount; // cds depositors count
-    uint64  public withdrawTimeLimit; // Fixed Time interval between deposit and withdraw
+    uint64  private withdrawTimeLimit; // Fixed Time interval between deposit and withdraw
     uint256 public totalCdsDepositedAmount; // total amint and usdt deposited in cds
     uint256 public totalCdsDepositedAmountWithOptionFees;
     uint256 public totalAvailableLiquidationAmount; // total deposited amint available for liquidation
-    uint128 public lastCumulativeRate; 
-    uint8   public amintLimit; // amint limit in percent
-    uint64  public usdtLimit; // usdt limit in number
+    uint128 private lastCumulativeRate; 
+    uint8   private amintLimit; // amint limit in percent
+    uint64  private usdtLimit; // usdt limit in number
     uint256 public usdtAmountDepositedTillNow; // total usdt deposited till now
     uint256 public burnedAmintInRedeem;
-    uint128 public cumulativeValue;
-    bool    public cumulativeValueSign;
+    uint128 private cumulativeValue;
+    bool    private cumulativeValueSign;
 
     mapping (address => CdsDetails) public cdsDetails;
 
     // liquidations info based on liquidation numbers
-    mapping (uint128 liquidationIndex => LiquidationInfo) public liquidationIndexToInfo;
+    mapping (uint128 liquidationIndex => LiquidationInfo) public omniChainCDSLiqIndexToInfo;
 
     using OptionsBuilder for bytes;
     OmniChainCDSData public omniChainCDS;//! omnichainCDS contains global CDS data(all chains)
@@ -221,7 +221,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         cdsDetails[msg.sender].cdsAccountDetails[index].optedLiquidation = _liquidate;
         //If user opted for liquidation
         if(_liquidate){
-            cdsDetails[msg.sender].cdsAccountDetails[index].liquidationindex = borrowing.noOfLiquidations();
+            cdsDetails[msg.sender].cdsAccountDetails[index].liquidationindex = borrowing.omniChainBorrowingNoOfLiquidations();
             cdsDetails[msg.sender].cdsAccountDetails[index].liquidationAmount = _liquidationAmount;
             cdsDetails[msg.sender].cdsAccountDetails[index].InitialLiquidationAmount = _liquidationAmount;
             totalAvailableLiquidationAmount += _liquidationAmount;
@@ -261,7 +261,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
         //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, FunctionToDo(1), 0, _options, false);
+        MessagingFee memory fee = quote(dstEid, FunctionToDo(1), 0, 0, 0, LiquidationInfo(0,0,0,0), 0, _options, false);
 
         //! Calling Omnichain send function
         send(dstEid, FunctionToDo(1), omniChainCDS, 0, fee, _options);
@@ -305,12 +305,21 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
         //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, FunctionToDo(2), optionsFeesToGetFromOtherChain, _options, false);
+        MessagingFee memory fee = quote(
+            dstEid, 
+            FunctionToDo(2), 
+            optionsFeesToGetFromOtherChain, 
+            0, 
+            0,  
+            LiquidationInfo(0,0,0,0), 
+            0, 
+            _options, 
+            false);
 
         // If user opted for liquidation
         if(cdsDetails[msg.sender].cdsAccountDetails[_index].optedLiquidation){
             returnAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
-            uint128 currentLiquidations = borrowing.noOfLiquidations();
+            uint128 currentLiquidations = borrowing.omniChainBorrowingNoOfLiquidations();
             uint128 liquidationIndexAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationindex;
             uint128 ethAmount;
             if(currentLiquidations >= liquidationIndexAtDeposit){
@@ -318,7 +327,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                 for(uint128 i = (liquidationIndexAtDeposit + 1); i <= currentLiquidations; i++){
                     uint128 liquidationAmount = cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
                     if(liquidationAmount > 0){
-                        LiquidationInfo memory liquidationData = liquidationIndexToInfo[i];
+                        LiquidationInfo memory liquidationData = omniChainCDSLiqIndexToInfo[i];
 
                         uint128 share = (liquidationAmount * 1e10)/uint128(liquidationData.availableLiquidationAmount);
                         uint128 profit;
@@ -504,7 +513,16 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
         //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, FunctionToDo(1), 0, _options, false);
+        MessagingFee memory fee = quote(
+            dstEid, 
+            FunctionToDo(1),
+            0, 
+            0, 
+            0,  
+            LiquidationInfo(0,0,0,0), 
+            0, 
+            _options, 
+            false);
 
         //! Calling Omnichain send function
         send(dstEid, FunctionToDo(1), omniChainCDS, 0, fee, _options);
@@ -579,7 +597,16 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
         //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, FunctionToDo(1), 0, _options, false);
+        MessagingFee memory fee = quote(
+            dstEid, 
+            FunctionToDo(1), 
+            0, 
+            0, 
+            0, 
+            LiquidationInfo(0,0,0,0), 
+            0, 
+            _options, 
+            false);
 
         //! Calling Omnichain send function
         send(dstEid, FunctionToDo(1), omniChainCDS, 0, fee, _options);
@@ -652,6 +679,32 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         return optionsfeesToGet;
     }
 
+    function callLzSendFromExternal(
+        uint32 _dstEid,
+        FunctionToDo functionToDo,
+        uint256 optionsFeesToGetFromOtherChain,
+        uint256 cdsAmountToGetFromOtherChain,
+        uint256 liqAmountToGetFromOtherChain,
+        LiquidationInfo memory liquidationInfo,
+        uint128 liqIndex,
+        MessagingFee memory fee,
+        bytes memory _options
+    ) external payable onlyBorrowingContract returns (MessagingReceipt memory receipt) {
+
+        bytes memory _payload = abi.encode(
+            functionToDo,
+            omniChainCDS,
+            optionsFeesToGetFromOtherChain,
+            cdsAmountToGetFromOtherChain,
+            liqAmountToGetFromOtherChain,
+            liquidationInfo,
+            liqIndex
+            );
+        
+        //! Calling layer zero send function to send to dst chain
+        receipt = _lzSend(_dstEid, _payload, _options, fee, payable(msg.sender));
+    }
+
     function send(
         uint32 _dstEid,
         FunctionToDo _functionToDo,
@@ -660,7 +713,17 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         MessagingFee memory fee,
         bytes memory _options
     ) internal returns (MessagingReceipt memory receipt) {
-        bytes memory _payload = abi.encode(_functionToDo, _message, optionsFeesToGetFromOtherChain);
+
+        LiquidationInfo memory liqInfo;
+
+        bytes memory _payload = abi.encode(
+            _functionToDo, 
+            _message, 
+            optionsFeesToGetFromOtherChain, 
+            0, 
+            0,
+            liqInfo,
+            0);
         
         //! Calling layer zero send function to send to dst chain
         receipt = _lzSend(_dstEid, _payload, _options, fee, payable(msg.sender));
@@ -670,13 +733,21 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         uint32 _dstEid,
         FunctionToDo _functionToDo,
         uint256 optionsFeesToGetFromOtherChain,
+        uint256 cdsAmountToGetFromOtherChain,
+        uint256 liqAmountToGetFromOtherChain,
+        LiquidationInfo memory liquidationInfo,
+        uint128 liqIndex,
         bytes memory _options,
         bool _payInLzToken
     ) public view returns (MessagingFee memory fee) {
         bytes memory payload = abi.encode(
             _functionToDo,
             omniChainCDS,
-            optionsFeesToGetFromOtherChain);
+            optionsFeesToGetFromOtherChain,
+            cdsAmountToGetFromOtherChain,
+            liqAmountToGetFromOtherChain,
+            liquidationInfo,
+            liqIndex);
         fee = _quote(_dstEid, payload, _options, _payInLzToken);
     }
 
@@ -691,19 +762,33 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         OmniChainCDSData memory data;
         FunctionToDo functionToDo;
         uint256 optionsFeesToRemove;
+        uint256 cdsAmountToRemove;
+        uint256 liqAmountToRemove;
+        LiquidationInfo memory liquidationInfo;
+        uint128 liqIndex;
 
-        (functionToDo, data, optionsFeesToRemove) = abi.decode(payload, (FunctionToDo, OmniChainCDSData, uint256));
+        (
+            functionToDo, 
+            data, 
+            optionsFeesToRemove,
+            cdsAmountToRemove,
+            liqAmountToRemove,
+            liquidationInfo,
+            liqIndex) = abi.decode(payload, (FunctionToDo, OmniChainCDSData, uint256, uint256, uint256, LiquidationInfo, uint128));
 
         if(functionToDo == FunctionToDo.UPDATE_GLOBAL){
             omniChainCDS = data;
-        }else{
+        }else if(functionToDo == FunctionToDo.UPDATE_INDIVIDUAL){
             totalCdsDepositedAmountWithOptionFees -= optionsFeesToRemove;
+            totalCdsDepositedAmount -= cdsAmountToRemove;
+            totalAvailableLiquidationAmount -= liqAmountToRemove;
+            omniChainCDSLiqIndexToInfo[liqIndex] = liquidationInfo;
             omniChainCDS = data;
         }
     }
 
     function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external onlyBorrowingContract{
-        liquidationIndexToInfo[index] = liquidationData;
+        omniChainCDSLiqIndexToInfo[index] = liquidationData;
     }
 
     function updateTotalAvailableLiquidationAmount(uint256 amount) external onlyBorrowingContract{

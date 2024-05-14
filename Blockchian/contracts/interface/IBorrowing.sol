@@ -21,8 +21,6 @@ interface IBorrowing{
         CDS_VOLUME_BY_BORROWER_VOLUME
     }
 
-    enum BorrowFunction { DUMMY, DEPOSIT, WITHDRAW, LIQUIDATION}
-
     struct OmniChainBorrowingData {
         uint256  normalizedAmount;
         uint256  ethVaultValue;
@@ -35,10 +33,10 @@ interface IBorrowing{
     }
 
     function getUSDValue() external view returns(uint256);
-    function noOfLiquidations() external view returns(uint128);
-    function lastEthVaultValue() external view returns(uint256);
-    function lastCDSPoolValue() external view returns(uint256);
+    // function lastEthVaultValue() external view returns(uint256);
+    // function lastCDSPoolValue() external view returns(uint256);
     function omniChainBorrowingCDSPoolValue() external view returns(uint256);
+    function omniChainBorrowingNoOfLiquidations() external view returns(uint128);
     function getOmniChainBorrowing() external view returns(OmniChainBorrowingData memory);
 
 

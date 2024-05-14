@@ -133,6 +133,14 @@ interface ITreasury{
         function omniChainTreasuryTotalVolumeOfBorrowersAmountinUSD() external view returns(uint256);
         function omniChainTreasuryEthProfitsOfLiquidators() external view returns(uint256);
 
+        function quote(
+            uint32 _dstEid,
+            FunctionToDo _functionToDo,
+            AmintOftTransferData memory _oftTransferData,
+            bytes memory _options,
+            bool _payInLzToken
+        ) external view returns (MessagingFee memory fee);
+
         function oftReceiveFromOtherChains(
             FunctionToDo _functionToDo,
             AmintOftTransferData memory _oftTransferData
