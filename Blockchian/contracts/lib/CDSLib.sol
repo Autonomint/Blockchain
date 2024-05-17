@@ -63,4 +63,107 @@ library CDSLib {
         }
         return CDSInterface.CalculateValueResult(value,gains);
     }
+
+    function getOptionsFeesProportions(
+        uint256 optionsFees,
+        uint256 _totalCdsDepositedAmount,
+        uint256 _totalGlobalCdsDepositedAmount,
+        uint256 _totalCdsDepositedAmountWithOptionFees,
+        uint256 _totalGlobalCdsDepositedAmountWithOptionFees
+    ) internal pure returns (uint256){
+        uint256 otherChainCDSAmount = _totalGlobalCdsDepositedAmount - _totalCdsDepositedAmount;
+
+        uint256 totalOptionFeesInOtherChain = _totalGlobalCdsDepositedAmountWithOptionFees
+                - _totalCdsDepositedAmountWithOptionFees - otherChainCDSAmount;
+
+        uint256 totalOptionFeesInThisChain = _totalCdsDepositedAmountWithOptionFees - _totalCdsDepositedAmount; 
+
+        uint256 share = (otherChainCDSAmount * 1e10)/_totalGlobalCdsDepositedAmount;
+        uint256 optionsfeesToGet = (optionsFees * share)/1e10;
+        uint256 optionsFeesRemaining = optionsFees - optionsfeesToGet;
+
+        if(totalOptionFeesInOtherChain == 0){
+            optionsfeesToGet = 0;
+        }else{
+            if(totalOptionFeesInOtherChain < optionsfeesToGet) {
+                optionsfeesToGet = totalOptionFeesInOtherChain;
+            }else{
+                if(totalOptionFeesInOtherChain > optionsfeesToGet && totalOptionFeesInThisChain < optionsFeesRemaining){
+                    optionsfeesToGet += optionsFeesRemaining - totalOptionFeesInThisChain;
+                }else{
+                    optionsfeesToGet = optionsfeesToGet;
+                }
+            }
+        }
+        return optionsfeesToGet;
+    }
+
+    function setCumulativeValue(
+        uint128 _value,
+        bool _gains,
+        bool _cumulativeValueSign,
+        uint128 _cumulativeValue) internal pure returns(bool,uint128){
+        if(_gains){
+            // If the cumulativeValue is positive
+            if(_cumulativeValueSign){
+                // Add value to cumulativeValue
+                _cumulativeValue += _value;
+            }else{
+                // if the cumulative value is greater than value 
+                if(_cumulativeValue > _value){
+                    // Remains in negative
+                    _cumulativeValue -= _value;
+                }else{
+                    // Going to postive since value is higher than cumulative value
+                    _cumulativeValue = _value - _cumulativeValue;
+                    _cumulativeValueSign = true;
+                }
+            }
+        }else{
+            // If cumulative value is in positive
+            if(_cumulativeValueSign){
+                if(_cumulativeValue > _value){
+                    // Cumulative value remains in positive
+                    _cumulativeValue -= _value;
+                }else{
+                    // Going to negative since value is higher than cumulative value
+                    _cumulativeValue = _value - _cumulativeValue;
+                    _cumulativeValueSign = false;
+                }
+            }else{
+                // Cumulative value is in negative
+                _cumulativeValue += _value;
+            }
+        }
+
+        return (_cumulativeValueSign, _cumulativeValue);
+    }
+
+    function calculateCumulativeRate(
+        uint128 _fees,
+        uint256 _totalCdsDepositedAmount,
+        uint256 _totalCdsDepositedAmountWithOptionFees,
+        uint256 _totalGlobalCdsDepositedAmountWithOptionFees,
+        uint128 _lastCumulativeRate,
+        uint128 _noOfBorrowers
+    ) internal pure returns(uint256,uint256,uint128){
+
+        require(_fees != 0,"Fees should not be zero");
+        if(_totalCdsDepositedAmount > 0){
+            _totalCdsDepositedAmountWithOptionFees += _fees;
+        }
+        _totalGlobalCdsDepositedAmountWithOptionFees += _fees;
+        uint128 netCDSPoolValue = uint128(_totalGlobalCdsDepositedAmountWithOptionFees);
+        uint128 percentageChange = (_fees * PRECISION)/netCDSPoolValue;
+        uint128 currentCumulativeRate;
+        if(_noOfBorrowers == 0){
+            currentCumulativeRate = (1 * PRECISION) + percentageChange;
+            _lastCumulativeRate = currentCumulativeRate;
+        }else{
+            currentCumulativeRate = _lastCumulativeRate * ((1 * PRECISION) + percentageChange);
+            _lastCumulativeRate = (currentCumulativeRate/PRECISION);
+        }
+
+        return (_totalCdsDepositedAmountWithOptionFees,_totalGlobalCdsDepositedAmountWithOptionFees,_lastCumulativeRate);
+    }
 }

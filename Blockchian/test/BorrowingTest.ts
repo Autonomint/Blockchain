@@ -173,7 +173,7 @@ describe("Borrowing Contract",function(){
     }
 
     describe("Should deposit ETH and mint Trinity",function(){
-        it.only("Should deposit ETH",async function(){
+        it("Should deposit ETH",async function(){
             const {BorrowingContract,CDSContract,usdt} = await loadFixture(deployer);
             const timeStamp = await time.latest();
             await usdt.connect(user1).mint(user1.getAddress(),10000000000);
@@ -269,16 +269,16 @@ describe("Borrowing Contract",function(){
             await expect(tx).to.be.revertedWith("Cannot deposit zero tokens");
         })
 
-        // it("Should revert if LTV set to zero value before providing loans",async function(){
-        //     const {BorrowingContract,CDSContract} = await loadFixture(deployer);
-        //     await BorrowingContract.setLTV(0);          
-        //     const timeStamp = await time.latest();
-        //     await usdt.connect(user1).mint(user1.getAddress(),10000000000)
-        //     await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
-        //     await CDSContract.connect(user1).deposit(10000000000,0,false,0);
-        //     const tx =  BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
-        //     await expect(tx).to.be.revertedWith("LTV must be set to non-zero value before providing loans");
-        // })
+        it("Should revert if LTV set to zero value before providing loans",async function(){
+            const {BorrowingContract,CDSContract} = await loadFixture(deployer);
+            await BorrowingContract.setLTV(0);          
+            const timeStamp = await time.latest();
+            await usdt.connect(user1).mint(user1.getAddress(),10000000000)
+            await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
+            await CDSContract.connect(user1).deposit(10000000000,0,false,0);
+            const tx =  BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
+            await expect(tx).to.be.revertedWith("LTV must be set to non-zero value before providing loans");
+        })
 
         it("Should revert if LTV set to zero",async function(){
             const {BorrowingContract,multiSign,CDSContract} = await loadFixture(deployer);
@@ -318,30 +318,6 @@ describe("Borrowing Contract",function(){
             await expect(BorrowingContract.connect(owner).setAdmin(ethers.ZeroAddress)).to.be.revertedWith("Admin can't be contract address & zero address");
         })
 
-        // it("Should revert if caller is not owner(depositToAaveProtocol)",async function(){
-        //     const {BorrowingContract} = await loadFixture(deployer);
-        //     const tx = BorrowingContract.connect(user1).depositToAaveProtocol();
-        //     await expect(tx).to.be.revertedWith("Ownable: caller is not the owner");
-        // })
-
-        // it("Should revert if caller is not owner(withdrawFromAaveProtocol)",async function(){
-        //     const {BorrowingContract} = await loadFixture(deployer);
-        //     const tx = BorrowingContract.connect(user1).withdrawFromAaveProtocol(1);
-        //     await expect(tx).to.be.revertedWith("Ownable: caller is not the owner");
-        // })
-
-        // it("Should revert if caller is not owner(depositToCompoundProtocol)",async function(){
-        //     const {BorrowingContract} = await loadFixture(deployer);
-        //     const tx = BorrowingContract.connect(user1).depositToCompoundProtocol();
-        //     await expect(tx).to.be.revertedWith("Ownable: caller is not the owner");
-        // })
-
-        // it("Should revert if caller is not owner(withdrawFromProtocol)",async function(){
-        //     const {BorrowingContract} = await loadFixture(deployer);
-        //     const tx = BorrowingContract.connect(user1).withdrawFromCompoundProtocol(1);
-        //     await expect(tx).to.be.revertedWith("Ownable: caller is not the owner");
-        // })
-
         it("Should revert if caller is not owner(setWithdrawTimeLimit)",async function(){
             const {BorrowingContract} = await loadFixture(deployer);
             const tx = BorrowingContract.connect(user1).setWithdrawTimeLimit(100);
@@ -376,16 +352,6 @@ describe("Borrowing Contract",function(){
             const tx = BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
             await expect(tx).to.be.revertedWith("Not enough fund in CDS");
         })
-
-        // it("Should revert Borrower address can't be zero",async function(){
-        //     const {BorrowingContract,CDSContract} = await loadFixture(deployer);
-        //     const timeStamp = await time.latest();
-        //     await usdt.connect(user1).mint(user1.getAddress(),10000000000)
-        //     await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
-        //     await CDSContract.connect(user1).deposit(10000000000,0,false,0);
-        //     const tx = BorrowingContract.connect(ethers.ZeroAddress).depositTokens(1000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
-        //     await expect(tx).to.be.revertedWith("Borrower cannot be zero address");
-        // })
 
         it("Should return true if the address is contract address ",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
@@ -729,6 +695,7 @@ describe("Borrowing Contract",function(){
     // })
 
     describe("Should withdraw ETH from protocol",function(){
+
         it("Should withdraw ETH (between 0.8 and 1)",async function(){
             const {BorrowingContract,Token,abondToken,usdt,CDSContract} = await loadFixture(deployer);
             const timeStamp = await time.latest();
@@ -747,6 +714,7 @@ describe("Borrowing Contract",function(){
             await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
             await BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
         })
+
         it("Should withdraw ETH(>1)",async function(){
             const {BorrowingContract,Token,abondToken,usdt,CDSContract} = await loadFixture(deployer);
             const timeStamp = await time.latest();
@@ -769,6 +737,7 @@ describe("Borrowing Contract",function(){
             await BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,110000,timeStamp);
 
         })
+
         it("Should withdraw ETH(=1)",async function(){
             const {BorrowingContract,Token,abondToken,usdt,CDSContract} = await loadFixture(deployer);
             const timeStamp = await time.latest();
@@ -789,6 +758,7 @@ describe("Borrowing Contract",function(){
             await BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,100000,timeStamp);
 
         })
+
         it("Should revert To address is zero and contract address",async function(){
             const {BorrowingContract,treasury} = await loadFixture(deployer);
             const timeStamp = await time.latest();
@@ -799,6 +769,7 @@ describe("Borrowing Contract",function(){
             const tx1 = BorrowingContract.connect(user1).withDraw(await treasury.getAddress(),1,99900,timeStamp);
             await expect(tx1).to.be.revertedWith("To address cannot be a zero and contract address");
         })
+
         it("Should revert if User doens't have the perticular index",async function(){
             const {BorrowingContract,usdt,CDSContract} = await loadFixture(deployer);
             const timeStamp = await time.latest();
@@ -810,6 +781,7 @@ describe("Borrowing Contract",function(){
             const tx = BorrowingContract.connect(user1).withDraw(user2.getAddress(),2,99900,timeStamp);
             await expect(tx).to.be.revertedWith("User doens't have the perticular index");
         })
+
         it("Should revert if BorrowingHealth is Low",async function(){
             const {BorrowingContract,usdt,CDSContract} = await loadFixture(deployer);
             const timeStamp = await time.latest();
@@ -820,6 +792,7 @@ describe("Borrowing Contract",function(){
             const tx = BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,80000,timeStamp);
             await expect(tx).to.be.revertedWith("BorrowingHealth is Low");
         })
+
         it("Should revert if User already withdraw entire amount",async function(){
             const {BorrowingContract,Token,abondToken,CDSContract,usdt} = await loadFixture(deployer);
             const timeStamp = await time.latest();
@@ -842,31 +815,6 @@ describe("Borrowing Contract",function(){
 
             const tx = BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
             await expect(tx).to.be.revertedWith("User already withdraw entire amount");
-        })
-
-        it("Should revert if withdraw time limit is not yet reached",async function(){
-            const {BorrowingContract,Token,abondToken,CDSContract,usdt,multiSign} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
-            await multiSign.connect(owner).approveSetterFunction([2]);
-            await multiSign.connect(owner1).approveSetterFunction([2]);
-            await BorrowingContract.connect(owner).setWithdrawTimeLimit(2592000);
-            await usdt.connect(user1).mint(user1.getAddress(),10000000000)
-            await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
-            await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000);
-            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
-            
-            const blockNumber = await ethers.provider.getBlockNumber(); // Get latest block number
-            const latestBlock = await ethers.provider.getBlock(blockNumber);
-            const latestTimestamp1 = latestBlock.timestamp;
-            await time.increaseTo(latestTimestamp1 + 259200);
-
-            await BorrowingContract.calculateCumulativeRate();
-            await Token.mint(user1.getAddress(),5000000);
-            
-            await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
-            await BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
-
-            // await expect(tx).to.be.revertedWith("Can't withdraw before the withdraw time limit");
         })
 
         it("Should revert if User amount has been liquidated",async function(){
@@ -901,27 +849,6 @@ describe("Borrowing Contract",function(){
             await expect(tx).to.be.revertedWith("User balance is less than required");
         })
 
-        it("Should revert Don't have enough Protocol Tokens",async function(){
-            const {BorrowingContract,Token,abondToken,usdt,CDSContract} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
-            await usdt.connect(user1).mint(user1.getAddress(),10000000000)
-            await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
-            await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000);
-            await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
-            
-            const blockNumber = await ethers.provider.getBlockNumber(); // Get latest block number
-            const latestBlock = await ethers.provider.getBlock(blockNumber);
-            const latestTimestamp1 = latestBlock.timestamp;
-            await time.increaseTo(latestTimestamp1 + 2592000);
-
-            await BorrowingContract.calculateCumulativeRate();
-            await Token.mint(user1.getAddress(),5000000);
-            
-            await Token.connect(user1).approve(await BorrowingContract.getAddress(),await Token.balanceOf(user1.getAddress()));
-            await BorrowingContract.connect(user1).withDraw(user2.getAddress(),1,99900,timeStamp);
-
-            // await expect(tx).to.be.revertedWith("Don't have enough ABOND Tokens");
-        })
     })
 
     describe("Should Liquidate ETH from protocol",function(){
@@ -986,7 +913,6 @@ describe("Borrowing Contract",function(){
         //     await usdt.connect(user1).approve(CDSContract.getAddress(),10000000000);
         //     await CDSContract.connect(user1).deposit(10000000000,0,true,10000000000);
         //     await BorrowingContract.connect(user2).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("1")});
-        //     await BorrowingContract.connect(owner).depositToAaveProtocol();
 
         //     const tx = BorrowingContract.connect(owner).liquidate(user2.getAddress(),1,100000);
         //     await expect(tx).to.be.revertedWith("Not enough funds in treasury");

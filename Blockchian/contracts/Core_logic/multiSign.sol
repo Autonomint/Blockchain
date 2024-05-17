@@ -15,7 +15,6 @@ contract MultiSign is Initializable,OwnableUpgradeable,UUPSUpgradeable {
     enum SetterFunctions{
         SetLTV,
         SetAPR,
-        SetWithdrawTimeLimitBorrow,
         SetWithdrawTimeLimitCDS,
         SetAdminBorrow,
         SetAdminCDS,

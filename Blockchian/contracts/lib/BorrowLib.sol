@@ -21,13 +21,58 @@ library BorrowLib {
     uint128 constant AMINT_PRECISION = 1e12;
     uint128 constant LIQ_AMOUNT_PRECISION = 1e10;
 
+    string  public constant name = "AMINT Stablecoin";
+    string  public constant version = "1";
+    bytes32 public constant PERMIT_TYPEHASH = keccak256("Permit(address holder,address spender,uint256 allowedAmount,bool allowed,uint256 expiry)");
+
+    function calculateHalfValue(uint256 amount) public pure returns(uint128){
+        return uint128((amount * 50)/100);
+    }
+
+    function calculateNormAmount(
+        uint256 amount,
+        uint256 cumulativeRate
+    ) public pure returns(uint256){
+        return (amount * RATE_PRECISION)/cumulativeRate;
+    }
+
+    function calculateDebtAmount(
+        uint256 amount,
+        uint256 cumulativeRate
+    ) public pure returns(uint256){
+        return (amount * cumulativeRate)/RATE_PRECISION;
+    }
+
+    function calculateEthPriceRatio(
+        uint128 depositEthPrice, 
+        uint128 currentEthPrice
+    ) public pure returns(uint128){
+        return (currentEthPrice * 10000)/depositEthPrice;
+    }
+
+    function calculateDiscountedETH(
+        uint256 amount,
+        uint128 ethPrice
+    ) public pure returns(uint256){
+        return ((((80*calculateHalfValue(amount))/100)*ethPrice)/100)/AMINT_PRECISION;
+    }
+
+    function calculateReturnToAbond(
+        uint128 depositedAmount,
+        uint128 depositEthPrice,
+        uint128 returnToTreasury
+    ) public pure returns(uint128){
+        return (((((depositedAmount * depositEthPrice)/AMINT_PRECISION)/100) - returnToTreasury) * 10)/100;
+    }
+    
     function calculateRatio(
         uint256 _amount,
         uint currentEthPrice,
         uint128 lastEthprice,
         uint128 noOfBorrowers,
         uint256 latestTotalCDSPool,
-        IBorrowing.OmniChainBorrowingData memory previousData) public pure returns(uint64, IBorrowing.OmniChainBorrowingData memory){
+        IBorrowing.OmniChainBorrowingData memory previousData
+    ) public pure returns(uint64, IBorrowing.OmniChainBorrowingData memory){
 
         uint256 netPLCdsPool;
 
@@ -118,9 +163,20 @@ library BorrowLib {
         return currentCumulativeRate;
     }
 
-    function tokensToLend(uint256 depositedAmont, uint128 ethPrice, uint8 LTV) public pure returns(uint256){
+    function tokensToLend(
+        uint256 depositedAmont, 
+        uint128 ethPrice, 
+        uint8 LTV
+    ) public pure returns(uint256){
         uint256 tokens = (depositedAmont * ethPrice * LTV) / (AMINT_PRECISION * RATIO_PRECISION);
         return tokens;
+    }
+
+    function abondToMint(
+        uint256 _amount, 
+        uint64 _bondRatio
+    ) public pure returns(uint128 amount){
+        amount = (uint128(_amount) * AMINT_PRECISION)/_bondRatio;
     }
 
     function getAbondYields(
@@ -140,8 +196,8 @@ library BorrowLib {
         uint256 redeemableAmount = treasury.calculateYieldsForExternalProtocol(user,aBondAmount);
         uint128 depositedAmount = (aBondAmount * userState.ethBacked)/1e18;
 
-        uint128 amintToAbondRatioLiq = uint64(treasury.amintGainedFromLiquidation() * BorrowLib.RATE_PRECISION/ abond.totalSupply());
-        uint256 amintToTransfer = (amintToAbondRatioLiq * aBondAmount) / BorrowLib.RATE_PRECISION;
+        uint128 amintToAbondRatioLiq = uint64(treasury.amintGainedFromLiquidation() * RATE_PRECISION/ abond.totalSupply());
+        uint256 amintToTransfer = (amintToAbondRatioLiq * aBondAmount) / RATE_PRECISION;
 
         return (depositedAmount,redeemableAmount,amintToTransfer);
     }
@@ -196,7 +252,7 @@ library BorrowLib {
         address amintAddress,
         address abondAddress,
         address treasuryAddress
-    ) public returns(uint256){
+    ) internal returns(uint256){
 
         require(aBondAmount > 0,"Abond amount should not be zero");
         IABONDToken abond = IABONDToken(abondAddress);
@@ -205,12 +261,12 @@ library BorrowLib {
         require(aBondAmount <= userState.aBondBalance,"You don't have enough aBonds");
 
         ITreasury treasury = ITreasury(treasuryAddress);
-        uint128 amintToAbondRatio = uint128(treasury.abondAmintPool() * BorrowLib.RATE_PRECISION/ abond.totalSupply());
-        uint256 amintToBurn = (amintToAbondRatio * aBondAmount) / BorrowLib.RATE_PRECISION;
+        uint128 amintToAbondRatio = uint128(treasury.abondAmintPool() * RATE_PRECISION/ abond.totalSupply());
+        uint256 amintToBurn = (amintToAbondRatio * aBondAmount) / RATE_PRECISION;
         treasury.updateAbondAmintPool(amintToBurn,false);
 
-        uint128 amintToAbondRatioLiq = uint128(treasury.amintGainedFromLiquidation() * BorrowLib.RATE_PRECISION/ abond.totalSupply());
-        uint256 amintToTransfer = (amintToAbondRatioLiq * aBondAmount) / BorrowLib.RATE_PRECISION;
+        uint128 amintToAbondRatioLiq = uint128(treasury.amintGainedFromLiquidation() * RATE_PRECISION/ abond.totalSupply());
+        uint256 amintToTransfer = (amintToAbondRatioLiq * aBondAmount) / RATE_PRECISION;
         treasury.updateAmintGainedFromLiquidation(amintToTransfer,false);
 
         //Burn the amint from treasury
@@ -269,7 +325,7 @@ library BorrowLib {
     //             uint128 borrowingHealth = (ethPrice * 10000) / depositDetail.ethPriceAtDeposit;
     //             require(borrowingHealth > 8000,"BorrowingHealth is Low");
     //             // Calculate th borrower's debt
-    //             uint256 borrowerDebt = ((depositDetail.normalizedAmount * lastCumulativeRate)/BorrowLib.RATE_PRECISION);
+    //             uint256 borrowerDebt = ((depositDetail.normalizedAmount * lastCumulativeRate)/RATE_PRECISION);
     //             calculateCumulativeRate();
     //             uint128 lastEventTime = uint128(block.timestamp);
     //             // Check whether the Borrower have enough Trinty
@@ -282,7 +338,7 @@ library BorrowLib {
     //             // Calculate interest for the borrower's debt
     //             //uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
 
-    //             uint256 discountedETH = ((((80*((depositDetail.depositedAmount * 50)/100))/100)*ethPrice)/100)/BorrowLib.AMINT_PRECISION; // 0.4
+    //             uint256 discountedETH = ((((80*((depositDetail.depositedAmount * 50)/100))/100)*ethPrice)/100)/AMINT_PRECISION; // 0.4
     //             treasury.updateAbondAmintPool(discountedETH,true);
     //             // Calculate the amount of AMINT to burn and sent to the treasury
     //             // uint256 halfValue = (50 *(depositDetail.borrowedAmount))/100;

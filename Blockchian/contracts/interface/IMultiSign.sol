@@ -7,7 +7,6 @@ interface IMultiSign{
     enum SetterFunctions{
         SetLTV,
         SetAPR,
-        SetWithdrawTimeLimitBorrow,
         SetWithdrawTimeLimitCDS,
         SetAdminBorrow,
         SetAdminCDS,

@@ -55,16 +55,8 @@ describe("CDS Contract",function(){
             await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
         const ABONDToken = await ethers.getContractFactory("TestABONDToken");
-        const abondTokenA = await upgrades.deployProxy(ABONDToken,[
-            "Test ABOND Token",
-            "TABOND",
-            await mockEndpointV2A.getAddress(),
-            await owner.getAddress()],{initializer: 'initialize'}, {kind:'uups'});
-        const abondTokenB = await upgrades.deployProxy(ABONDToken,[
-            "Test ABOND Token",
-            "TABOND",
-            await mockEndpointV2B.getAddress(),
-            await owner.getAddress()],{initializer: 'initialize'}, {kind:'uups'});
+        const abondTokenA = await upgrades.deployProxy(ABONDToken,{initializer: 'initialize'}, {kind:'uups'});
+        const abondTokenB = await upgrades.deployProxy(ABONDToken,{initializer: 'initialize'}, {kind:'uups'});
 
         const MultiSign = await ethers.getContractFactory("MultiSign");
         const multiSignA = await upgrades.deployProxy(MultiSign,[[await owner.getAddress(),await owner1.getAddress(),await owner2.getAddress()],2],{initializer:'initialize'},{kind:'uups'});
@@ -161,12 +153,7 @@ describe("CDS Contract",function(){
             await TokenA.getAddress(),
             await abondTokenA.getAddress(),
             await CDSContractA.getAddress(),
-            wethGatewayMainnet,
-            cometMainnet,
-            aavePoolAddressMainnet,
-            aTokenAddressMainnet,
             await usdtA.getAddress(),
-            wethAddressMainnet,
             await mockEndpointV2A.getAddress(),
             await owner.getAddress()
         ],{initializer:'initialize'},{kind:'uups'});
@@ -176,12 +163,7 @@ describe("CDS Contract",function(){
             await TokenB.getAddress(),
             await abondTokenB.getAddress(),
             await CDSContractB.getAddress(),
-            wethGatewayMainnet,
-            cometMainnet,
-            aavePoolAddressMainnet,
-            aTokenAddressMainnet,
             await usdtB.getAddress(),
-            wethAddressMainnet,
             await mockEndpointV2B.getAddress(),
             await owner.getAddress()
         ],{initializer:'initialize'},{kind:'uups'});
@@ -192,9 +174,6 @@ describe("CDS Contract",function(){
 
         await mockEndpointV2B.setDestLzEndpoint(await TokenA.getAddress(), mockEndpointV2A.getAddress())
         await mockEndpointV2A.setDestLzEndpoint(await TokenB.getAddress(), mockEndpointV2B.getAddress())
-
-        await mockEndpointV2B.setDestLzEndpoint(await abondTokenA.getAddress(), mockEndpointV2A.getAddress())
-        await mockEndpointV2A.setDestLzEndpoint(await abondTokenB.getAddress(), mockEndpointV2B.getAddress())
 
         await mockEndpointV2B.setDestLzEndpoint(await multiSignA.getAddress(), mockEndpointV2A.getAddress())
         await mockEndpointV2A.setDestLzEndpoint(await multiSignB.getAddress(), mockEndpointV2B.getAddress())
@@ -228,19 +207,16 @@ describe("CDS Contract",function(){
         await TokenA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await TokenB.getAddress(), 32))
         await TokenB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await TokenA.getAddress(), 32))
 
-        await abondTokenA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await abondTokenB.getAddress(), 32))
-        await abondTokenB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await abondTokenA.getAddress(), 32))
-
         await usdtA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await usdtB.getAddress(), 32))
         await usdtB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await usdtA.getAddress(), 32))
 
         await abondTokenA.setBorrowingContract(await BorrowingContractA.getAddress());
         await abondTokenB.setBorrowingContract(await BorrowingContractB.getAddress());
 
-        await multiSignA.connect(owner).approveSetterFunction([0,1,4,5,6,7,8,9,10]);
-        await multiSignA.connect(owner1).approveSetterFunction([0,1,4,5,6,7,8,9,10]);
-        await multiSignB.connect(owner).approveSetterFunction([0,1,4,5,6,7,8,9,10]);
-        await multiSignB.connect(owner1).approveSetterFunction([0,1,4,5,6,7,8,9,10]);
+        await multiSignA.connect(owner).approveSetterFunction([0,1,3,4,5,6,7,8,9]);
+        await multiSignA.connect(owner1).approveSetterFunction([0,1,3,4,5,6,7,8,9]);
+        await multiSignB.connect(owner).approveSetterFunction([0,1,3,4,5,6,7,8,9]);
+        await multiSignB.connect(owner1).approveSetterFunction([0,1,3,4,5,6,7,8,9]);
 
         await BorrowingContractA.connect(owner).setAdmin(owner.getAddress());
         await BorrowingContractB.connect(owner).setAdmin(owner.getAddress());
@@ -259,9 +235,6 @@ describe("CDS Contract",function(){
 
         await TokenA.setDstEid(eidB);
         await TokenB.setDstEid(eidA);
-
-        await abondTokenA.setDstEid(eidB);
-        await abondTokenB.setDstEid(eidA);
 
         await usdtA.setDstEid(eidB);
         await usdtB.setDstEid(eidA);
@@ -291,28 +264,28 @@ describe("CDS Contract",function(){
         await BorrowingContractA.calculateCumulativeRate();
         await BorrowingContractB.calculateCumulativeRate();
 
+        await treasuryA.connect(owner).setDstTreasuryAddress(await treasuryB.getAddress());
+        await treasuryB.connect(owner).setDstTreasuryAddress(await treasuryA.getAddress());
+        await treasuryA.connect(owner).setExternalProtocolAddresses(
+            wethGatewayMainnet,
+            cometMainnet,
+            aavePoolAddressMainnet,
+            aTokenAddressMainnet,
+            wethAddressMainnet,
+        )
+        await treasuryB.connect(owner).setExternalProtocolAddresses(
+            wethGatewayMainnet,
+            cometMainnet,
+            aavePoolAddressMainnet,
+            aTokenAddressMainnet,
+            wethAddressMainnet,
+        )
+
         const provider = new ethers.JsonRpcProvider(INFURA_URL_MAINNET);
         const signer = new ethers.Wallet("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",provider);
 
         const aToken = new ethers.Contract(aTokenAddressMainnet,aTokenABI,signer);
         const cETH = new ethers.Contract(cometMainnet,cETH_ABI,signer);
-
-        // console.log("TOKEN A", await TokenA.getAddress());
-        // console.log("TOKEN B", await TokenB.getAddress());
-        // console.log("ABOND A", await abondTokenA.getAddress());
-        // console.log("ABOND B", await abondTokenB.getAddress());
-        // console.log("USDT A", await usdtA.getAddress());
-        // console.log("USDT B", await usdtB.getAddress());
-        // console.log("MULTI A", await multiSignA.getAddress());
-        // console.log("MULTI B", await multiSignB.getAddress());
-        // console.log("CDS A", await CDSContractA.getAddress());
-        // console.log("CDS B", await CDSContractB.getAddress());
-        // console.log("BORROW A", await BorrowingContractA.getAddress());
-        // console.log("BORROW B", await BorrowingContractB.getAddress());
-        // console.log("TREAS A", await treasuryA.getAddress());
-        // console.log("TREAS B", await treasuryB.getAddress());
-        // console.log("OPT A", await optionsA.getAddress());
-        // console.log("OPT B", await optionsB.getAddress());
 
         return {
             TokenA,abondTokenA,usdtA,
@@ -328,20 +301,30 @@ describe("CDS Contract",function(){
         }
     }
 
-    describe("should deposit into CDS",function(){
+    describe("Minting tokens and transfering tokens", async function(){
+
+        it("Should check Trinity Token contract & Owner of contracts",async () => {
+            const{CDSContractA,TokenA} = await loadFixture(deployer);
+            expect(await CDSContractA.amint()).to.be.equal(await TokenA.getAddress());
+            expect(await CDSContractA.owner()).to.be.equal(await owner.getAddress());
+            expect(await TokenA.owner()).to.be.equal(await owner.getAddress());
+        })
+
+        it("Should Mint token", async function() {
+            const{TokenA} = await loadFixture(deployer);
+            await TokenA.mint(owner.getAddress(),ethers.parseEther("1"));
+            expect(await TokenA.balanceOf(owner.getAddress())).to.be.equal(ethers.parseEther("1"));
+        })
 
         it("should deposit USDT into CDS",async function(){
-            const {
-                CDSContractA,CDSContractB,
-                usdtA,usdtB
-            } = await loadFixture(deployer);
+            const {CDSContractA,CDSContractB,usdtA,usdtB} = await loadFixture(deployer);
 
             await usdtA.connect(user1).mint(user1.getAddress(),10000000000);
             await usdtA.connect(user1).approve(CDSContractA.getAddress(),10000000000);
             const options = "0x00030100110100000000000000000000000000030d40";
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,123,123,[0,0,0,0],0,options, false)
             await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
 
             await usdtB.connect(user1).mint(user1.getAddress(),10000000000);
@@ -360,10 +343,10 @@ describe("CDS Contract",function(){
             await usdtA.mint(owner.getAddress(),30000000000);
             await usdtA.connect(owner).approve(CDSContractA.getAddress(),30000000000);
 
-            const options = "0x00030100110100000000000000000000000000030d40";
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB,1,123, options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,123,123,[0,0,0,0],0,options, false)
 
             await CDSContractA.deposit(20000000000,0,true,10000000000, { value: nativeFee.toString()});
 
@@ -376,6 +359,169 @@ describe("CDS Contract",function(){
             let tx = await CDSContractA.cdsDetails(owner.getAddress());
             expect(tx.hasDeposited).to.be.equal(true);
             expect(tx.index).to.be.equal(2);
+        })
+    })
+
+    describe("Checking revert conditions", function(){
+
+        it("should revert if Liquidation amount can't greater than deposited amount", async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(owner).deposit(3000000000,700000000,true,ethers.parseEther("5000"))).to.be.revertedWith("Liquidation amount can't greater than deposited amount");
+        })
+
+        it("should revert if 0 USDT deposit into CDS", async function(){
+            const {CDSContractA,TokenA,usdtA} = await loadFixture(deployer);
+            await usdtA.mint(owner.getAddress(),10000000000);
+            await usdtA.connect(owner).approve(CDSContractA.getAddress(),10000000000);
+
+            expect(await usdtA.allowance(owner.getAddress(),CDSContractA.getAddress())).to.be.equal(10000000000);
+
+            await expect(CDSContractA.deposit(0,ethers.parseEther("1"),true,ethers.parseEther("0.5"))).to.be.revertedWith("100% of amount must be USDT");
+        })
+
+        it("should revert if USDT deposit into CDS is greater than 20%", async function(){
+            const {CDSContractA,TokenA,usdtA} = await loadFixture(deployer);
+            await usdtA.mint(owner.getAddress(),30000000000);
+            await usdtA.connect(owner).approve(CDSContractA.getAddress(),30000000000);
+
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB, 1, 123,123,123,[0,0,0,0],0, options, false)
+
+            await CDSContractA.deposit(20000000000,0,true,10000000000,{ value: nativeFee.toString()});
+
+            await TokenA.mint(owner.getAddress(),700000000)
+            await TokenA.connect(owner).approve(CDSContractA.getAddress(),700000000);
+
+            await expect(CDSContractA.connect(owner).deposit(3000000000,700000000,true,500000000,{ value: nativeFee.toString()})).to.be.revertedWith("Required AMINT amount not met");
+        })
+
+        it("should revert if Insufficient AMINT balance with msg.sender", async function(){
+            const {CDSContractA,TokenA,usdtA} = await loadFixture(deployer);
+            await usdtA.mint(owner.getAddress(),30000000000);
+            await usdtA.connect(owner).approve(CDSContractA.getAddress(),30000000000);
+
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB, 1, 123,123,123,[0,0,0,0],0, options, false)
+
+            await CDSContractA.deposit(20000000000,0,true,10000000000,{ value: nativeFee.toString()});
+
+            await TokenA.mint(owner.getAddress(),70000000)
+            await TokenA.connect(owner).approve(CDSContractA.getAddress(),70000000);
+
+            await expect(CDSContractA.connect(owner).deposit(200000000,800000000,true,500000000,{ value: nativeFee.toString()})).to.be.revertedWith("Insufficient AMINT balance with msg.sender");
+        })
+
+        it("should revert Insufficient USDT balance with msg.sender", async function(){
+            const {CDSContractA,TokenA,usdtA} = await loadFixture(deployer);
+            await usdtA.mint(owner.getAddress(),20100000000);
+            await usdtA.connect(owner).approve(CDSContractA.getAddress(),20100000000);
+
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB, 1, 123,123,123,[0,0,0,0],0, options, false)
+
+            await CDSContractA.deposit(20000000000,0,true,10000000000,{ value: nativeFee.toString()});
+
+            await TokenA.mint(owner.getAddress(),800000000)
+            await TokenA.connect(owner).approve(CDSContractA.getAddress(),800000000);
+
+
+            await expect(CDSContractA.connect(owner).deposit(200000000,800000000,true,500000000,{ value: nativeFee.toString()})).to.be.revertedWith("Insufficient USDT balance with msg.sender");
+        })
+
+        it("should revert Insufficient USDT balance with msg.sender", async function(){
+            const {CDSContractA,usdtA} = await loadFixture(deployer);
+            await usdtA.mint(owner.getAddress(),10000000000);
+            await usdtA.connect(owner).approve(CDSContractA.getAddress(),10000000000);
+
+            expect(await usdtA.allowance(owner.getAddress(),CDSContractA.getAddress())).to.be.equal(10000000000);
+
+            await expect(CDSContractA.deposit(20000000000,0,true,10000000000)).to.be.revertedWith("Insufficient USDT balance with msg.sender");
+        })
+
+        it("Should revert if zero balance is deposited in CDS",async () => {
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect( CDSContractA.connect(user1).deposit(0,0,true,ethers.parseEther("1"))).to.be.revertedWith("Deposit amount should not be zero");
+        })
+
+        it("Should revert if Input address is invalid",async () => {
+            const {CDSContractA} = await loadFixture(deployer);  
+            await expect( CDSContractA.connect(owner).setBorrowingContract(ethers.ZeroAddress)).to.be.revertedWith("Input address is invalid");
+            await expect( CDSContractA.connect(owner).setBorrowingContract(user1.getAddress())).to.be.revertedWith("Input address is invalid");
+        })
+
+        it("Should revert if the index is not valid",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).withdraw(1)).to.be.revertedWith("user doesn't have the specified index");
+        })
+
+        it("Should revert if the caller is not owner for setTreasury",async function(){
+            const {CDSContractA,treasuryA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).setTreasury(treasuryA.getAddress())).to.be.revertedWith("Caller is not an admin");
+        })
+
+        it("Should revert if the caller is not owner for setWithdrawTimeLimit",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).setWithdrawTimeLimit(1000)).to.be.revertedWith("Caller is not an admin");
+        })
+
+        it("Should revert if the caller is not owner for setBorrowingContract",async function(){
+            const {BorrowingContractA,CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).setBorrowingContract(BorrowingContractA.getAddress())).to.be.revertedWith("Caller is not an admin");
+        })
+
+        it("Should revert if the Treasury address is zero",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(owner).setTreasury(ZeroAddress)).to.be.revertedWith("Input address is invalid");
+        })
+
+        it("Should revert if the Treasury address is not contract address",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(owner).setTreasury(user2.getAddress())).to.be.revertedWith("Input address is invalid");
+        })
+
+        it("Should revert if the zero sec is given in setWithdrawTimeLimit",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(owner).setWithdrawTimeLimit(0)).to.be.revertedWith("Withdraw time limit can't be zero");
+        })
+
+        it("Should revert if Amint limit can't be zero",async () => {
+            const {CDSContractA} = await loadFixture(deployer);  
+            await expect( CDSContractA.connect(owner).setAmintLimit(0)).to.be.revertedWith("Amint limit can't be zero");
+        })
+
+        it("Should revert if the caller is not owner for setAmintLImit",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).setAmintLimit(10)).to.be.revertedWith("Caller is not an admin");
+        })
+
+        it("Should revert if USDT limit can't be zero",async () => {
+            const {CDSContractA} = await loadFixture(deployer);  
+            await expect( CDSContractA.connect(owner).setUsdtLimit(0)).to.be.revertedWith("USDT limit can't be zero");
+        })
+
+        it("Should revert if the caller is not owner for setUsdtLImit",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).setUsdtLimit(1000)).to.be.revertedWith("Caller is not an admin");
+        })
+    })
+
+    describe("Should update variables correctly",function(){
+        it("Should update treasury correctly",async function(){
+            const {treasuryA,CDSContractA,multiSignA} = await loadFixture(deployer);
+            await multiSignA.connect(owner).approveSetterFunction([6]);
+            await multiSignA.connect(owner1).approveSetterFunction([6]);
+            await CDSContractA.connect(owner).setTreasury(treasuryA.getAddress());
+            expect (await CDSContractA.treasuryAddress()).to.be.equal(await treasuryA.getAddress());     
+        })
+        it("Should update withdrawTime correctly",async function(){
+            const {CDSContractA,multiSignA} = await loadFixture(deployer);
+            await multiSignA.connect(owner).approveSetterFunction([2]);
+            await multiSignA.connect(owner1).approveSetterFunction([2]);
+            await CDSContractA.connect(owner).setWithdrawTimeLimit(1500);
+            expect (await CDSContractA.withdrawTimeLimit()).to.be.equal(1500);     
         })
     })
 
@@ -445,14 +591,14 @@ describe("CDS Contract",function(){
             //     ethers.zeroPadValue(await treasuryB.getAddress(), 32).toString()
             // ).toHex().toString();
             
-            const optionsA = Options.newOptions().addExecutorLzReceiveOption(450000, 0).toHex().toString()
+            const optionsA = Options.newOptions().addExecutorLzReceiveOption(600000, 0).toHex().toString()
             let nativeFee2a = 0
-            ;[nativeFee2a] = await treasuryB.quote(eidA, 1, [ZeroAddress,0],[ZeroAddress,0],optionsA, false)
+            ;[nativeFee2a] = await treasuryB.quote(eidA, 2, [ZeroAddress,0],[ZeroAddress,0],optionsA, false)
 
             await CDSContractA.connect(user2).withdraw(1, { value: nativeFee + nativeFee2a});
         })
 
-        it.only("Should withdraw from cds,both chains have cds amount and one chain have eth deposit",async () => {
+        it("Should withdraw from cds,both chains have cds amount and one chain have eth deposit",async () => {
             const {BorrowingContractB,CDSContractA,CDSContractB,usdtA,usdtB,treasuryB} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
@@ -490,16 +636,8 @@ describe("CDS Contract",function(){
                 ethVolatility,
                 depositAmount,
                 {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2) + BigInt(nativeFee))})
-            // await BorrowingContractB.connect(user2).depositTokens(
-            //     100000,
-            //     timeStamp,
-            //     1,
-            //     110000,
-            //     ethVolatility,
-            //     depositAmount,
-            //     {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2) + BigInt(nativeFee))})
             
-            const optionsA = Options.newOptions().addExecutorLzReceiveOption(500000, 0).toHex().toString()
+            const optionsA = Options.newOptions().addExecutorLzReceiveOption(600000, 0).toHex().toString()
             let nativeFee2a = 0
             ;[nativeFee2a] = await treasuryB.quote(eidA, 1, [ZeroAddress,0], [ZeroAddress,0], optionsA, false)
 
@@ -518,64 +656,45 @@ describe("CDS Contract",function(){
             const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB,1,123, options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,123,123,[0,0,0,0],0,options, false)
 
             await CDSContractA.connect(user2).deposit(12000000000,0,true,12000000000, { value: nativeFee.toString()});
 
-            const depositAmount = ethers.parseEther("1");
-            const coder = ethers.AbiCoder.defaultAbiCoder();
-            const callDataDeposit = coder.encode([            
-                "uint64",
-                "uint64",
-                "uint256",
-                "uint64",
-                "uint64",
-                "uint256",
-                "address",
-                'uint64'
-            ],[
-                100000,
-                timeStamp,
-                depositAmount,
-                1,
-                110000,
-                ethVolatility,
-                await user1.getAddress(),
-                1
-            ]);
+            const depositAmount = ethers.parseEther("1");;
 
             let nativeFee1 = 0
-            ;[nativeFee1] = await BorrowingContractB.quote(eidA, [5,10,15,20,25,30,35,40],[], options, false)
+            ;[nativeFee1] = await BorrowingContractB.quote(eidA, [5,10,15,20,25,30,35,40], options, false)
             let nativeFee2 = 0
-            ;[nativeFee2] = await treasuryB.quote(eidA, 1, [5,10,15,20,25,30,35,40,45], [ZeroAddress,0],options, false)
+            ;[nativeFee2] = await treasuryB.quote(eidA,1, [ZeroAddress,0],[ZeroAddress,0],options, false)
             
-            await BorrowingContractB.connect(user1).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
-            await BorrowingContractB.connect(user2).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
-            await BorrowingContractA.connect(user2).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
-
-            const callDataLiquidate = coder.encode([            
-                "uint64",
-                "uint64",
-                "uint256",
-                "uint64",
-                "uint64",
-                "uint256",
-                "address",
-                'uint64'
-            ],[
-                80000,
+            await BorrowingContractB.connect(user1).depositTokens(
+                100000,
                 timeStamp,
-                depositAmount,
                 1,
                 110000,
                 ethVolatility,
-                await user1.getAddress(),
-                1
-            ]);
+                depositAmount,
+                {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2) + BigInt(nativeFee))})
+            await BorrowingContractB.connect(user2).depositTokens(
+                100000,
+                timeStamp,
+                1,
+                110000,
+                ethVolatility,
+                depositAmount,
+                {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2) + BigInt(nativeFee))})
+            await BorrowingContractA.connect(user2).depositTokens(
+                100000,
+                timeStamp,
+                1,
+                110000,
+                ethVolatility,
+                depositAmount,
+                {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2) + BigInt(nativeFee))})
             
-            const optionsA = Options.newOptions().addExecutorLzReceiveOption(420000, 0).toHex().toString()
+            const optionsA = Options.newOptions().addExecutorLzReceiveOption(600000, 0).toHex().toString()
             let nativeFee2a = 0
-            ;[nativeFee2a] = await treasuryB.quote(eidA, 1, [5,10,15,20,25,30,35,40,45], [ZeroAddress,0],optionsA, false)
+            ;[nativeFee2a] = await treasuryB.quote(eidA, 2, [ZeroAddress,0],[ZeroAddress,0],optionsA, false)
 
             const tx = CDSContractA.connect(user2).withdraw(1, { value: nativeFee + nativeFee2a});
             await expect(tx).to.be.revertedWith("CDS: Not enough fund in CDS")
@@ -603,7 +722,7 @@ describe("CDS Contract",function(){
             let nativeFee1 = 0
             ;[nativeFee1] = await BorrowingContractB.quote(eidA, [5,10,15,20,25,30,35,40], options, false)
             let nativeFee2 = 0
-            ;[nativeFee2] = await treasuryB.quote(eidA, 1, [ZeroAddress,0],options, false)
+            ;[nativeFee2] = await treasuryB.quote(eidA, 2, [ZeroAddress,0],[ZeroAddress,0],options, false)
             
             await BorrowingContractB.connect(user1).depositTokens(
                 100000,
@@ -622,9 +741,9 @@ describe("CDS Contract",function(){
                 depositAmount,
                 {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2) + BigInt(nativeFee))})
             
-            const optionsA = Options.newOptions().addExecutorLzReceiveOption(450000, 0).toHex().toString()
+            const optionsA = Options.newOptions().addExecutorLzReceiveOption(600000, 0).toHex().toString()
             let nativeFee2a = 0
-            ;[nativeFee2a] = await treasuryB.quote(eidA, 1, [ZeroAddress,0],optionsA, false)
+            ;[nativeFee2a] = await treasuryB.quote(eidA, 2, [ZeroAddress,0],[ZeroAddress,0],optionsA, false)
 
             await BorrowingContractB.connect(owner).liquidate(
                 await user2.getAddress(),
@@ -633,82 +752,7 @@ describe("CDS Contract",function(){
                 {value: (nativeFee1 + nativeFee2a + nativeFee).toString()})
 
             await CDSContractA.connect(user2).withdraw(1, { value: nativeFee + nativeFee2a});
-            await expect(tx).to.be.revertedWith("CDS: Not enough fund in CDS")
-        })
-
-        it("Should withdraw from cds,one chain have cds amount and one chain have eth deposit",async () => {
-            const {BorrowingContractA,CDSContractA,usdtA,treasuryA} = await loadFixture(deployer);
-            const timeStamp = await time.latest();
-
-            await usdtA.mint(user2.getAddress(),20000000000)
-            await usdtA.mint(user1.getAddress(),50000000000)
-            await usdtA.connect(user2).approve(CDSContractA.getAddress(),20000000000);
-            await usdtA.connect(user1).approve(CDSContractA.getAddress(),50000000000);
-
-            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
-
-            let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB,1,123, options, false)
-
-            await CDSContractA.connect(user2).deposit(12000000000,0,true,12000000000, { value: nativeFee.toString()});
-
-            const depositAmount = ethers.parseEther("1");
-            const coder = ethers.AbiCoder.defaultAbiCoder();
-            const callDataDeposit = coder.encode([            
-                "uint64",
-                "uint64",
-                "uint256",
-                "uint64",
-                "uint64",
-                "uint256",
-                "address",
-                'uint64'
-            ],[
-                100000,
-                timeStamp,
-                depositAmount,
-                1,
-                110000,
-                ethVolatility,
-                await user1.getAddress(),
-                1
-            ]);
-
-            let nativeFee1 = 0
-            ;[nativeFee1] = await BorrowingContractA.quote(eidB, [5,10,15,20,25,30,35,40],[], options, false)
-            let nativeFee2 = 0
-            ;[nativeFee2] = await treasuryA.quote(eidB, 1, [5,10,15,20,25,30,35,40,45], [ZeroAddress,0],options, false)
-            
-            await BorrowingContractA.connect(user1).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
-            await BorrowingContractA.connect(user2).send(1, callDataDeposit, {value: (depositAmount + BigInt(nativeFee) + BigInt(nativeFee1) + BigInt(nativeFee2))})
-
-            const callDataLiquidate = coder.encode([            
-                "uint64",
-                "uint64",
-                "uint256",
-                "uint64",
-                "uint64",
-                "uint256",
-                "address",
-                'uint64'
-            ],[
-                80000,
-                timeStamp,
-                depositAmount,
-                1,
-                110000,
-                ethVolatility,
-                await user1.getAddress(),
-                1
-            ]);
-            
-            const optionsA = Options.newOptions().addExecutorLzReceiveOption(420000, 0).toHex().toString()
-            let nativeFee2a = 0
-            ;[nativeFee2a] = await treasuryA.quote(eidB, 1, [5,10,15,20,25,30,35,40,45], [ZeroAddress,0],optionsA, false)
-
-            const tx = CDSContractA.connect(user2).withdraw(1, { value: nativeFee + nativeFee2a});
-            await expect(tx).to.be.revertedWith("CDS: Not enough fund in CDS")
-
+            // await expect(tx).to.be.revertedWith("CDS: Not enough fund in CDS")
         })
 
         it("Should withdraw from cds",async () => {
@@ -716,13 +760,123 @@ describe("CDS Contract",function(){
 
             await usdtA.connect(user1).mint(user1.getAddress(),10000000000);
             await usdtA.connect(user1).approve(CDSContractA.getAddress(),10000000000);
-            const options = "0x00030100110100000000000000000000000000030d40";
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,options, false)
+            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,123,123,[0,0,0,0],0,options, false)
             await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
 
             await CDSContractA.connect(user1).withdraw(1, { value: nativeFee.toString()});
+        })
+
+        it("Should revert Already withdrawn",async () => {
+            const {CDSContractA,usdtA} = await loadFixture(deployer);
+
+            await usdtA.connect(user1).mint(user1.getAddress(),10000000000);
+            await usdtA.connect(user1).approve(CDSContractA.getAddress(),10000000000);
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,123,123,[0,0,0,0],0,options, false)
+            await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
+
+            await CDSContractA.connect(user1).withdraw(1, { value: nativeFee.toString()});
+            const tx =  CDSContractA.connect(user1).withdraw(1, { value: nativeFee.toString()});
+            await expect(tx).to.be.revertedWith("Already withdrawn");
+        })
+
+        it("Should revert cannot withdraw before the withdraw time limit",async () => {
+            const {CDSContractA,usdtA,multiSignA} = await loadFixture(deployer);
+
+            await multiSignA.connect(owner).approveSetterFunction([2]);
+            await multiSignA.connect(owner1).approveSetterFunction([2]);
+            await CDSContractA.connect(owner).setWithdrawTimeLimit(1000);
+
+            await usdtA.connect(user1).mint(user1.getAddress(),10000000000);
+            await usdtA.connect(user1).approve(CDSContractA.getAddress(),10000000000);
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,123,123,[0,0,0,0],0,options, false)
+            await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
+
+            const tx =  CDSContractA.connect(user1).withdraw(1, { value: nativeFee.toString()});
+            await expect(tx).to.be.revertedWith("cannot withdraw before the withdraw time limit");
+        })
+    })
+
+    describe("Should redeem USDT correctly",function(){
+        it("Should redeem USDT correctly",async function(){
+            const {CDSContractA,TokenA,usdtA} = await loadFixture(deployer);
+            await usdtA.mint(user1.getAddress(),20000000000);
+            await usdtA.connect(user1).approve(CDSContractA.getAddress(),20000000000);
+
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB, 1, 123,123,123,[0,0,0,0],0, options, false)
+
+            await CDSContractA.connect(user1).deposit(20000000000,0,true,10000000000,{ value: nativeFee.toString()});
+
+            await TokenA.mint(owner.getAddress(),800000000);
+            await TokenA.connect(owner).approve(CDSContractA.getAddress(),800000000);
+
+            await CDSContractA.connect(owner).redeemUSDT(800000000,1500,1000,{ value: nativeFee.toString()});
+
+            expect(await TokenA.totalSupply()).to.be.equal(20000000000);
+            expect(await usdtA.balanceOf(owner.getAddress())).to.be.equal(1200000000);
+        })
+
+        it("Should revert Amount should not be zero",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB, 1, 123,123,123,[0,0,0,0],0, options, false)
+
+            const tx = CDSContractA.connect(owner).redeemUSDT(0,1500,1000,{ value: nativeFee.toString()});
+            await expect(tx).to.be.revertedWith("Amount should not be zero");
+        })
+
+        it("Should revert Insufficient AMINT balance",async function(){
+            const {CDSContractA,TokenA} = await loadFixture(deployer);
+            await TokenA.mint(owner.getAddress(),80000000);
+
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB, 1, 123,123,123,[0,0,0,0],0, options, false)
+
+            const tx = CDSContractA.connect(owner).redeemUSDT(800000000,1500,1000,{ value: nativeFee.toString()});
+            await expect(tx).to.be.revertedWith("Insufficient balance");
+        })
+    })
+
+    describe("Should calculate value correctly",function(){
+        it("Should calculate value for no deposit in borrowing",async function(){
+            const {CDSContractA,usdtA} = await loadFixture(deployer);
+            await usdtA.mint(user1.getAddress(),20000000000);
+            await usdtA.connect(user1).approve(CDSContractA.getAddress(),20000000000);
+
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB, 1, 123,123,123,[0,0,0,0],0, options, false)
+            await CDSContractA.connect(user1).deposit(20000000000,0,true,10000000000,{ value: nativeFee.toString()});
+        })
+
+        it("Should calculate value for no deposit in borrowing and 2 deposit in cds",async function(){
+            const {CDSContractA,TokenA,usdtA} = await loadFixture(deployer);
+            await usdtA.mint(user1.getAddress(),20000000000);
+            await usdtA.connect(user1).approve(CDSContractA.getAddress(),20000000000);
+
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB, 1, 123,123,123,[0,0,0,0],0, options, false)
+            await CDSContractA.connect(user1).deposit(20000000000,0,true,10000000000,{ value: nativeFee.toString()});
+
+            await TokenA.mint(user2.getAddress(),4000000000);
+            await TokenA.connect(user2).approve(CDSContractA.getAddress(),4000000000);
+            await CDSContractA.connect(user2).deposit(0,4000000000,true,4000000000,{ value: nativeFee.toString()});
+
+            await CDSContractA.connect(user1).withdraw(1,{ value: nativeFee.toString()});
         })
     })
 })

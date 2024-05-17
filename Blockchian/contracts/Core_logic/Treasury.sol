@@ -23,77 +23,59 @@ import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/lib
 
 contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
 
-    IBorrowing  public borrow;
-    IAMINT      public amint;
-    IABONDToken public abond;
-    IWrappedTokenGatewayV3  public wethGateway; // Weth gateway is used to deposit eth in  and withdraw from aave
-    IPoolAddressesProvider  public aavePoolAddressProvider; // To get the current pool  address in Aave
-    IERC20  public usdt;
-    IERC20  public aToken; // aave token contract
-    CometMainInterface public comet; // To deposit in and withdraw eth from compound
-    IWETH9 public WETH;
+    IBorrowing  private borrow;
+    IAMINT      private amint;
+    IABONDToken private abond;
+    IWrappedTokenGatewayV3  private wethGateway; // Weth gateway is used to deposit eth in  and withdraw from aave
+    IPoolAddressesProvider  private aavePoolAddressProvider; // To get the current pool  address in Aave
+    IERC20  private usdt;
+    IERC20  private aToken; // aave token contract
+    CometMainInterface private comet; // To deposit in and withdraw eth from compound
+    IWETH9 private WETH;
 
-    address public borrowingContract;
-    address public cdsContract;  
-    address public compoundAddress;
-    address public aaveWETH;        //wethGateway Address for Approve
+    address private cdsContract;  
+    address private compoundAddress;
 
     // Get depositor details by address
     mapping(address depositor => BorrowerDetails) public borrowing;
     //Get external protocol deposit details by protocol name (enum)
-    mapping(Protocol => ProtocolDeposit) public protocolDeposit;
+    mapping(Protocol => ProtocolDeposit) private protocolDeposit;
     uint256 public totalVolumeOfBorrowersAmountinWei;
     //eth vault value
     uint256 public totalVolumeOfBorrowersAmountinUSD;
     uint128 public noOfBorrowers;
-    uint256 public totalInterest;
-    uint256 public totalInterestFromLiquidation;
+    uint256 private totalInterest;
+    uint256 private totalInterestFromLiquidation;
     uint256 public abondAmintPool;
-    uint256 public ethProfitsOfLiquidators;
+    uint256 private ethProfitsOfLiquidators;
     uint256 private interestFromExternalProtocolDuringLiquidation;
 
-    //no of times deposited in external protocol(always 1 ahead) 
-    uint64 public externalProtocolDepositCount;
     uint128 private PRECISION;
     uint256 private CUMULATIVE_PRECISION;
 
-    // Eth depsoited in particular index
-    mapping(uint256=>uint256) externalProtocolCountTotalValue;
     uint256 public amintGainedFromLiquidation;
-    OmniChainTreasuryData public omniChainTreasury;//! omnichainTreasury contains global treasury data(all chains)
+    OmniChainTreasuryData private omniChainTreasury;//! omnichainTreasury contains global treasury data(all chains)
     using OptionsBuilder for bytes;
     uint32 private dstEid;
+    address private dstTreasuryAddress;
 
     function initialize(
         address _borrowing,
         address _tokenAddress,
         address _abondAddress,
         address _cdsContract,
-        address _wethGateway,
-        address _comet,
-        address _aavePoolAddressProvider,
-        address _aToken,
         address _usdt,
-        address _weth,
         address _endpoint,
         address _delegate
         ) initializer public{
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         __oAppinit(_endpoint, _delegate);
-        borrowingContract = _borrowing;
         cdsContract = _cdsContract;
         borrow = IBorrowing(_borrowing);
         amint = IAMINT(_tokenAddress);
         abond = IABONDToken(_abondAddress);
-        wethGateway = IWrappedTokenGatewayV3(_wethGateway);       // 0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
-        comet = CometMainInterface(_comet);                    // 0xA17581A9E3356d9A858b789D68B4d866e593aE94
-        WETH = IWETH9(_weth);                                  // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
-        aavePoolAddressProvider = IPoolAddressesProvider(_aavePoolAddressProvider);  // 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
-        aToken = IERC20(_aToken);                                                    // 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
-        aaveWETH = _wethGateway;
         usdt = IERC20(_usdt);
-        externalProtocolDepositCount = 1;
         PRECISION = 1e18;
         CUMULATIVE_PRECISION = 1e27;
     }
@@ -101,7 +83,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
 
     modifier onlyBorrowingContract() {
-        require( msg.sender == borrowingContract, "This function can only called by borrowing contract");
+        require( msg.sender == address(borrow), "This function can only called by borrowing contract");
         _;
     }
 
@@ -110,7 +92,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         _;
     }
     modifier onlyCDSOrBorrowingContract() {
-        require( (msg.sender == cdsContract) || (msg.sender == borrowingContract), "This function can only called by Borrowing or CDS contract");
+        require( (msg.sender == cdsContract) || (msg.sender == address(borrow)), "This function can only called by Borrowing or CDS contract");
         _;
     }
 
@@ -171,11 +153,6 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         borrowing[user].depositDetails[borrowerIndex].ethPriceAtDeposit = _ethPrice;
 
         borrowing[user].depositDetails[borrowerIndex].depositedAmountUsdValue = uint128(_depositingAmount) * _ethPrice;
-        
-        //having the count of the deposit done to Aave/Compound in batched
-        borrowing[user].depositDetails[borrowerIndex].externalProtocolCount = externalProtocolDepositCount;
-
-        externalProtocolCountTotalValue[externalProtocolDepositCount] += ((_depositingAmount * 50)/100);
 
         uint256 externalProtocolDepositEth = ((_depositingAmount * 25)/100);
 
@@ -222,9 +199,9 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         borrow.updateLastEthVaultValue(borrowing[borrower].depositDetails[index].depositedAmountUsdValue);
         // Updating total volumes
         totalVolumeOfBorrowersAmountinUSD -= borrowing[borrower].depositDetails[index].depositedAmountUsdValue;
-        totalVolumeOfBorrowersAmountinWei -= amount * 2;
+        totalVolumeOfBorrowersAmountinWei -= borrowing[borrower].depositDetails[index].depositedAmount;
         omniChainTreasury.totalVolumeOfBorrowersAmountinUSD -= borrowing[borrower].depositDetails[index].depositedAmountUsdValue;
-        omniChainTreasury.totalVolumeOfBorrowersAmountinWei -= amount * 2;
+        omniChainTreasury.totalVolumeOfBorrowersAmountinWei -= borrowing[borrower].depositDetails[index].depositedAmount;
 
         // Deduct tototalBorrowedAmountt
         borrowing[borrower].totalBorrowedAmount -= borrowing[borrower].depositDetails[index].borrowedAmount;
@@ -701,11 +678,11 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
     function updateEthProfitsOfLiquidators(uint256 amount,bool operation) external onlyCDSOrBorrowingContract{
         require(amount != 0, "Treasury:Amount should not be zero");
         if(operation){
-            ethProfitsOfLiquidators += amount;
+            // ethProfitsOfLiquidators += amount;
             omniChainTreasury.ethProfitsOfLiquidators += amount;
 
         }else{
-            ethProfitsOfLiquidators -= amount;
+            // ethProfitsOfLiquidators -= amount;
             omniChainTreasury.ethProfitsOfLiquidators += amount;
         }
     }
@@ -802,8 +779,8 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
      */
     function transferEthToCdsLiquidators(address borrower,uint128 amount) external onlyCDSContract{
         require(borrower != address(0) && amount != 0, "Input address or amount is invalid");
-        require(amount <= ethProfitsOfLiquidators,"Treasury don't have enough ETH amount");
-        ethProfitsOfLiquidators -= amount;
+        require(amount <= omniChainTreasury.ethProfitsOfLiquidators,"Treasury don't have enough ETH amount");
+        omniChainTreasury.ethProfitsOfLiquidators -= amount;
         (bool sent,) = payable(borrower).call{value: amount}("");
         if(!sent){
             revert Treasury_EthTransferToCdsLiquidatorFailed();
@@ -887,7 +864,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
             revert Treasury_AavePoolAddressZero();
         }
 
-        aToken.approve(aaveWETH,amount);
+        aToken.approve(address(wethGateway),amount);
 
         // Call the withdraw function in aave to withdraw eth.
         wethGateway.withdrawETH(poolAddress,amount,address(this));
@@ -912,9 +889,29 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         return amount;
     }
 
+    function setExternalProtocolAddresses(
+        address _wethGateway,
+        address _comet,
+        address _aavePoolAddressProvider,
+        address _aToken,
+        address _weth
+    ) external onlyOwner{
+        wethGateway = IWrappedTokenGatewayV3(_wethGateway);     // 0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
+        comet = CometMainInterface(_comet);                     // 0xA17581A9E3356d9A858b789D68B4d866e593aE94
+        WETH = IWETH9(_weth);                                   // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+        aavePoolAddressProvider = IPoolAddressesProvider(
+            _aavePoolAddressProvider);                          // 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
+        aToken = IERC20(_aToken);                               // 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
+    }
+
     function setDstEid(uint32 _eid) external onlyOwner{
         require(_eid != 0, "EID can't be zero");
         dstEid = _eid;
+    }
+
+    function setDstTreasuryAddress(address _treasuryAddress) external onlyOwner{
+        require(_treasuryAddress != address(0), "Treasury address can't be zero address");
+        dstTreasuryAddress = _treasuryAddress;
     }
 
     function oftOrNativeReceiveFromOtherChains(
@@ -932,7 +929,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         MessagingFee memory _fee;
         bytes memory _options;
 
-        if(_functionToDo == FunctionToDo.TOKEN_TRANSFER){
+        if(_functionToDo == FunctionToDo.TOKEN_TRANSFER || _functionToDo == FunctionToDo.BOTH_TRANSFER){
 
             //! getting options since,the src don't know the dst state
             bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
@@ -948,12 +945,12 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
             );
             MessagingFee memory fee = amint.quoteSend( _sendParam, false);
 
-            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(260000, 0).addExecutorNativeDropOption(
+            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(350000, 0).addExecutorNativeDropOption(
                 uint128(fee.nativeFee), 
-                bytes32(uint256(uint160(_oftTransferData.recipient)))
+                bytes32(uint256(uint160(dstTreasuryAddress)))
             );
 
-            _fee = quote( dstEid, FunctionToDo(2), _oftTransferData, _nativeTokenTransferData, _options, false);
+            _fee = quote( dstEid, _functionToDo, _oftTransferData, _nativeTokenTransferData, _options, false);
         }else if(_functionToDo == FunctionToDo.NATIVE_TRANSFER){
             _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(260000, 0);
         }
@@ -1003,6 +1000,8 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         OmniChainTreasuryData memory data;
         AmintOftTransferData memory oftTransferData;
         NativeTokenTransferData memory nativeTokenTransferData;
+        bytes memory _options;
+        MessagingFee memory _fee;
 
         (
             functionToDo,
@@ -1013,8 +1012,10 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
 
         if(functionToDo == FunctionToDo.TOKEN_TRANSFER){
 
+            omniChainTreasury = data;
+
             //! getting options since,the src don't know the dst state
-            bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
+            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
 
             SendParam memory _sendParam = SendParam(
                 dstEid,
@@ -1025,26 +1026,15 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
                 '0x',
                 '0x'
             );
-            MessagingFee memory _fee = amint.quoteSend( _sendParam, false);
-            
-            omniChainTreasury = data;
-            // console.log("n fee", _fee.nativeFee);
-            // console.logBytes32(_sendParam.to);
-            console.log("send param", _sendParam.amountLD);
-            // console.log("send param", _sendParam.minAmountLD);
-            // console.log("tre address", address(this));
-            console.log("gas left", gasleft());
-            // console.log("amint address", address(amint));
-            // console.log("trea amint bal", amint.balanceOf(address(this)));
+            _fee = amint.quoteSend( _sendParam, false);
 
             amint.send{ value: _fee.nativeFee}( _sendParam, _fee, address(this));
-                        console.log("gas left 2", gasleft());
 
         }else if(functionToDo == FunctionToDo.NATIVE_TRANSFER){
 
             omniChainTreasury = data;
 
-            bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(260000, 0).addExecutorNativeDropOption(
+            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(260000, 0).addExecutorNativeDropOption(
                 uint128(nativeTokenTransferData.nativeTokensToSend), 
                 bytes32(uint256(uint160(nativeTokenTransferData.recipient)))
             );
@@ -1055,7 +1045,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
                 AmintOftTransferData(address(0),0),
                 NativeTokenTransferData(address(0), 0));
 
-            MessagingFee memory _fee = quote( 
+            _fee = quote( 
                 dstEid, 
                 FunctionToDo(1), 
                 AmintOftTransferData(address(0),0),
@@ -1065,9 +1055,29 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
 
             _lzSend(dstEid, _payload, _options, _fee, payable(msg.sender));
 
-        }else{
+        }else if(functionToDo == FunctionToDo.BOTH_TRANSFER){
 
             omniChainTreasury = data;
+
+            // _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
+
+            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(260000, 0).addExecutorNativeDropOption(
+                uint128(nativeTokenTransferData.nativeTokensToSend), 
+                bytes32(uint256(uint160(nativeTokenTransferData.recipient)))
+            );
+
+            SendParam memory _sendParam = SendParam(
+                dstEid,
+                bytes32(uint256(uint160(oftTransferData.recipient))),
+                oftTransferData.tokensToSend,
+                oftTransferData.tokensToSend,
+                _options,
+                '0x',
+                '0x'
+            );
+            _fee = amint.quoteSend( _sendParam, false);
+
+            amint.send{ value: _fee.nativeFee}( _sendParam, _fee, address(this));
 
         }
 

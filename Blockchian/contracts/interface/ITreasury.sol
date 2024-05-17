@@ -32,7 +32,6 @@ interface ITreasury{
         uint128 aBondTokensAmount;
         uint128 strikePrice;
         uint128 optionFees;
-        uint64  externalProtocolCount;
     }
 
     //Borrower Details
@@ -104,7 +103,7 @@ interface ITreasury{
     }
 
     enum Protocol{Aave,Compound}
-    enum FunctionToDo { DUMMY, UPDATE, TOKEN_TRANSFER, NATIVE_TRANSFER }
+    enum FunctionToDo { DUMMY, UPDATE, TOKEN_TRANSFER, NATIVE_TRANSFER, BOTH_TRANSFER}
 
         function deposit(
             uint256 _depositingAmount,
@@ -128,7 +127,6 @@ interface ITreasury{
 
 
         function noOfBorrowers() external view returns(uint128);
-        function ethProfitsOfLiquidators() external view returns(uint256);
         function abondAmintPool() external view returns(uint256);
         function amintGainedFromLiquidation() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinWei() external view returns(uint256);

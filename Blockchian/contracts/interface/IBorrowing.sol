@@ -37,8 +37,6 @@ interface IBorrowing{
     // function lastCDSPoolValue() external view returns(uint256);
     function omniChainBorrowingCDSPoolValue() external view returns(uint256);
     function omniChainBorrowingNoOfLiquidations() external view returns(uint128);
-    function getOmniChainBorrowing() external view returns(OmniChainBorrowingData memory);
-
 
     function updateLastEthVaultValue(uint256 _amount) external;
     function calculateRatio(uint256 _amount,uint currentEthPrice) external returns(uint64);
