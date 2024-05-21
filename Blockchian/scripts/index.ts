@@ -16,9 +16,9 @@ export const aTokenAddressSepolia = "0x5b071b590a59395fE4025A0Ccc1FcC931AAc1830"
 export const endpointSepolia = "0x6edce65403992e310a62460808c4b910d972f10f"
 export const eidSepolia = 40161
 
-export const owner1 = "0x876b4dE42e35A37E6D0eaf8762836CAD860C0c18";
-export const owner2 = "0x14dadA759016a617bc491c9337F196Ade6cE9921";
-export const owner3 = "0xc2858E82b388e4E5e8644Ca89D3f1b03D9047181";
+export const owner1 = "0xF318E76833D7fc6c24029c71AFE07db81cB90bA8";
+export const owner2 = "0xb1C0ceB9Bb5a9602F0dC380E2433A9E2801929b5";
+export const owner3 = "0x555c74B09A29e083EA6F661c2dD78617d8Fd906E";
 
 export const PROXY_AMINT_ADDRESS = "0x163B51BdFA222a0dDf0EB3ec45CcbABC55993cEE"
 export const PROXY_ABOND_ADDRESS = "0xd83780601Db14F911c7c02F697e6efdc8C20F6a7"

@@ -45,7 +45,7 @@ interface CDSInterface {
         uint256 totalCdsDepositedAmountWithOptionFees;
         uint256 totalAvailableLiquidationAmount;
         uint256 usdtAmountDepositedTillNow;
-        uint256 burnedAmintInRedeem;
+        uint256 burnedUSDaInRedeem;
         uint128 lastCumulativeRate;
     }
 
@@ -88,6 +88,6 @@ interface CDSInterface {
     function updateTotalCdsDepositedAmountWithOptionFees(uint128 _amount) external;
 
     
-    event Deposit(uint256 depositedAmint,uint64 index,uint128 liquidationAmount,uint256 normalizedAmount,uint128 depositVal);
-    event Withdraw(uint256 withdrewAmint,uint128 withdrawETH);
+    event Deposit(uint256 depositedUSDa,uint64 index,uint128 liquidationAmount,uint256 normalizedAmount,uint128 depositVal);
+    event Withdraw(uint256 withdrewUSDa,uint128 withdrawETH);
 }

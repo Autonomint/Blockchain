@@ -21,7 +21,7 @@ contract MultiSign is Initializable,OwnableUpgradeable,UUPSUpgradeable {
         SetTreasuryBorrow,
         SetTreasuryCDS,
         SetBondRatio,
-        SetAmintLimit,
+        SetUSDaLimit,
         SetUsdtLimit
     }
     enum Functions{

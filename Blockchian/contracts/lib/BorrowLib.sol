@@ -7,7 +7,7 @@ pragma solidity 0.8.20;
 
 import { State, IABONDToken } from "../interface/IAbond.sol";
 import "../interface/ITreasury.sol";
-import "../interface/IAmint.sol";
+import "../interface/IUSDa.sol";
 import "../interface/IBorrowing.sol";
 import "hardhat/console.sol";
 
@@ -18,10 +18,10 @@ library BorrowLib {
     uint128 constant CUMULATIVE_PRECISION = 1e7;
     uint128 constant RATIO_PRECISION = 1e4;
     uint128 constant RATE_PRECISION = 1e27;
-    uint128 constant AMINT_PRECISION = 1e12;
+    uint128 constant USDA_PRECISION = 1e12;
     uint128 constant LIQ_AMOUNT_PRECISION = 1e10;
 
-    string  public constant name = "AMINT Stablecoin";
+    string  public constant name = "Autonomint USD";
     string  public constant version = "1";
     bytes32 public constant PERMIT_TYPEHASH = keccak256("Permit(address holder,address spender,uint256 allowedAmount,bool allowed,uint256 expiry)");
 
@@ -54,7 +54,7 @@ library BorrowLib {
         uint256 amount,
         uint128 ethPrice
     ) public pure returns(uint256){
-        return ((((80*calculateHalfValue(amount))/100)*ethPrice)/100)/AMINT_PRECISION;
+        return ((((80*calculateHalfValue(amount))/100)*ethPrice)/100)/USDA_PRECISION;
     }
 
     function calculateReturnToAbond(
@@ -62,7 +62,7 @@ library BorrowLib {
         uint128 depositEthPrice,
         uint128 returnToTreasury
     ) public pure returns(uint128){
-        return (((((depositedAmount * depositEthPrice)/AMINT_PRECISION)/100) - returnToTreasury) * 10)/100;
+        return (((((depositedAmount * depositEthPrice)/USDA_PRECISION)/100) - returnToTreasury) * 10)/100;
     }
     
     function calculateRatio(
@@ -109,7 +109,7 @@ library BorrowLib {
 
             // Set the currentCDSPoolValue to lastCDSPoolValue for next deposit
             previousData.cdsPoolValue = currentCDSPoolValue;
-            currentCDSPoolValue = currentCDSPoolValue * AMINT_PRECISION;
+            currentCDSPoolValue = currentCDSPoolValue * USDA_PRECISION;
 
         }else{
 
@@ -136,7 +136,7 @@ library BorrowLib {
             }
 
             previousData.totalCDSPool = latestTotalCDSPool;
-            currentCDSPoolValue = previousData.cdsPoolValue * AMINT_PRECISION;
+            currentCDSPoolValue = previousData.cdsPoolValue * USDA_PRECISION;
         }
 
         // Calculate ratio by dividing currentEthVaultValue by currentCDSPoolValue,
@@ -168,7 +168,7 @@ library BorrowLib {
         uint128 ethPrice, 
         uint8 LTV
     ) public pure returns(uint256){
-        uint256 tokens = (depositedAmont * ethPrice * LTV) / (AMINT_PRECISION * RATIO_PRECISION);
+        uint256 tokens = (depositedAmont * ethPrice * LTV) / (USDA_PRECISION * RATIO_PRECISION);
         return tokens;
     }
 
@@ -176,7 +176,7 @@ library BorrowLib {
         uint256 _amount, 
         uint64 _bondRatio
     ) public pure returns(uint128 amount){
-        amount = (uint128(_amount) * AMINT_PRECISION)/_bondRatio;
+        amount = (uint128(_amount) * USDA_PRECISION)/_bondRatio;
     }
 
     function getAbondYields(
@@ -196,10 +196,10 @@ library BorrowLib {
         uint256 redeemableAmount = treasury.calculateYieldsForExternalProtocol(user,aBondAmount);
         uint128 depositedAmount = (aBondAmount * userState.ethBacked)/1e18;
 
-        uint128 amintToAbondRatioLiq = uint64(treasury.amintGainedFromLiquidation() * RATE_PRECISION/ abond.totalSupply());
-        uint256 amintToTransfer = (amintToAbondRatioLiq * aBondAmount) / RATE_PRECISION;
+        uint128 usdaToAbondRatioLiq = uint64(treasury.usdaGainedFromLiquidation() * RATE_PRECISION/ abond.totalSupply());
+        uint256 usdaToTransfer = (usdaToAbondRatioLiq * aBondAmount) / RATE_PRECISION;
 
-        return (depositedAmount,redeemableAmount,amintToTransfer);
+        return (depositedAmount,redeemableAmount,usdaToTransfer);
     }
 
     function getLiquidationAmountProportions(
@@ -208,7 +208,7 @@ library BorrowLib {
         uint256 _totalGlobalCdsDepositedAmount,
         uint256 _totalAvailableLiqAmount,
         uint256 _totalGlobalAvailableLiqAmountAmount
-    ) internal pure returns (uint256){
+    ) public pure returns (uint256){
 
         uint256 otherChainCDSAmount = _totalGlobalCdsDepositedAmount - _totalCdsDepositedAmount;
 
@@ -238,7 +238,7 @@ library BorrowLib {
         uint128 _liqAmount,
         uint128 _liqAmountToGetFromOtherChain,
         uint128 _cdsProfits
-    ) internal pure returns (uint128){
+    ) public pure returns (uint128){
 
         uint128 share = (_liqAmountToGetFromOtherChain * LIQ_AMOUNT_PRECISION)/_liqAmount;
         uint128 cdsProfitsForOtherChain = (_cdsProfits * share)/LIQ_AMOUNT_PRECISION;
@@ -249,10 +249,10 @@ library BorrowLib {
     function redeemYields(
         address user,
         uint128 aBondAmount,
-        address amintAddress,
+        address usdaAddress,
         address abondAddress,
         address treasuryAddress
-    ) internal returns(uint256){
+    ) public returns(uint256){
 
         require(aBondAmount > 0,"Abond amount should not be zero");
         IABONDToken abond = IABONDToken(abondAddress);
@@ -261,25 +261,25 @@ library BorrowLib {
         require(aBondAmount <= userState.aBondBalance,"You don't have enough aBonds");
 
         ITreasury treasury = ITreasury(treasuryAddress);
-        uint128 amintToAbondRatio = uint128(treasury.abondAmintPool() * RATE_PRECISION/ abond.totalSupply());
-        uint256 amintToBurn = (amintToAbondRatio * aBondAmount) / RATE_PRECISION;
-        treasury.updateAbondAmintPool(amintToBurn,false);
+        uint128 usdaToAbondRatio = uint128(treasury.abondUSDaPool() * RATE_PRECISION/ abond.totalSupply());
+        uint256 usdaToBurn = (usdaToAbondRatio * aBondAmount) / RATE_PRECISION;
+        treasury.updateAbondUSDaPool(usdaToBurn,false);
 
-        uint128 amintToAbondRatioLiq = uint128(treasury.amintGainedFromLiquidation() * RATE_PRECISION/ abond.totalSupply());
-        uint256 amintToTransfer = (amintToAbondRatioLiq * aBondAmount) / RATE_PRECISION;
-        treasury.updateAmintGainedFromLiquidation(amintToTransfer,false);
+        uint128 usdaToAbondRatioLiq = uint128(treasury.usdaGainedFromLiquidation() * RATE_PRECISION/ abond.totalSupply());
+        uint256 usdaToTransfer = (usdaToAbondRatioLiq * aBondAmount) / RATE_PRECISION;
+        treasury.updateUSDaGainedFromLiquidation(usdaToTransfer,false);
 
-        //Burn the amint from treasury
-        treasury.approveAmint(address(this),(amintToBurn + amintToTransfer));
+        //Burn the usda from treasury
+        treasury.approveUSDa(address(this),(usdaToBurn + usdaToTransfer));
 
-        IAMINT amint = IAMINT(amintAddress);
-        bool burned = amint.burnFromUser(address(treasury),amintToBurn);
+        IUSDa usda = IUSDa(usdaAddress);
+        bool burned = usda.burnFromUser(address(treasury),usdaToBurn);
         if(!burned){
             revert ('Borrowing_RedeemBurnFailed');
         }
         
-        if(amintToTransfer > 0){
-            bool transferred = amint.transferFrom(address(treasury),user,amintToTransfer);
+        if(usdaToTransfer > 0){
+            bool transferred = usda.transferFrom(address(treasury),user,usdaToTransfer);
             if(!transferred){
                 revert ('Borrowing_RedeemTransferFailed');
             }
@@ -294,119 +294,8 @@ library BorrowLib {
         }
         return withdrawAmount;
     }
-    // function withDraw(
-    //     address toAddress,
-    //     uint64 index,
-    //     uint64 ethPrice,
-    //     uint64 withdrawTime,
-    //     uint256 lastCumulativeRate,
-    //     address abondAddress,
-    //     address amintAddress,
-    //     address treasuryAddress
-    // ) public {
 
-    //     IAMINT amint = IAMINT(amintAddress);
-    //     IABONDToken abond = IABONDToken(abondAddress);
-    //     ITreasury treasury = ITreasury(treasuryAddress);
-
-    //     calculateRatio(0,ethPrice);
-    //     uint128 lastEthprice = uint128(ethPrice);
-
-    //     ITreasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(msg.sender,index);
-    //     ITreasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
-
-    //     // check if borrowerIndex in BorrowerDetails of the msg.sender is greater than or equal to Index
-    //     if(getBorrowingResult.totalIndex >= index ) {
-    //         // Check if user amount in the Index is been liquidated or not
-    //         require(!depositDetail.liquidated,"User amount has been liquidated");
-    //         // check if withdrawed in depositDetail in borrowing of msg.seader is false or not
-    //         if(depositDetail.withdrawed == false) {                                  
-    //             // Calculate the borrowingHealth
-    //             uint128 borrowingHealth = (ethPrice * 10000) / depositDetail.ethPriceAtDeposit;
-    //             require(borrowingHealth > 8000,"BorrowingHealth is Low");
-    //             // Calculate th borrower's debt
-    //             uint256 borrowerDebt = ((depositDetail.normalizedAmount * lastCumulativeRate)/RATE_PRECISION);
-    //             calculateCumulativeRate();
-    //             uint128 lastEventTime = uint128(block.timestamp);
-    //             // Check whether the Borrower have enough Trinty
-    //             require(amint.balanceOf(msg.sender) >= borrowerDebt, "User balance is less than required");
-                            
-    //             // Update the borrower's data
-    //             {depositDetail.ethPriceAtWithdraw = ethPrice;
-    //             depositDetail.withdrawed = true;
-    //             depositDetail.withdrawTime = withdrawTime;
-    //             // Calculate interest for the borrower's debt
-    //             //uint256 interest = borrowerDebt - depositDetail.borrowedAmount;
-
-    //             uint256 discountedETH = ((((80*((depositDetail.depositedAmount * 50)/100))/100)*ethPrice)/100)/AMINT_PRECISION; // 0.4
-    //             treasury.updateAbondAmintPool(discountedETH,true);
-    //             // Calculate the amount of AMINT to burn and sent to the treasury
-    //             // uint256 halfValue = (50 *(depositDetail.borrowedAmount))/100;
-    //             console.log("BORROWED AMOUNT",depositDetail.borrowedAmount);
-    //             console.log("DISCOUNTED ETH",discountedETH);
-    //             uint256 burnValue = depositDetail.borrowedAmount - discountedETH;
-    //             console.log("BURN VALUE",burnValue);
-    //             // Burn the AMINT from the Borrower
-    //             bool success = amint.burnFromUser(msg.sender, burnValue);
-    //             if(!success){
-    //                 revert ("Borrowing_WithdrawBurnFailed");
-    //             }
-
-    //             //Transfer the remaining AMINT to the treasury
-    //             bool transfer = amint.transferFrom(msg.sender,treasuryAddress,borrowerDebt - burnValue);
-    //             if(!transfer){
-    //                 revert ("Borrowing_WithdrawAMINTTransferFailed");
-    //             }
-    //             //Update totalNormalizedAmount
-    //             totalNormalizedAmount -= depositDetail.normalizedAmount;
-    //             console.log("borrowerDebt",borrowerDebt);
-    //             treasury.updateTotalInterest(borrowerDebt - depositDetail.borrowedAmount);
-
-    //             // Mint the ABondTokens
-    //             uint128 noOfAbondTokensminted = _mintAbondToken(msg.sender, index, discountedETH);
-    //             // Update ABONDToken data
-    //             depositDetail.aBondTokensAmount = noOfAbondTokensminted;
-
-    //             // Update deposit details    
-    //             treasury.updateDepositDetails(msg.sender,index,depositDetail);}             
-    //             uint128 ethToReturn;
-    //             //Calculate current depositedAmount value
-    //             uint128 depositedAmountvalue = (depositDetail.depositedAmount * depositDetail.ethPriceAtDeposit)/ethPrice;
-
-    //             if(borrowingHealth > 10000){
-    //                 // If the ethPrice is higher than deposit ethPrice,call withdrawOption in options contract
-    //                 ethToReturn = (depositedAmountvalue + (options.calculateStrikePriceGains(depositDetail.depositedAmount,depositDetail.strikePrice,_ethPrice)));
-    //                 if(ethToReturn > depositDetail.depositedAmount){
-    //                     ethRemainingInWithdraw += (ethToReturn - depositDetail.depositedAmount);
-    //                 }else{
-    //                     ethRemainingInWithdraw += (depositDetail.depositedAmount - ethToReturn);
-    //                 }
-    //                 ethValueRemainingInWithdraw += (ethRemainingInWithdraw * ethPrice);
-    //             }else if(borrowingHealth == 10000){
-    //                 ethToReturn = depositedAmountvalue;
-    //             }else if(8000 < borrowingHealth && borrowingHealth < 10000) {
-    //                 ethToReturn = depositDetail.depositedAmount;
-    //             }else{
-    //                 revert("BorrowingHealth is Low");
-    //             }
-    //             ethToReturn = (ethToReturn * 50)/100;
-    //             // Call withdraw in treasury
-    //             bool sent = treasury.withdraw(msg.sender,toAddress,ethToReturn,index);
-    //             if(!sent){
-    //                 revert ("Borrowing_WithdrawEthTransferFailed");
-    //             }
-    //             emit Withdraw(borrowerDebt,ethToReturn,depositDetail.aBondTokensAmount);
-    //         }else{
-    //             // update withdrawed to true
-    //             revert("User already withdraw entire amount");
-    //         }
-    //     }else {
-    //         // revert if user doens't have the perticular index
-    //         revert("User doens't have the perticular index");
-    //     }
-    // }
-
-    function _rpow(uint x, uint n, uint b) internal pure returns (uint z) {
+    function _rpow(uint x, uint n, uint b) public pure returns (uint z) {
       assembly {
         switch x case 0 {switch n case 0 {z := b} default {z := 0}}
         default {

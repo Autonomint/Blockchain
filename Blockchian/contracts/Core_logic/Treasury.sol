@@ -7,7 +7,7 @@ import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/interfaces/IERC20.sol";
-import "../interface/IAmint.sol";
+import "../interface/IUSDa.sol";
 import { State,IABONDToken } from "../interface/IAbond.sol";
 import "../interface/IBorrowing.sol";
 import "../interface/ITreasury.sol";
@@ -24,7 +24,7 @@ import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/lib
 contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
 
     IBorrowing  private borrow;
-    IAMINT      private amint;
+    IUSDa      private usda;
     IABONDToken private abond;
     IWrappedTokenGatewayV3  private wethGateway; // Weth gateway is used to deposit eth in  and withdraw from aave
     IPoolAddressesProvider  private aavePoolAddressProvider; // To get the current pool  address in Aave
@@ -33,7 +33,8 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
     CometMainInterface private comet; // To deposit in and withdraw eth from compound
     IWETH9 private WETH;
 
-    address private cdsContract;  
+    address private cdsContract;
+    address private borrowLiquidation;
     address private compoundAddress;
 
     // Get depositor details by address
@@ -46,14 +47,14 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
     uint128 public noOfBorrowers;
     uint256 private totalInterest;
     uint256 private totalInterestFromLiquidation;
-    uint256 public abondAmintPool;
+    uint256 public abondUSDaPool;
     uint256 private ethProfitsOfLiquidators;
     uint256 private interestFromExternalProtocolDuringLiquidation;
 
     uint128 private PRECISION;
     uint256 private CUMULATIVE_PRECISION;
 
-    uint256 public amintGainedFromLiquidation;
+    uint256 public usdaGainedFromLiquidation;
     OmniChainTreasuryData private omniChainTreasury;//! omnichainTreasury contains global treasury data(all chains)
     using OptionsBuilder for bytes;
     uint32 private dstEid;
@@ -64,6 +65,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         address _tokenAddress,
         address _abondAddress,
         address _cdsContract,
+        address _borrowLiquidation,
         address _usdt,
         address _endpoint,
         address _delegate
@@ -73,26 +75,20 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         __oAppinit(_endpoint, _delegate);
         cdsContract = _cdsContract;
         borrow = IBorrowing(_borrowing);
-        amint = IAMINT(_tokenAddress);
+        usda = IUSDa(_tokenAddress);
         abond = IABONDToken(_abondAddress);
         usdt = IERC20(_usdt);
+        borrowLiquidation = _borrowLiquidation;
         PRECISION = 1e18;
         CUMULATIVE_PRECISION = 1e27;
     }
 
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
 
-    modifier onlyBorrowingContract() {
-        require( msg.sender == address(borrow), "This function can only called by borrowing contract");
-        _;
-    }
-
-    modifier onlyCDSContract() {
-        require( msg.sender == cdsContract, "This function can only called by CDS contract");
-        _;
-    }
-    modifier onlyCDSOrBorrowingContract() {
-        require( (msg.sender == cdsContract) || (msg.sender == address(borrow)), "This function can only called by Borrowing or CDS contract");
+    modifier onlyCoreContracts() {
+        require( 
+            msg.sender == address(borrow) ||  msg.sender == cdsContract || msg.sender == borrowLiquidation, 
+            "This function can only called by Core contracts");
         _;
     }
 
@@ -101,7 +97,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
     }
 
     /**
-     * @dev This function takes ethPrice, depositTime parameters to deposit eth into the contract and mint them back the AMINT tokens.
+     * @dev This function takes ethPrice, depositTime parameters to deposit eth into the contract and mint them back the USDa tokens.
      * @param _ethPrice get current eth price 
      * @param _depositTime get unixtime stamp at the time of deposit
      **/
@@ -111,7 +107,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         address user,
         uint128 _ethPrice,
         uint64 _depositTime
-    ) external payable onlyBorrowingContract returns(DepositResult memory) {
+    ) external payable onlyCoreContracts returns(DepositResult memory) {
 
         require (msg.value > _depositingAmount,"Treasury: Don't have enough LZ fee");
 
@@ -156,8 +152,8 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
 
         uint256 externalProtocolDepositEth = ((_depositingAmount * 25)/100);
 
-        // depositToAaveByUser(externalProtocolDepositEth);
-        // depositToCompoundByUser(externalProtocolDepositEth);
+        depositToAaveByUser(externalProtocolDepositEth);
+        depositToCompoundByUser(externalProtocolDepositEth);
 
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
@@ -165,7 +161,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         MessagingFee memory fee = quote(
             dstEid, 
             FunctionToDo(1), 
-            AmintOftTransferData( address(0), 0),
+            USDaOftTransferData( address(0), 0),
             NativeTokenTransferData( address(0), 0),
             _options, 
             false);
@@ -189,7 +185,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         address toAddress,
         uint256 _amount,
         uint64 index
-    ) external payable onlyBorrowingContract returns(bool){
+    ) external payable onlyCoreContracts returns(bool){
         // Check the _amount is non zero
         require(_amount > 0, "Cannot withdraw zero Ether");
         require(borrowing[borrower].depositDetails[index].withdrawed,"");
@@ -218,7 +214,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         MessagingFee memory fee = quote(
             dstEid, 
             FunctionToDo(1), 
-            AmintOftTransferData( address(0), 0), 
+            USDaOftTransferData( address(0), 0), 
             NativeTokenTransferData( address(0), 0),
             _options, 
             false);
@@ -233,7 +229,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         return true;
     }
 
-    function withdrawFromExternalProtocol(address user, uint128 aBondAmount) external onlyBorrowingContract returns(uint256){
+    function withdrawFromExternalProtocol(address user, uint128 aBondAmount) external onlyCoreContracts returns(uint256){
 
         uint256 aTokenBalance = aToken.balanceOf(address(this));
         _calculateCumulativeRate(aTokenBalance, Protocol.Aave);
@@ -259,7 +255,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
      * @dev This function depsoit 25% of the deposited ETH to AAVE and mint aTokens 
     */
 
-    // function depositToAave() external onlyBorrowingContract{
+    // function depositToAave() external onlyCoreContracts{
 
     //     //Divide the Total ETH in the contract to 1/4
     //     uint256 share = (externalProtocolCountTotalValue[externalProtocolDepositCount]*50)/100;
@@ -366,7 +362,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
      * @param index index of aave deposit 
      */
 
-    // function withdrawFromAave(uint64 index) external onlyBorrowingContract{
+    // function withdrawFromAave(uint64 index) external onlyCoreContracts{
 
     //     //Check the deposited amount in the given index is already withdrawed
     //     require(!protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawed,"Already withdrawed in this index");
@@ -422,7 +418,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
      * @dev This function depsoit 25% of the deposited ETH to COMPOUND and mint cETH. 
     */
 
-    // function depositToCompound() external onlyBorrowingContract{
+    // function depositToCompound() external onlyCoreContracts{
 
     //     //Divide the Total ETH in the contract to 1/4
     //     uint256 share = (externalProtocolCountTotalValue[externalProtocolDepositCount - 1]*50)/100;
@@ -473,7 +469,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
      * @dev This function withdraw ETH from COMPOUND.
      */
 
-    // function withdrawFromCompound(uint64 index) external onlyBorrowingContract{
+    // function withdrawFromCompound(uint64 index) external onlyCoreContracts{
 
     //     uint256 amount = protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].tokensCredited;
 
@@ -592,7 +588,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
     //     return interestGainedByUser;
     // }
 
-    function calculateYieldsForExternalProtocol(address user,uint128 aBondAmount) external view onlyBorrowingContract returns (uint256) {
+    function calculateYieldsForExternalProtocol(address user,uint128 aBondAmount) external view onlyCoreContracts returns (uint256) {
         
         State memory userState = abond.userStates(user);
 
@@ -630,52 +626,52 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
     function updateDepositDetails(
         address depositor,
         uint64 index,DepositDetails memory depositDetail
-    ) external onlyBorrowingContract{
+    ) external onlyCoreContracts{
             borrowing[depositor].depositDetails[index] = depositDetail;
     }
 
-    function updateHasBorrowed(address borrower,bool _bool) external onlyBorrowingContract{
+    function updateHasBorrowed(address borrower,bool _bool) external onlyCoreContracts{
         borrowing[borrower].hasBorrowed = _bool;
     }
-    function updateTotalDepositedAmount(address borrower,uint128 amount) external onlyBorrowingContract{
+    function updateTotalDepositedAmount(address borrower,uint128 amount) external onlyCoreContracts{
         borrowing[borrower].depositedAmount -= amount;
     }
-    function updateTotalBorrowedAmount(address borrower,uint256 amount) external onlyBorrowingContract{
+    function updateTotalBorrowedAmount(address borrower,uint256 amount) external onlyCoreContracts{
         borrowing[borrower].totalBorrowedAmount += amount;
     }
 
-    function updateTotalInterest(uint256 _amount) external onlyBorrowingContract{
+    function updateTotalInterest(uint256 _amount) external onlyCoreContracts{
         totalInterest += _amount;
         omniChainTreasury.totalInterest += _amount;
     }
 
-    function updateTotalInterestFromLiquidation(uint256 _amount) external onlyBorrowingContract{
+    function updateTotalInterestFromLiquidation(uint256 _amount) external onlyCoreContracts{
         totalInterestFromLiquidation += _amount;
         omniChainTreasury.totalInterestFromLiquidation += _amount;
     }
 
-    function updateAbondAmintPool(uint256 amount,bool operation) external onlyBorrowingContract{
+    function updateAbondUSDaPool(uint256 amount,bool operation) external onlyCoreContracts{
         require(amount != 0, "Treasury:Amount should not be zero");
         if(operation){
-            abondAmintPool += amount;
-            omniChainTreasury.abondAmintPool += amount;
+            abondUSDaPool += amount;
+            omniChainTreasury.abondUSDaPool += amount;
         }else{
-            abondAmintPool -= amount;
-            omniChainTreasury.abondAmintPool -= amount;
+            abondUSDaPool -= amount;
+            omniChainTreasury.abondUSDaPool -= amount;
         }
     }
 
-    function updateAmintGainedFromLiquidation(uint256 amount,bool operation) external onlyBorrowingContract{
+    function updateUSDaGainedFromLiquidation(uint256 amount,bool operation) external onlyCoreContracts{
         if(operation){
-            amintGainedFromLiquidation += amount;
-            omniChainTreasury.amintGainedFromLiquidation += amount;
+            usdaGainedFromLiquidation += amount;
+            omniChainTreasury.usdaGainedFromLiquidation += amount;
         }else{
-            amintGainedFromLiquidation -= amount;
-            omniChainTreasury.amintGainedFromLiquidation -= amount;
+            usdaGainedFromLiquidation -= amount;
+            omniChainTreasury.usdaGainedFromLiquidation -= amount;
         }
     }
 
-    function updateEthProfitsOfLiquidators(uint256 amount,bool operation) external onlyCDSOrBorrowingContract{
+    function updateEthProfitsOfLiquidators(uint256 amount,bool operation) external onlyCoreContracts{
         require(amount != 0, "Treasury:Amount should not be zero");
         if(operation){
             // ethProfitsOfLiquidators += amount;
@@ -687,7 +683,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         }
     }
 
-    function updateInterestFromExternalProtocol(uint256 amount) external onlyBorrowingContract{
+    function updateInterestFromExternalProtocol(uint256 amount) external onlyCoreContracts{
         interestFromExternalProtocolDuringLiquidation += amount;
         omniChainTreasury.interestFromExternalProtocolDuringLiquidation += amount;
     }
@@ -722,7 +718,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         return uint128(protocolDeposit[Protocol.Compound].cumulativeRate);
     }
 
-    function getExternalProtocolCumulativeRate(bool maximum) public view onlyBorrowingContract returns(uint128){
+    function getExternalProtocolCumulativeRate(bool maximum) public view onlyCoreContracts returns(uint128){
         uint128 aaveCumulativeRate = getAaveCumulativeRate();
         uint128 compoundCumulativeRate = getCompoundCumulativeRate();
         if(maximum){
@@ -741,20 +737,20 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
     }
 
     /**
-     * amint approval
+     * usda approval
      * @param _address address to spend
-     * @param _amount amint amount
+     * @param _amount usda amount
      */
-    function approveAmint(address _address, uint _amount) external onlyCDSOrBorrowingContract{
+    function approveUSDa(address _address, uint _amount) external onlyCoreContracts{
         require(_address != address(0) && _amount != 0, "Input address or amount is invalid");
-        bool state = amint.approve(_address, _amount);
+        bool state = usda.approve(_address, _amount);
         require(state == true, "Approve failed");
     }
 
     /**
      * usdt approval
      */
-    function approveUsdt(address _address, uint _amount) external onlyCDSContract{
+    function approveUsdt(address _address, uint _amount) external onlyCoreContracts{
         require(_address != address(0) && _amount != 0, "Input address or amount is invalid");
         bool state = usdt.approve(_address, _amount);
         require(state == true, "Approve failed");
@@ -770,14 +766,14 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         require(toAddress != address(0) && amount != 0, "Input address or amount is invalid");
         require(amount <= (totalInterest + totalInterestFromLiquidation),"Treasury don't have enough interest");
         totalInterest -= amount;
-        bool sent = amint.transfer(toAddress,amount);
+        bool sent = usda.transfer(toAddress,amount);
         require(sent, "Failed to send Ether");
     }
 
     /**
      * transfer eth from treasury
      */
-    function transferEthToCdsLiquidators(address borrower,uint128 amount) external onlyCDSContract{
+    function transferEthToCdsLiquidators(address borrower,uint128 amount) external onlyCoreContracts{
         require(borrower != address(0) && amount != 0, "Input address or amount is invalid");
         require(amount <= omniChainTreasury.ethProfitsOfLiquidators,"Treasury don't have enough ETH amount");
         omniChainTreasury.ethProfitsOfLiquidators -= amount;
@@ -812,7 +808,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         return currentCumulativeRate;
     }
 
-    function depositToAaveByUser(uint256 depositAmount) internal onlyBorrowingContract{
+    function depositToAaveByUser(uint256 depositAmount) internal onlyCoreContracts{
         //Atoken balance before depsoit
         uint256 aTokenBeforeDeposit = aToken.balanceOf(address(this));
 
@@ -829,7 +825,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         protocolDeposit[Protocol.Aave].totalCreditedTokens = creditedAmount;
     }
 
-    function depositToCompoundByUser(uint256 depositAmount) internal onlyBorrowingContract {
+    function depositToCompoundByUser(uint256 depositAmount) internal onlyCoreContracts {
         //Ctoken balance before depsoit
         uint256 cTokenBeforeDeposit = comet.balanceOf(address(this));
 
@@ -916,9 +912,9 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
 
     function oftOrNativeReceiveFromOtherChains(
         FunctionToDo _functionToDo,
-        AmintOftTransferData memory _oftTransferData,
+        USDaOftTransferData memory _oftTransferData,
         NativeTokenTransferData memory _nativeTokenTransferData
-    ) external payable onlyCDSOrBorrowingContract returns (MessagingReceipt memory receipt) {
+    ) external payable onlyCoreContracts returns (MessagingReceipt memory receipt) {
 
         bytes memory _payload = abi.encode(
             _functionToDo, 
@@ -943,7 +939,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
                 '0x',
                 '0x'
             );
-            MessagingFee memory fee = amint.quoteSend( _sendParam, false);
+            MessagingFee memory fee = usda.quoteSend( _sendParam, false);
 
             _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(350000, 0).addExecutorNativeDropOption(
                 uint128(fee.nativeFee), 
@@ -965,11 +961,11 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         OmniChainTreasuryData memory _message,
         MessagingFee memory _fee,
         bytes memory _options
-    ) internal onlyBorrowingContract returns (MessagingReceipt memory receipt) {
+    ) internal onlyCoreContracts returns (MessagingReceipt memory receipt) {
         bytes memory _payload = abi.encode(
             _functionToDo, 
             _message, 
-            AmintOftTransferData(address(0),0),
+            USDaOftTransferData(address(0),0),
             NativeTokenTransferData(address(0), 0));
         
         //! Calling layer zero send function to send to dst chain
@@ -979,7 +975,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
     function quote(
         uint32 _dstEid,
         FunctionToDo _functionToDo,
-        AmintOftTransferData memory _oftTransferData,
+        USDaOftTransferData memory _oftTransferData,
         NativeTokenTransferData memory _nativeTokenTransferData,
         bytes memory _options,
         bool _payInLzToken
@@ -998,7 +994,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
 
         FunctionToDo functionToDo;
         OmniChainTreasuryData memory data;
-        AmintOftTransferData memory oftTransferData;
+        USDaOftTransferData memory oftTransferData;
         NativeTokenTransferData memory nativeTokenTransferData;
         bytes memory _options;
         MessagingFee memory _fee;
@@ -1008,7 +1004,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
             data, 
             oftTransferData, 
             nativeTokenTransferData
-            ) = abi.decode(payload, ( FunctionToDo, OmniChainTreasuryData, AmintOftTransferData, NativeTokenTransferData));
+            ) = abi.decode(payload, ( FunctionToDo, OmniChainTreasuryData, USDaOftTransferData, NativeTokenTransferData));
 
         if(functionToDo == FunctionToDo.TOKEN_TRANSFER){
 
@@ -1026,9 +1022,9 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
                 '0x',
                 '0x'
             );
-            _fee = amint.quoteSend( _sendParam, false);
+            _fee = usda.quoteSend( _sendParam, false);
 
-            amint.send{ value: _fee.nativeFee}( _sendParam, _fee, address(this));
+            usda.send{ value: _fee.nativeFee}( _sendParam, _fee, address(this));
 
         }else if(functionToDo == FunctionToDo.NATIVE_TRANSFER){
 
@@ -1042,13 +1038,13 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
             bytes memory _payload = abi.encode(
                 FunctionToDo(1), 
                 omniChainTreasury, 
-                AmintOftTransferData(address(0),0),
+                USDaOftTransferData(address(0),0),
                 NativeTokenTransferData(address(0), 0));
 
             _fee = quote( 
                 dstEid, 
                 FunctionToDo(1), 
-                AmintOftTransferData(address(0),0),
+                USDaOftTransferData(address(0),0),
                 NativeTokenTransferData(address(0), 0), 
                 _options, 
                 false);
@@ -1075,9 +1071,9 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
                 '0x',
                 '0x'
             );
-            _fee = amint.quoteSend( _sendParam, false);
+            _fee = usda.quoteSend( _sendParam, false);
 
-            amint.send{ value: _fee.nativeFee}( _sendParam, _fee, address(this));
+            usda.send{ value: _fee.nativeFee}( _sendParam, _fee, address(this));
 
         }
 

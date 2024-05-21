@@ -8,7 +8,7 @@ import {
     MessagingFee  
     } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
 
-interface IAMINT {
+interface IUSDa {
     function balanceOf(address account) external view returns (uint256);
     function mint(address to, uint256 amount) external returns(bool);
     function burnFromUser(address to, uint256 amount) external returns(bool);

@@ -7,7 +7,7 @@ pragma solidity 0.8.20;
 
 import { State, IABONDToken } from "../interface/IAbond.sol";
 import "../interface/ITreasury.sol";
-import "../interface/IAmint.sol";
+import "../interface/IUSDa.sol";
 
 library TreasuryLib {
     error Treasury_ZeroDeposit();
@@ -92,10 +92,10 @@ library TreasuryLib {
         uint128  noOfBorrowers;
         uint256  totalInterest;
         uint256  totalInterestFromLiquidation;
-        uint256  abondAmintPool;
+        uint256  abondUSDaPool;
         uint256  ethProfitsOfLiquidators;
         uint256  interestFromExternalProtocolDuringLiquidation;
-        uint256  amintGainedFromLiquidation;
+        uint256  usdaGainedFromLiquidation;
     }
 
     enum Protocol{Aave,Compound}

@@ -21,7 +21,7 @@ contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
     uint256 private PRECISION;
     uint256 private ETH_PRICE_PRECISION;
     uint256 private OPTION_PRICE_PRECISION;
-    uint128 private AMINT_PRECISION;
+    uint128 private USDA_PRECISION;
 
     // enum for different strike price percentages
     enum StrikePrice{FIVE,TEN,FIFTEEN,TWENTY,TWENTY_FIVE}
@@ -44,7 +44,7 @@ contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
         PRECISION = 1e18;
         ETH_PRICE_PRECISION = 1e6;
         OPTION_PRICE_PRECISION = 1e5;
-        AMINT_PRECISION = 1e12;
+        USDA_PRECISION = 1e12;
     }
 
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
@@ -123,9 +123,9 @@ contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
         require(E != 0,"No borrowers in protocol");
         uint256 cdsVault;
         if(treasury.omniChainTreasuryNoOfBorrowers() == 0){
-            cdsVault = cds.omniChainCDSTotalCdsDepositedAmount() * AMINT_PRECISION;
+            cdsVault = cds.omniChainCDSTotalCdsDepositedAmount() * USDA_PRECISION;
         }else{
-            cdsVault = borrowing.omniChainBorrowingCDSPoolValue() * AMINT_PRECISION;
+            cdsVault = borrowing.omniChainBorrowingCDSPoolValue() * USDA_PRECISION;
         }
 
         require(E != 0, "Treasury balance is zero");
@@ -150,7 +150,7 @@ contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
         }else{
             revert("Incorrect Strike Price");
         }
-        return ((optionPrice * _amount)/PRECISION)/AMINT_PRECISION;
+        return ((optionPrice * _amount)/PRECISION)/USDA_PRECISION;
     }
 
     // Provided square root function

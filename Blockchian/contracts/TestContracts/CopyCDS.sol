@@ -6,7 +6,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "../interface/IAmint.sol";
+import "../interface/IUSDa.sol";
 import "../interface/IBorrowing.sol";
 import "../interface/ITreasury.sol";
 import "../interface/CDSInterface.sol";
@@ -20,7 +20,7 @@ import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/lib
 
 contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp{
 
-    IAMINT      public amint; // our stablecoin
+    IUSDa      public usda; // our stablecoin
     IBorrowing  private borrowing; // Borrowing contract interface
     ITreasury   private treasury; // Treasury contrcat interface
     AggregatorV3Interface internal dataFeed;
@@ -28,20 +28,21 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
     IERC20      private usdt; // USDT interface
 
     address private admin; // admin address
-    address public treasuryAddress; // treasury address
+    address private treasuryAddress; // treasury address
+    address private borrowLiquidation;
 
     uint128 private lastEthPrice;
     uint128 private fallbackEthPrice;
     uint64  private cdsCount; // cds depositors count
     uint64  public withdrawTimeLimit; // Fixed Time interval between deposit and withdraw
-    uint256 public  totalCdsDepositedAmount; // total amint and usdt deposited in cds
+    uint256 public  totalCdsDepositedAmount; // total usda and usdt deposited in cds
     uint256 private totalCdsDepositedAmountWithOptionFees;
-    uint256 public  totalAvailableLiquidationAmount; // total deposited amint available for liquidation
+    uint256 public  totalAvailableLiquidationAmount; // total deposited usda available for liquidation
     uint128 private lastCumulativeRate; 
-    uint8   private amintLimit; // amint limit in percent
+    uint8   private usdaLimit; // usda limit in percent
     uint64  private usdtLimit; // usdt limit in number
     uint256 private usdtAmountDepositedTillNow; // total usdt deposited till now
-    uint256 private burnedAmintInRedeem;
+    uint256 private burnedUSDaInRedeem;
     uint128 private cumulativeValue;
     bool    private cumulativeValueSign;
 
@@ -55,7 +56,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
     uint32 private dstEid;
 
     function initialize(
-        address _amint,
+        address _usda,
         address priceFeed,
         address _usdt,
         address _multiSign,
@@ -65,7 +66,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         __oAppinit(_endpoint, _delegate);
-        amint = IAMINT(_amint); // amint token contract address
+        usda = IUSDa(_usda); // usda token contract address
         usdt = IERC20(_usdt);
         multiSign = IMultiSign(_multiSign);
         dataFeed = AggregatorV3Interface(priceFeed);
@@ -82,8 +83,8 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         _;
     }
 
-    modifier onlyBorrowingContract() {
-        require( msg.sender == address(borrowing), "This function can only called by borrowing contract");
+    modifier onlyBorrowOrLiquidationContract() {
+        require( msg.sender == address(borrowing) || msg.sender == address(borrowLiquidation), "This function can only called by borrowing or Liquidation contract");
         _;
     }
 
@@ -129,20 +130,20 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
     }
 
     /**
-     * @dev amint and usdt deposit to cds
+     * @dev usda and usdt deposit to cds
      * @param usdtAmount usdt amount to deposit
-     * @param amintAmount amint amount to deposit
+     * @param usdaAmount usda amount to deposit
      * @param _liquidate whether the user opted for liquidation
      * @param _liquidationAmount If opted for liquidation,the liquidation amount
      */
     function deposit(
         uint128 usdtAmount,
-        uint128 amintAmount,
+        uint128 usdaAmount,
         bool _liquidate,
         uint128 _liquidationAmount
     ) public payable nonReentrant whenNotPaused(IMultiSign.Functions(4)){
-        // totalDepositingAmount is usdt and amint
-        uint256 totalDepositingAmount = usdtAmount + amintAmount;
+        // totalDepositingAmount is usdt and usda
+        uint256 totalDepositingAmount = usdtAmount + usdaAmount;
         require(totalDepositingAmount != 0, "Deposit amount should not be zero"); // check _amount not zero
         require(
             _liquidationAmount <= (totalDepositingAmount),
@@ -156,8 +157,8 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                 revert("Surplus USDT amount");
             }
         }else{
-            require(amintAmount >= (amintLimit * totalDepositingAmount)/100,"Required AMINT amount not met");
-            require(amint.balanceOf(msg.sender) >= amintAmount,"Insufficient AMINT balance with msg.sender"); // check if user has sufficient AMINT token
+            require(usdaAmount >= (usdaLimit * totalDepositingAmount)/100,"Required USDa amount not met");
+            require(usda.balanceOf(msg.sender) >= usdaAmount,"Insufficient USDa balance with msg.sender"); // check if user has sufficient USDa token
         }
 
         uint128 ethPrice = getLatestData();
@@ -230,27 +231,27 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
             updateLastEthPrice(ethPrice);
         }
 
-        if(usdtAmount != 0 && amintAmount != 0){
-            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient USDT balance with msg.sender"); // check if user has sufficient AMINT token
+        if(usdtAmount != 0 && usdaAmount != 0){
+            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient USDT balance with msg.sender"); // check if user has sufficient USDa token
             bool usdtTransfer = usdt.transferFrom(msg.sender, treasuryAddress, usdtAmount); // transfer amount to this contract
             require(usdtTransfer == true, "USDT Transfer failed in CDS deposit");
-            //Transfer AMINT tokens from msg.sender to this contract
-            bool amintTransfer = amint.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract       
-            require(amintTransfer == true, "AMINT Transfer failed in CDS deposit");
+            //Transfer USDa tokens from msg.sender to this contract
+            bool usdaTransfer = usda.transferFrom(msg.sender, treasuryAddress, usdaAmount); // transfer amount to this contract       
+            require(usdaTransfer == true, "USDa Transfer failed in CDS deposit");
         }else if(usdtAmount == 0){
-            bool transfer = amint.transferFrom(msg.sender, treasuryAddress, amintAmount); // transfer amount to this contract
+            bool transfer = usda.transferFrom(msg.sender, treasuryAddress, usdaAmount); // transfer amount to this contract
             //check it token have successfully transfer or not
-            require(transfer == true, "AMINT Transfer failed in CDS deposit");
+            require(transfer == true, "USDa Transfer failed in CDS deposit");
         }else{
-            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient USDT balance with msg.sender"); // check if user has sufficient AMINT token
+            require(usdt.balanceOf(msg.sender) >= usdtAmount,"Insufficient USDT balance with msg.sender"); // check if user has sufficient USDa token
             bool transfer = usdt.transferFrom(msg.sender, treasuryAddress, usdtAmount); // transfer amount to this contract
             //check it token have successfully transfer or not
             require(transfer == true, "USDT Transfer failed in CDS deposit");
         }
 
         if(usdtAmount != 0 ){
-            bool success = amint.mint(treasuryAddress,usdtAmount);
-            require(success == true, "AMINT mint to treasury failed in CDS deposit");
+            bool success = usda.mint(treasuryAddress,usdtAmount);
+            require(success == true, "USDa mint to treasury failed in CDS deposit");
         }
 
         //! getting options since,the src don't know the dst state
@@ -266,7 +267,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
     }
 
     /**
-     * @dev withdraw amint
+     * @dev withdraw usda
      * @param _index index of the deposit to withdraw
      */
     function withdraw(uint64 _index) public payable nonReentrant whenNotPaused(IMultiSign.Functions(5)){
@@ -290,7 +291,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         // option fees
         uint256 optionFees = ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * omniChainCDS.lastCumulativeRate)/CDSLib.PRECISION) - 
             cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
-        uint256 returnAmount = cdsAmountToReturn(msg.sender,_index, ethPrice) + optionFees;
+        uint256 returnAmount = cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount + optionFees;
         
         uint256 optionsFeesToGetFromOtherChain = getOptionsFeesProportions(optionFees);
 
@@ -372,17 +373,17 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                 if(optionsFeesToGetFromOtherChain > 0 || ethAmount >0 ){
                     treasury.oftOrNativeReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
                         functionToDo,
-                        ITreasury.AmintOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
+                        ITreasury.USDaOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
                         ITreasury.NativeTokenTransferData(treasuryAddress, ethAmount));
                 }
 
                 cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
 
                 // Get approval from treasury 
-                treasury.approveAmint(address(this),returnAmountWithGains);
+                treasury.approveUSDa(address(this),returnAmountWithGains);
 
-                //Call transferFrom in amint
-                bool success = amint.transferFrom(treasuryAddress,msg.sender, returnAmountWithGains); // transfer amount to msg.sender
+                //Call transferFrom in usda
+                bool success = usda.transferFrom(treasuryAddress,msg.sender, returnAmountWithGains); // transfer amount to msg.sender
                 require(success == true, "Transsuccessed in cds withdraw");
                 
                 if(ethAmount != 0){
@@ -399,11 +400,11 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
             if(optionsFeesToGetFromOtherChain > 0){
                 treasury.oftOrNativeReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
                     ITreasury.FunctionToDo(2),
-                    ITreasury.AmintOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
+                    ITreasury.USDaOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
                     ITreasury.NativeTokenTransferData(address(0), 0));
             }
             
-            // amint.approve(msg.sender, returnAmount);
+            // usda.approve(msg.sender, returnAmount);
             totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
             totalCdsDepositedAmountWithOptionFees -= returnAmount - optionsFeesToGetFromOtherChain;
 
@@ -412,8 +413,8 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
             
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
 
-            treasury.approveAmint(address(this),returnAmount);
-            bool transfer = amint.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
+            treasury.approveUSDa(address(this),returnAmount);
+            bool transfer = usda.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
             require(transfer == true, "Transfer failed in cds withdraw");
         }
 
@@ -496,25 +497,25 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
    }
 
     /**
-     * @dev acts as dex amint to usdt
-     * @param _amintAmount amint amount to deposit
-     * @param amintPrice amint price
+     * @dev acts as dex usda to usdt
+     * @param _usdaAmount usda amount to deposit
+     * @param usdaPrice usda price
      * @param usdtPrice usdt price
      */
     function redeemUSDT(
-        uint128 _amintAmount,
-        uint64 amintPrice,
+        uint128 _usdaAmount,
+        uint64 usdaPrice,
         uint64 usdtPrice
     ) external payable nonReentrant whenNotPaused(IMultiSign.Functions(6)){
-        require(_amintAmount != 0,"Amount should not be zero");
+        require(_usdaAmount != 0,"Amount should not be zero");
 
-        require(amint.balanceOf(msg.sender) >= _amintAmount,"Insufficient balance");
-        burnedAmintInRedeem += _amintAmount;
-        omniChainCDS.burnedAmintInRedeem += _amintAmount;
-        bool transfer = amint.burnFromUser(msg.sender,_amintAmount);
-        require(transfer == true, "AMINT Burn failed in redeemUSDT");
+        require(usda.balanceOf(msg.sender) >= _usdaAmount,"Insufficient balance");
+        burnedUSDaInRedeem += _usdaAmount;
+        omniChainCDS.burnedUSDaInRedeem += _usdaAmount;
+        bool transfer = usda.burnFromUser(msg.sender,_usdaAmount);
+        require(transfer == true, "USDa Burn failed in redeemUSDT");
 
-        uint128 _usdtAmount = (amintPrice * _amintAmount/usdtPrice);  
+        uint128 _usdtAmount = (usdaPrice * _usdaAmount/usdtPrice);  
           
         treasury.approveUsdt(address(this),_usdtAmount);
         bool success = usdt.transferFrom(treasuryAddress,msg.sender,_usdtAmount);
@@ -557,10 +558,15 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         treasury = ITreasury(_treasury);
     }
 
-    function setAmintLimit(uint8 percent) external onlyAdmin{
-        require(percent != 0, "Amint limit can't be zero");
+    function setBorrowLiquidation(address _address) external onlyAdmin {
+        require(_address != address(0) && isContract(_address) != false, "Input address is invalid");
+        borrowLiquidation = _address;
+    }
+
+    function setUSDaLimit(uint8 percent) external onlyAdmin{
+        require(percent != 0, "USDa limit can't be zero");
         require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(8)));
-        amintLimit = percent;  
+        usdaLimit = percent;  
     }
 
     function setUsdtLimit(uint64 amount) external onlyAdmin{
@@ -586,7 +592,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
      * @dev calculate cumulative rate
      * @param fees fees to split
      */
-    function calculateCumulativeRate(uint128 fees) external payable onlyBorrowingContract{
+    function calculateCumulativeRate(uint128 fees) external payable onlyBorrowOrLiquidationContract{
 
         (
             totalCdsDepositedAmountWithOptionFees,
@@ -653,7 +659,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         uint128 liqIndex,
         MessagingFee memory fee,
         bytes memory _options
-    ) external payable onlyBorrowingContract returns (MessagingReceipt memory receipt) {
+    ) external payable onlyBorrowOrLiquidationContract returns (MessagingReceipt memory receipt) {
 
         bytes memory _payload = abi.encode(
             functionToDo,
@@ -751,21 +757,21 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         }
     }
 
-    function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external onlyBorrowingContract{
+    function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external onlyBorrowOrLiquidationContract{
         omniChainCDSLiqIndexToInfo[index] = liquidationData;
     }
 
-    function updateTotalAvailableLiquidationAmount(uint256 amount) external onlyBorrowingContract{
+    function updateTotalAvailableLiquidationAmount(uint256 amount) external onlyBorrowOrLiquidationContract{
         totalAvailableLiquidationAmount -= amount;
         omniChainCDS.totalAvailableLiquidationAmount -= amount;
     }
 
-    function updateTotalCdsDepositedAmount(uint128 _amount) external onlyBorrowingContract{
+    function updateTotalCdsDepositedAmount(uint128 _amount) external onlyBorrowOrLiquidationContract{
         totalCdsDepositedAmount -= _amount;
         omniChainCDS.totalCdsDepositedAmount -= _amount;
     }
 
-    function updateTotalCdsDepositedAmountWithOptionFees(uint128 _amount) external onlyBorrowingContract{
+    function updateTotalCdsDepositedAmountWithOptionFees(uint128 _amount) external onlyBorrowOrLiquidationContract{
         totalCdsDepositedAmountWithOptionFees -= _amount;
         omniChainCDS.totalCdsDepositedAmountWithOptionFees -= _amount;
     }

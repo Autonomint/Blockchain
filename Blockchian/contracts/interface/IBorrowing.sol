@@ -6,9 +6,9 @@ interface IBorrowing{
 
     error Borrowing_DepositFailed();
     error Borrowing_GettingETHPriceFailed();
-    error Borrowing_amintMintFailed();
+    error Borrowing_usdaMintFailed();
     error Borrowing_abondMintFailed();
-    error Borrowing_WithdrawAMINTTransferFailed();
+    error Borrowing_WithdrawUSDaTransferFailed();
     error Borrowing_WithdrawEthTransferFailed();
     error Borrowing_WithdrawBurnFailed();
     error Borrowing_LiquidateBurnFailed();

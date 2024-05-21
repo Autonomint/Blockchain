@@ -86,13 +86,13 @@ interface ITreasury{
         uint128  noOfBorrowers;
         uint256  totalInterest;
         uint256  totalInterestFromLiquidation;
-        uint256  abondAmintPool;
+        uint256  abondUSDaPool;
         uint256  ethProfitsOfLiquidators;
         uint256  interestFromExternalProtocolDuringLiquidation;
-        uint256  amintGainedFromLiquidation;
+        uint256  usdaGainedFromLiquidation;
     }
 
-    struct AmintOftTransferData {
+    struct USDaOftTransferData {
         address recipient;
         uint256 tokensToSend;
     }
@@ -121,14 +121,14 @@ interface ITreasury{
         // function withdrawFromCompoundByUser(address depositor,uint64 index) external returns(uint256);
         function calculateYieldsForExternalProtocol(address user,uint128 aBondAmount) external view returns (uint256);
         function getBalanceInTreasury() external view returns(uint256);
-        function approveAmint(address _address, uint _amount) external;
+        function approveUSDa(address _address, uint _amount) external;
         function approveUsdt(address _address, uint _amount) external;
         function transferEthToCdsLiquidators(address borrower,uint128 amount) external;
 
 
         function noOfBorrowers() external view returns(uint128);
-        function abondAmintPool() external view returns(uint256);
-        function amintGainedFromLiquidation() external view returns(uint256);
+        function abondUSDaPool() external view returns(uint256);
+        function usdaGainedFromLiquidation() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinWei() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinUSD() external view returns(uint256);
         function omniChainTreasuryNoOfBorrowers() external view returns(uint128);
@@ -139,7 +139,7 @@ interface ITreasury{
         function quote(
             uint32 _dstEid,
             FunctionToDo _functionToDo,
-            AmintOftTransferData memory _oftTransferData,
+            USDaOftTransferData memory _oftTransferData,
             NativeTokenTransferData memory _nativeTokenTransferData,
             bytes memory _options,
             bool _payInLzToken
@@ -147,7 +147,7 @@ interface ITreasury{
 
         function oftOrNativeReceiveFromOtherChains(
             FunctionToDo _functionToDo,
-            AmintOftTransferData memory _oftTransferData,
+            USDaOftTransferData memory _oftTransferData,
             NativeTokenTransferData memory nativeTokenTransferData
         ) external payable returns (MessagingReceipt memory receipt);
 
@@ -160,8 +160,8 @@ interface ITreasury{
         function updateDepositDetails(address depositor,uint64 index,DepositDetails memory depositDetail) external;
         function updateTotalInterest(uint256 _amount) external;
         function updateTotalInterestFromLiquidation(uint256 _amount) external;
-        function updateAbondAmintPool(uint256 amount,bool operation) external;
-        function updateAmintGainedFromLiquidation(uint256 amount,bool operation) external;
+        function updateAbondUSDaPool(uint256 amount,bool operation) external;
+        function updateUSDaGainedFromLiquidation(uint256 amount,bool operation) external;
         function updateEthProfitsOfLiquidators(uint256 amount,bool operation) external;
         function updateInterestFromExternalProtocol(uint256 amount) external;
 

@@ -11,25 +11,30 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import { OFT } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/OFT.sol";
 
-contract TestAMINTStablecoin is Initializable, OFT, UUPSUpgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable{
+contract USDaStablecoin is Initializable, OFT, UUPSUpgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable{
+    
+    mapping(address => bool) private whitelist;
+    address private borrowingContract;
+    address private cdsContract;
     uint32 private dstEid;
 
-    function initialize(        
-        string memory _name,
-        string memory _symbol,
+    function initialize(
         address _lzEndpoint,
         address _delegate
     ) initializer public {
-        __OFT_init(_name, _symbol, _lzEndpoint, _delegate);
+        __OFT_init("Autonomint USD", "USDa", _lzEndpoint, _delegate);
         __ERC20Burnable_init();
         __ERC20Pausable_init();
-        __UUPSUpgradeable_init();
         __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
     }
 
-    mapping(address => bool) public whitelist;
-
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
+
+    modifier onlyCDSOrBorrowingContract() {
+        require((msg.sender == cdsContract) || (msg.sender == borrowingContract), "This function can only called by Borrowing or CDS contract");
+        _;
+    }
 
     function isContract(address account) internal view returns (bool) {
         return account.code.length > 0;
@@ -52,12 +57,12 @@ contract TestAMINTStablecoin is Initializable, OFT, UUPSUpgradeable, ERC20Burnab
         _unpause();
     }
 
-    function mint(address to, uint256 amount) public returns(bool){
+    function mint(address to, uint256 amount) public onlyCDSOrBorrowingContract returns(bool){
         _mint(to, amount);
         return true;
     }
     
-    function burnFromUser(address to, uint256 amount) public returns(bool){
+    function burnFromUser(address to, uint256 amount) public onlyCDSOrBorrowingContract returns(bool){
         burnFrom(to, amount);
         return true;
     }
@@ -69,4 +74,13 @@ contract TestAMINTStablecoin is Initializable, OFT, UUPSUpgradeable, ERC20Burnab
         super._update(from, to, value);
     }
 
+    function setBorrowingContract(address _address) external onlyOwner {
+        require(_address != address(0) && isContract(_address) != false, "Input address is invalid");
+        borrowingContract = _address;
+    }
+
+    function setCdsContract(address _address) external onlyOwner {
+        require(_address != address(0) && isContract(_address) != false, "Input address is invalid");
+        cdsContract = _address;
+    }
 }

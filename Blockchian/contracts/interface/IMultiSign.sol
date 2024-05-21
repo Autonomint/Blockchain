@@ -13,7 +13,7 @@ interface IMultiSign{
         SetTreasuryBorrow,
         SetTreasuryCDS,
         SetBondRatio,
-        SetAmintLimit,
+        SetUSDaLimit,
         SetUsdtLimit
     }
     enum Functions{

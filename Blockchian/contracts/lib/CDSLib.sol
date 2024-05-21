@@ -6,7 +6,7 @@
 pragma solidity 0.8.20;
 
 import "../interface/ITreasury.sol";
-import "../interface/IAmint.sol";
+import "../interface/IUSDa.sol";
 import "../interface/IBorrowing.sol";
 import "../interface/CDSInterface.sol";
 import "hardhat/console.sol";
@@ -70,7 +70,7 @@ library CDSLib {
         uint256 _totalGlobalCdsDepositedAmount,
         uint256 _totalCdsDepositedAmountWithOptionFees,
         uint256 _totalGlobalCdsDepositedAmountWithOptionFees
-    ) internal pure returns (uint256){
+    ) public pure returns (uint256){
         uint256 otherChainCDSAmount = _totalGlobalCdsDepositedAmount - _totalCdsDepositedAmount;
 
         uint256 totalOptionFeesInOtherChain = _totalGlobalCdsDepositedAmountWithOptionFees
@@ -102,7 +102,7 @@ library CDSLib {
         uint128 _value,
         bool _gains,
         bool _cumulativeValueSign,
-        uint128 _cumulativeValue) internal pure returns(bool,uint128){
+        uint128 _cumulativeValue) public pure returns(bool,uint128){
         if(_gains){
             // If the cumulativeValue is positive
             if(_cumulativeValueSign){
@@ -146,7 +146,7 @@ library CDSLib {
         uint256 _totalGlobalCdsDepositedAmountWithOptionFees,
         uint128 _lastCumulativeRate,
         uint128 _noOfBorrowers
-    ) internal pure returns(uint256,uint256,uint128){
+    ) public pure returns(uint256,uint256,uint128){
 
         require(_fees != 0,"Fees should not be zero");
         if(_totalCdsDepositedAmount > 0){
