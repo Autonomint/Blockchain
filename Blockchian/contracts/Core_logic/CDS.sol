@@ -20,7 +20,7 @@ import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/lib
 
 contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp{
 
-    IUSDa      public usda; // our stablecoin
+    IUSDa      private usda; // our stablecoin
     IBorrowing  private borrowing; // Borrowing contract interface
     ITreasury   private treasury; // Treasury contrcat interface
     AggregatorV3Interface internal dataFeed;
@@ -33,15 +33,15 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
 
     uint128 private lastEthPrice;
     uint128 private fallbackEthPrice;
-    uint64  private cdsCount; // cds depositors count
-    uint64  public withdrawTimeLimit; // Fixed Time interval between deposit and withdraw
+    uint64  public cdsCount; // cds depositors count
+    uint64  private withdrawTimeLimit; // Fixed Time interval between deposit and withdraw
     uint256 public  totalCdsDepositedAmount; // total usda and usdt deposited in cds
     uint256 private totalCdsDepositedAmountWithOptionFees;
     uint256 public  totalAvailableLiquidationAmount; // total deposited usda available for liquidation
     uint128 private lastCumulativeRate; 
-    uint8   private usdaLimit; // usda limit in percent
-    uint64  private usdtLimit; // usdt limit in number
-    uint256 private usdtAmountDepositedTillNow; // total usdt deposited till now
+    uint8   public usdaLimit; // usda limit in percent
+    uint64  public usdtLimit; // usdt limit in number
+    uint256 public usdtAmountDepositedTillNow; // total usdt deposited till now
     uint256 private burnedUSDaInRedeem;
     uint128 private cumulativeValue;
     bool    private cumulativeValueSign;
