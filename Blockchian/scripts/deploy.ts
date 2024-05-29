@@ -151,12 +151,12 @@ async function main() {
   // });
 
   // await hre.run("verify:verify", {
-  //   address: "0x922f2e1ef08bc883dce59fe080f4552156564079",
+  //   address: "0xd418ff9b6df4fa01b61823c5ea74021cfec28c06",
   //   contract: "contracts/Core_logic/CDS.sol:CDS",
   // });
 
   // await hre.run("verify:verify", {
-  //   address: "0xac29627e717185b4ba755eb89247cddd360d5c5b",
+  //   address: "0x62b83355088e1f8f7468182eadb984773034d7ca",
   //   contract: "contracts/Core_logic/borrowing.sol:Borrowing",
   // });
 

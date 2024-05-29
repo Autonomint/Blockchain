@@ -43,14 +43,10 @@ describe("CDS Contract",function(){
 
         const USDaStablecoin = await ethers.getContractFactory("TestUSDaStablecoin");
         const TokenA = await upgrades.deployProxy(USDaStablecoin,[
-            "Test USDa TOKEN",
-            "TUSDa",
             await mockEndpointV2A.getAddress(),
             await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
         const TokenB = await upgrades.deployProxy(USDaStablecoin,[
-            "Test USDa TOKEN",
-            "TUSDa",
             await mockEndpointV2B.getAddress(),
             await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
@@ -64,13 +60,9 @@ describe("CDS Contract",function(){
 
         const USDTToken = await ethers.getContractFactory("TestUSDT");
         const usdtA = await upgrades.deployProxy(USDTToken,[
-            "Test Tether",
-            "TUSDT",
             await mockEndpointV2A.getAddress(),
             await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
         const usdtB = await upgrades.deployProxy(USDTToken,[
-            "Test Tether",
-            "TUSDT",
             await mockEndpointV2B.getAddress(),
             await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
 

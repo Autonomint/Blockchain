@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: unlicensed
 
+import "../interface/IOptions.sol";
+
 pragma solidity 0.8.20;
 
 interface IBorrowing{
@@ -41,7 +43,25 @@ interface IBorrowing{
     function updateLastEthVaultValue(uint256 _amount) external;
     function calculateRatio(uint256 _amount,uint currentEthPrice) external returns(uint64);
 
-    event Deposit(uint64 index,uint256 depositedAmount,uint256 borrowAmount,uint256 normalizedAmount);
-    event Withdraw(uint256 borrowDebt,uint128 withdrawAmount,uint128 noOfAbond);
+    event Deposit(
+        address user,
+        uint64 index,
+        uint256 depositedAmount,
+        uint256 normalizedAmount,
+        uint256 depositedTime,
+        uint128 ethPrice,
+        uint256 borrowAmount,
+        uint64 strikePrice,
+        uint256 optionsFees,
+        IOptions.StrikePrice strikePricePercent
+        );
+    event Withdraw(
+        address user,
+        uint64 index,
+        uint256 withdrawTime,
+        uint128 withdrawAmount,
+        uint128 noOfAbond,
+        uint256 borrowDebt
+    );
     event Liquidate(uint64 index,uint128 liquidationAmount,uint128 profits,uint128 ethAmount,uint256 availableLiquidationAmount);
 }

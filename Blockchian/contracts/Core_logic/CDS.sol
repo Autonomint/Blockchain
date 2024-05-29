@@ -140,7 +140,8 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
         uint128 usdtAmount,
         uint128 usdaAmount,
         bool _liquidate,
-        uint128 _liquidationAmount
+        uint128 _liquidationAmount,
+        uint128 lockingPeriod
     ) public payable nonReentrant whenNotPaused(IMultiSign.Functions(4)){
         // totalDepositingAmount is usdt and usda
         uint256 totalDepositingAmount = usdtAmount + usdaAmount;
@@ -263,7 +264,7 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
         //! Calling Omnichain send function
         send(dstEid, FunctionToDo(1), omniChainCDS, 0, fee, _options);
 
-        emit Deposit(totalDepositingAmount,index,_liquidationAmount,cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount,cdsDetails[msg.sender].cdsAccountDetails[index].depositValue);
+        emit Deposit(msg.sender,index,usdaAmount,usdtAmount,block.timestamp,ethPrice,lockingPeriod,_liquidationAmount,_liquidate);
     }
 
     /**
@@ -392,7 +393,7 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
                     treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
                 }
 
-                emit Withdraw(returnAmountWithGains,ethAmount);
+                emit Withdraw(msg.sender,_index,returnAmountWithGains,block.timestamp,ethAmount,ethPrice,optionFees,optionFees);
             }
 
         }else{
@@ -434,7 +435,7 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
         //! Calling Omnichain send function
         send(dstEid, FunctionToDo(2), omniChainCDS, optionsFeesToGetFromOtherChain, fee, _options);
         
-        emit Withdraw(returnAmount,0);
+        emit Withdraw(msg.sender,_index,returnAmount,block.timestamp,ethAmount,ethPrice,optionFees,optionFees);
     }
    
 

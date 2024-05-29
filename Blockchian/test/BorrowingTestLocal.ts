@@ -31,6 +31,7 @@ describe("Borrowing Contract",function(){
     let user3: any;
     const eidA = 1
     const eidB = 2
+    const eidC = 3
     const ethVolatility = 50622665;
 
 
@@ -40,17 +41,18 @@ describe("Borrowing Contract",function(){
         const EndpointV2Mock = await ethers.getContractFactory('EndpointV2Mock')
         const mockEndpointV2A = await EndpointV2Mock.deploy(eidA)
         const mockEndpointV2B = await EndpointV2Mock.deploy(eidB)
+        const mockEndpointV2C = await EndpointV2Mock.deploy(eidC)
 
         const USDaStablecoin = await ethers.getContractFactory("TestUSDaStablecoin");
         const TokenA = await upgrades.deployProxy(USDaStablecoin,[
-            "Test USDa TOKEN",
-            "TUSDa",
             await mockEndpointV2A.getAddress(),
             await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
         const TokenB = await upgrades.deployProxy(USDaStablecoin,[
-            "Test USDa TOKEN",
-            "TUSDa",
+            await mockEndpointV2B.getAddress(),
+            await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
+
+        const TokenC = await upgrades.deployProxy(USDaStablecoin,[
             await mockEndpointV2B.getAddress(),
             await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
@@ -64,13 +66,9 @@ describe("Borrowing Contract",function(){
 
         const USDTToken = await ethers.getContractFactory("TestUSDT");
         const usdtA = await upgrades.deployProxy(USDTToken,[
-            "Test Tether",
-            "TUSDT",
             await mockEndpointV2A.getAddress(),
             await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
         const usdtB = await upgrades.deployProxy(USDTToken,[
-            "Test Tether",
-            "TUSDT",
             await mockEndpointV2B.getAddress(),
             await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
@@ -198,7 +196,12 @@ describe("Borrowing Contract",function(){
         const optionsB = await upgrades.deployProxy(Option,[await treasuryB.getAddress(),await CDSContractB.getAddress(),await BorrowingContractB.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
         await mockEndpointV2B.setDestLzEndpoint(await TokenA.getAddress(), mockEndpointV2A.getAddress())
+        await mockEndpointV2B.setDestLzEndpoint(await TokenC.getAddress(), mockEndpointV2C.getAddress())
         await mockEndpointV2A.setDestLzEndpoint(await TokenB.getAddress(), mockEndpointV2B.getAddress())
+        await mockEndpointV2A.setDestLzEndpoint(await TokenC.getAddress(), mockEndpointV2C.getAddress())
+        await mockEndpointV2C.setDestLzEndpoint(await TokenA.getAddress(), mockEndpointV2A.getAddress())
+        await mockEndpointV2C.setDestLzEndpoint(await TokenB.getAddress(), mockEndpointV2B.getAddress())
+
 
         await mockEndpointV2B.setDestLzEndpoint(await multiSignA.getAddress(), mockEndpointV2A.getAddress())
         await mockEndpointV2A.setDestLzEndpoint(await multiSignB.getAddress(), mockEndpointV2B.getAddress())
@@ -228,7 +231,12 @@ describe("Borrowing Contract",function(){
         await treasuryB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await treasuryA.getAddress(), 32))
 
         await TokenA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await TokenB.getAddress(), 32))
+        await TokenA.connect(owner).setPeer(eidC, ethers.zeroPadValue(await TokenC.getAddress(), 32))
         await TokenB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await TokenA.getAddress(), 32))
+        await TokenB.connect(owner).setPeer(eidC, ethers.zeroPadValue(await TokenC.getAddress(), 32))
+        await TokenC.connect(owner).setPeer(eidA, ethers.zeroPadValue(await TokenA.getAddress(), 32))
+        await TokenC.connect(owner).setPeer(eidB, ethers.zeroPadValue(await TokenB.getAddress(), 32))
+
 
         await usdtA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await usdtB.getAddress(), 32))
         await usdtB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await usdtA.getAddress(), 32))
@@ -328,13 +336,13 @@ describe("Borrowing Contract",function(){
             treasuryB,optionsB,multiSignB,
 
             owner,user1,user2,user3,
-            provider,signer,
+            provider,signer,TokenC
         }
     }
 
     describe("Should deposit ETH and mint Trinity",function(){
 
-        it("Should deposit ETH with two cds deposits",async function(){
+        it.only("Should deposit ETH with two cds deposits",async function(){
             const {
                 BorrowingContractA,BorrowingContractB,
                 CDSContractA,CDSContractB,
@@ -401,14 +409,13 @@ describe("Borrowing Contract",function(){
                 {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2) + BigInt(nativeFee))})
         })
 
-        it("Should transfer USDa from src to dst ",async function(){
-            const {TokenA,TokenB} = await loadFixture(deployer);
+        it("Should transfer USDa from A to B",async function(){
+            const {TokenA} = await loadFixture(deployer);
             const initialAmount = ethers.parseEther('100')
             await TokenA.mint(await user1.getAddress(), initialAmount)
     
             const tokensToSend = ethers.parseEther('1')
     
-            // Defining extra message execution options for the send operation
             const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
     
             const sendParam = [
@@ -421,12 +428,57 @@ describe("Borrowing Contract",function(){
                 '0x',
             ]
     
-            // Fetching the native fee for the token send operation
             const [nativeFee] = await TokenA.quoteSend(sendParam, false)
     
-            // Executing the send operation from myOFTA contract
             await TokenA.connect(user1).send(sendParam, [nativeFee, 0], await user1.getAddress(), { value: nativeFee })
+        })
+
+        it("Should transfer USDa from A to C",async function(){
+            const {TokenA} = await loadFixture(deployer);
+            const initialAmount = ethers.parseEther('100')
+            await TokenA.mint(await user1.getAddress(), initialAmount)
     
+            const tokensToSend = ethers.parseEther('1')
+    
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+    
+            const sendParam = [
+                eidC,
+                ethers.zeroPadValue(await user2.getAddress(), 32),
+                tokensToSend,
+                tokensToSend,
+                options,
+                '0x',
+                '0x',
+            ]
+    
+            const [nativeFee] = await TokenA.quoteSend(sendParam, false)
+    
+            await TokenA.connect(user1).send(sendParam, [nativeFee, 0], await user1.getAddress(), { value: nativeFee })
+        })
+
+        it("Should transfer USDa from B to C",async function(){
+            const {TokenB} = await loadFixture(deployer);
+            const initialAmount = ethers.parseEther('100')
+            await TokenB.mint(await user1.getAddress(), initialAmount)
+    
+            const tokensToSend = ethers.parseEther('1')
+    
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+    
+            const sendParam = [
+                eidC,
+                ethers.zeroPadValue(await user2.getAddress(), 32),
+                tokensToSend,
+                tokensToSend,
+                options,
+                '0x',
+                '0x',
+            ]
+    
+            const [nativeFee] = await TokenB.quoteSend(sendParam, false)
+    
+            await TokenB.connect(user1).send(sendParam, [nativeFee, 0], await user1.getAddress(), { value: nativeFee })
         })
     
         it("Should set APY",async function(){

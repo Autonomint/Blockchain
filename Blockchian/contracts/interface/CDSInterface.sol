@@ -88,6 +88,25 @@ interface CDSInterface {
     function updateTotalCdsDepositedAmountWithOptionFees(uint128 _amount) external;
 
     
-    event Deposit(uint256 depositedUSDa,uint64 index,uint128 liquidationAmount,uint256 normalizedAmount,uint128 depositVal);
-    event Withdraw(uint256 withdrewUSDa,uint128 withdrawETH);
+    event Deposit(
+        address user,
+        uint64 index,
+        uint128 depositedUSDa,
+        uint128 depositedUSDT,
+        uint256 depositedTime,
+        uint128 ethPriceAtDeposit,
+        uint128 lockingPeriod,
+        uint128 liquidationAmount,
+        bool optedForLiquidation
+    );
+    event Withdraw(
+        address user,
+        uint64 index,
+        uint256 withdrawUSDa,
+        uint256 withdrawTime,
+        uint128 withdrawETH,
+        uint128 ethPriceAtWithdraw,
+        uint256 optionsFees,
+        uint256 optionsFeesWithdrawn
+    );
 }

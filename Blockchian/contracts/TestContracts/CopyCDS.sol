@@ -263,7 +263,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         //! Calling Omnichain send function
         send(dstEid, FunctionToDo(1), omniChainCDS, 0, fee, _options);
 
-        emit Deposit(totalDepositingAmount,index,_liquidationAmount,cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount,cdsDetails[msg.sender].cdsAccountDetails[index].depositValue);
+        emit Deposit(msg.sender,index,usdaAmount,usdtAmount,block.timestamp,ethPrice,60,_liquidationAmount,_liquidate);
     }
 
     /**
@@ -392,7 +392,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                     treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
                 }
 
-                emit Withdraw(returnAmountWithGains,ethAmount);
+                emit Withdraw(msg.sender,_index,returnAmountWithGains,block.timestamp,ethAmount,ethPrice,optionFees,optionFees);
             }
 
         }else{
@@ -434,9 +434,9 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         //! Calling Omnichain send function
         send(dstEid, FunctionToDo(2), omniChainCDS, optionsFeesToGetFromOtherChain, fee, _options);
         
-        emit Withdraw(returnAmount,0);
+        emit Withdraw(msg.sender,_index,returnAmount,block.timestamp,ethAmount,ethPrice,optionFees,optionFees);
     }
-   
+
 
     //calculating Ethereum value to return to CDS owner
     //The function will deduct some amount of ether if it is borrowed

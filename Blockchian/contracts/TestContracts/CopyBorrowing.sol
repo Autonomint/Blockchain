@@ -287,7 +287,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         //! Calling Omnichain send function
         send( dstEid, omniChainBorrowing, fee, _options);
 
-        emit Deposit(index,_depositingAmount,tokensToLend,normalizedAmount);
+        emit Deposit(msg.sender,index,_depositingAmount,normalizedAmount,_depositTime,_ethPrice,tokensToLend,_strikePrice,optionFees,_strikePercent);
     }
 
     /**
@@ -405,7 +405,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
                 if(!sent){
                     revert Borrowing_WithdrawEthTransferFailed();
                 }
-                emit Withdraw(borrowerDebt,ethToReturn,depositDetail.aBondTokensAmount);
+                emit Withdraw(msg.sender,_index,block.timestamp,ethToReturn,depositDetail.aBondTokensAmount,borrowerDebt);
             }else{
                 // update withdrawed to true
                 revert("User already withdraw entire amount");

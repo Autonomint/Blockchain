@@ -16,12 +16,10 @@ contract TestUSDT is Initializable, OFT, UUPSUpgradeable, ERC20BurnableUpgradeab
     uint32 private dstEid;
 
     function initialize(        
-        string memory _name,
-        string memory _symbol,
         address _lzEndpoint,
         address _delegate
     ) initializer public {
-        __OFT_init(_name, _symbol, _lzEndpoint, _delegate);
+        __OFT_init("Test Tether", "TUSDT", _lzEndpoint, _delegate);
         __ERC20Burnable_init();
         __ERC20Pausable_init();
         __UUPSUpgradeable_init();

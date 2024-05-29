@@ -45,19 +45,25 @@ async function main() {
   // await deployedMultisign.waitForDeployment();
   // console.log("NEW IMP MULTISIGN ADDRESS",await deployedMultisign.getAddress());
 
-  const CDSLibFactory = await ethers.getContractFactory("CDSLib");
-  const CDSLib = await CDSLibFactory.deploy();
-  const CDS = await ethers.getContractFactory("CDS",{
-    libraries: {
-        CDSLib:await CDSLib.getAddress()
-    }
-  });
-  const deployedCDS = await upgrades.upgradeProxy(SEPOLIA_CDS_ADDRESS,CDS,{unsafeAllowLinkedLibraries:true},{kind:'uups'})
-  await deployedCDS.waitForDeployment();
-  console.log("NEW IMP CDS ADDRESS",await deployedCDS.getAddress());
+  // const CDSLibFactory = await ethers.getContractFactory("CDSLib");
+  // const CDSLib = await CDSLibFactory.deploy();
+  // const CDS = await ethers.getContractFactory("CDS",{
+  //   libraries: {
+  //       CDSLib:await CDSLib.getAddress()
+  //   }
+  // });
+  // const deployedCDS = await upgrades.upgradeProxy(BASE_SEPOLIA_CDS_ADDRESS,CDS,{unsafeAllowLinkedLibraries:true},{kind:'uups'})
+  // await deployedCDS.waitForDeployment();
+  // console.log("NEW IMP CDS ADDRESS",await deployedCDS.getAddress());
 
-  // const Borrowing = await ethers.getContractFactory("Borrowing");
-  // const deployedBorrowing = await upgrades.upgradeProxy(PROXY_BORROWING_ADDRESS,Borrowing,{kind:'uups'});
+  // const borrowLibFactory = await ethers.getContractFactory("BorrowLib");
+  // const borrowLib = await borrowLibFactory.deploy();
+  // const Borrowing = await ethers.getContractFactory("Borrowing",{
+  //   libraries: {
+  //       BorrowLib:await borrowLib.getAddress()
+  //   }
+  // });  
+  // const deployedBorrowing = await upgrades.upgradeProxy(BASE_SEPOLIA_BORROWING_ADDRESS,Borrowing,{unsafeAllowLinkedLibraries:true},{kind:'uups'});
   // await deployedBorrowing.waitForDeployment();
   // console.log("NEW IMP BORROWING ADDRESS",await deployedBorrowing.getAddress());
 
