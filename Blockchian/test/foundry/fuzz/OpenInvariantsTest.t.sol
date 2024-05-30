@@ -9,7 +9,7 @@
 // import {CDSTest} from "../../../contracts/TestContracts/CopyCDS.sol";
 // import {Options} from "../../../contracts/Core_logic/Options.sol";
 // import {MultiSign} from "../../../contracts/Core_logic/multiSign.sol";
-// import {TestAMINTStablecoin} from "../../../contracts/TestContracts/CopyAmint.sol";
+// import {TestUSDaStablecoin} from "../../../contracts/TestContracts/CopyUSDa.sol";
 // import {TestABONDToken} from "../../../contracts/TestContracts/Copy_Abond_Token.sol";
 // import {TestUSDT} from "../../../contracts/TestContracts/CopyUsdt.sol";
 // import {HelperConfig} from "../../../scripts/script/HelperConfig.s.sol";
@@ -24,7 +24,7 @@
 
 // contract OpenInvariantTest is StdInvariant,Test {
 //     DeployBorrowing deployer;
-//     TestAMINTStablecoin amint;
+//     TestUSDaStablecoin usda;
 //     TestABONDToken abond;
 //     TestUSDT usdt;
 //     CDSTest cds;
@@ -52,7 +52,7 @@
 //     function setUp() public {
 //         deployer = new DeployBorrowing();
 //         (DeployBorrowing.Contracts memory contracts) = deployer.run();
-//         amint = contracts.amint;
+//         usda = contracts.usda;
 //         abond = contracts.abond;
 //         usdt = contracts.usdt;
 //         borrow = contracts.borrow;
@@ -79,7 +79,7 @@
 //         cds.setAdmin(0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266);
 //         cds.setTreasury(address(treasury));
 //         cds.setBorrowingContract(address(borrow));
-//         cds.setAmintLimit(80);
+//         cds.setUSDaLimit(80);
 //         cds.setUsdtLimit(20000000000);
 //         borrow.calculateCumulativeRate();
 //         vm.stopPrank();
@@ -90,7 +90,7 @@
 //     }
 
 //     function invariant_ProtocolMustHaveMoreValueThanSupply() public view{
-//         uint256 totalSupply = amint.totalSupply();
+//         uint256 totalSupply = usda.totalSupply();
 //         uint256 totalDepositedEth = (address(treasury)).balance;
 //         uint256 totalEthValue = totalDepositedEth * borrow.getUSDValue();
 //         assert(totalEthValue >= totalSupply);
