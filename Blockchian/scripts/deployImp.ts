@@ -2,24 +2,25 @@ import { ethers,upgrades } from "hardhat";
 import hre = require("hardhat");
 
 import {
-  wethGatewayMumbai,
-  wethGatewayGoerli,
-  wethGatewaySepolia,
-  cEtherMumbai,
-  cEtherGoerli,
-  cEtherSepolia,
-  aTokenAddressMumbai,
-  aTokenAddressGoerli,
-  aTokenAddressSepolia,
-  priceFeedAddressMumbai,
-  priceFeedAddressGoerli,
-  priceFeedAddressSepolia,
-  aavePoolAddressMumbai,
-  aavePoolAddressGoerli,
-  aavePoolAddressSepolia,
-  owner1,owner2,owner3,
-  PROXY_AMINT_ADDRESS,PROXY_ABOND_ADDRESS,PROXY_BORROWING_ADDRESS,
-  PROXY_CDS_ADDRESS,PROXY_MULTISIGN_ADDRESS,PROXY_TESTUSDT_ADDRESS,PROXY_TREASURY_ADDRESS, PROXY_OPTIONS_ADDRESS
+  SEPOLIA_USDA_ADDRESS,
+  SEPOLIA_ABOND_ADDRESS,
+  SEPOLIA_TESTUSDT_ADDRESS,
+  SEPOLIA_MULTISIGN_ADDRESS,
+  SEPOLIA_CDS_ADDRESS,
+  SEPOLIA_BORROWING_ADDRESS,
+  SEPOLIA_BORROW_LIQUIDATION_ADDRESS,
+  SEPOLIA_TREASURY_ADDRESS,
+  SEPOLIA_OPTIONS_ADDRESS,
+
+  BASE_SEPOLIA_USDA_ADDRESS,
+  BASE_SEPOLIA_ABOND_ADDRESS,
+  BASE_SEPOLIA_TESTUSDT_ADDRESS,
+  BASE_SEPOLIA_MULTISIGN_ADDRESS,
+  BASE_SEPOLIA_CDS_ADDRESS,
+  BASE_SEPOLIA_BORROWING_ADDRESS,
+  BASE_SEPOLIA_BORROW_LIQUIDATION_ADDRESS,
+  BASE_SEPOLIA_TREASURY_ADDRESS,
+  BASE_SEPOLIA_OPTIONS_ADDRESS
 } from"./index"
 
 async function main() {
@@ -44,13 +45,25 @@ async function main() {
   // await deployedMultisign.waitForDeployment();
   // console.log("NEW IMP MULTISIGN ADDRESS",await deployedMultisign.getAddress());
 
-  // const CDS = await ethers.getContractFactory("CDSTest");
-  // const deployedCDS = await upgrades.upgradeProxy(CDS,[await deployedAMINTStablecoin.getAddress(),priceFeedAddressGoerli,await deployedTestUSDT.getAddress(),await deployedMultisign.getAddress()],{initializer:'initialize'},{kind:'uups'})
+  // const CDSLibFactory = await ethers.getContractFactory("CDSLib");
+  // const CDSLib = await CDSLibFactory.deploy();
+  // const CDS = await ethers.getContractFactory("CDS",{
+  //   libraries: {
+  //       CDSLib:await CDSLib.getAddress()
+  //   }
+  // });
+  // const deployedCDS = await upgrades.upgradeProxy(BASE_SEPOLIA_CDS_ADDRESS,CDS,{unsafeAllowLinkedLibraries:true},{kind:'uups'})
   // await deployedCDS.waitForDeployment();
-  // console.log("NEW IMP CDS ADDRESS",deployedCDS.getAddress());
+  // console.log("NEW IMP CDS ADDRESS",await deployedCDS.getAddress());
 
-  // const Borrowing = await ethers.getContractFactory("Borrowing");
-  // const deployedBorrowing = await upgrades.upgradeProxy(PROXY_BORROWING_ADDRESS,Borrowing,{kind:'uups'});
+  // const borrowLibFactory = await ethers.getContractFactory("BorrowLib");
+  // const borrowLib = await borrowLibFactory.deploy();
+  // const Borrowing = await ethers.getContractFactory("Borrowing",{
+  //   libraries: {
+  //       BorrowLib:await borrowLib.getAddress()
+  //   }
+  // });  
+  // const deployedBorrowing = await upgrades.upgradeProxy(BASE_SEPOLIA_BORROWING_ADDRESS,Borrowing,{unsafeAllowLinkedLibraries:true},{kind:'uups'});
   // await deployedBorrowing.waitForDeployment();
   // console.log("NEW IMP BORROWING ADDRESS",await deployedBorrowing.getAddress());
 
@@ -59,10 +72,10 @@ async function main() {
   // await deployedTreasury.waitForDeployment();
   // console.log("NEW IMP TREASURY ADDRESS",await deployedTreasury.getAddress());
 
-  const Option = await ethers.getContractFactory("Options");
-  const deployedOptions = await upgrades.upgradeProxy(PROXY_OPTIONS_ADDRESS,Option,{kind:'uups'});
-  await deployedOptions.waitForDeployment();
-  console.log("NEW IMP OPTIONS ADDRESS",await deployedOptions.getAddress());
+  // const Option = await ethers.getContractFactory("Options");
+  // const deployedOptions = await upgrades.upgradeProxy(PROXY_OPTIONS_ADDRESS,Option,{kind:'uups'});
+  // await deployedOptions.waitForDeployment();
+  // console.log("NEW IMP OPTIONS ADDRESS",await deployedOptions.getAddress());
 
   // async function sleep(ms:number) {
   //   return new Promise((resolve) => setTimeout(resolve, ms));

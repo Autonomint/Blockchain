@@ -5,11 +5,15 @@ import { ethers,upgrades } from "hardhat";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { describe } from "node:test";
 import {
-    wethGateway,
-    priceFeedAddress,
-    aTokenAddress,
-    aavePoolAddress,
-    cEther
+    wethGatewayMainnet,wethGatewaySepolia,
+    priceFeedAddressMainnet,priceFeedAddressSepolia,
+    aTokenAddressMainnet,aTokenAddressSepolia,
+    aavePoolAddressMainnet,aavePoolAddressSepolia,
+    cometMainnet,cometSepolia,
+    INFURA_URL_MAINNET,INFURA_URL_SEPOLIA,
+    aTokenABI,
+    cETH_ABI,
+    wethAddressMainnet,wethAddressSepolia
     } from "./utils/index"
 
 
@@ -39,17 +43,18 @@ describe("Testing contracts ", function(){
         const usdt = await upgrades.deployProxy(USDTToken, {kind:'uups'});
 
         const CDS = await ethers.getContractFactory("CDSTest");
-        const CDSContract = await upgrades.deployProxy(CDS,[await Token.getAddress(),priceFeedAddress,await usdt.getAddress(),await multiSign.getAddress()],{initializer:'initialize'},{kind:'uups'})
+        const CDSContract = await upgrades.deployProxy(CDS,[await Token.getAddress(),priceFeedAddressMainnet,await usdt.getAddress(),await multiSign.getAddress()],{initializer:'initialize'},{kind:'uups'})
 
         const Borrowing = await ethers.getContractFactory("BorrowingTest");
-        const BorrowingContract = await upgrades.deployProxy(Borrowing,[await Token.getAddress(),await CDSContract.getAddress(),await abondToken.getAddress(),await multiSign.getAddress(),priceFeedAddress,1],{initializer:'initialize'},{kind:'uups'});
+        const BorrowingContract = await upgrades.deployProxy(Borrowing,[await Token.getAddress(),await CDSContract.getAddress(),await abondToken.getAddress(),await multiSign.getAddress(),priceFeedAddressMainnet,1],{initializer:'initialize'},{kind:'uups'});
 
         const Treasury = await ethers.getContractFactory("Treasury");
-        const treasury = await upgrades.deployProxy(Treasury,[await BorrowingContract.getAddress(),await Token.getAddress(),await CDSContract.getAddress(),wethGateway,aavePoolAddress,aTokenAddress,await usdt.getAddress()],{initializer:'initialize'},{kind:'uups'});
+        const treasury = await upgrades.deployProxy(Treasury,[await BorrowingContract.getAddress(),await Token.getAddress(),await abondToken.getAddress(),await CDSContract.getAddress(),wethGatewayMainnet,cometMainnet,aavePoolAddressMainnet,aTokenAddressMainnet,await usdt.getAddress(),wethAddressMainnet],{initializer:'initialize'},{kind:'uups'});
 
         const Option = await ethers.getContractFactory("Options");
         const options = await upgrades.deployProxy(Option,[await treasury.getAddress(),await CDSContract.getAddress(),await BorrowingContract.getAddress()],{initializer:'initialize'},{kind:'uups'});
         
+        await abondToken.setBorrowingContract(await BorrowingContract.getAddress());
         await multiSign.connect(owner).approveSetterFunction([0,1,4,5,6,7,8,9,10]);
         await multiSign.connect(owner1).approveSetterFunction([0,1,4,5,6,7,8,9,10]);
 
@@ -69,6 +74,9 @@ describe("Testing contracts ", function(){
         await CDSContract.connect(owner).setUsdtLimit(20000000000);
 
         await BorrowingContract.calculateCumulativeRate();
+        
+        const provider = new ethers.JsonRpcProvider(INFURA_URL_MAINNET);
+        const signer = new ethers.Wallet("0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",provider);
         
         return {Token,abondToken,usdt,CDSContract,BorrowingContract,treasury,options,multiSign,owner,user1,user2,user3}
     }
@@ -323,7 +331,7 @@ describe("Testing contracts ", function(){
             await BorrowingContract.connect(user1).depositTokens(100000,timeStamp,1,110000,ethVolatility,{value: ethers.parseEther("5")});
 
             await CDSContract.connect(user1).withdraw(1);
-            await expect(CDSContract.connect(user1).withdraw(2)).to.be.revertedWith("Not enough fund in CDS");
+            await expect(CDSContract.connect(user1).withdraw(2)).to.be.revertedWith("CDS: Not enough fund in CDS");
         })
 
         it("Should revert Already withdrawn",async () => {

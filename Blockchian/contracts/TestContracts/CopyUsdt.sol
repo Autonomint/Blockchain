@@ -9,20 +9,30 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Pausable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import { OFT } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/OFT.sol";
+import { TestUSDTV1 } from "../v1Contracts/Copy_UsdtV1.sol";
 
-contract TestUSDT is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
+contract TestUSDT is TestUSDTV1, Initializable, UUPSUpgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, OFT{
 
-    function initialize() initializer public {
-        __ERC20_init("Test Tether", "TUSDT");
+    uint32 private dstEid;
+
+    function initialize(        
+        address _lzEndpoint,
+        address _delegate
+    ) initializer public {
+        __OFT_init("Test Tether", "TUSDT", _lzEndpoint, _delegate);
         __ERC20Burnable_init();
         __ERC20Pausable_init();
-        __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
+        __Ownable_init(msg.sender);
     }
 
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
 
-    mapping(address => bool) private whitelist;
+    function setDstEid(uint32 _eid) external onlyOwner{
+        require(_eid != 0, "EID can't be zero");
+        dstEid = _eid;
+    }
 
     function pause() public onlyOwner {
         _pause();
@@ -44,14 +54,6 @@ contract TestUSDT is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, 
         burnFrom(to, amount);
         return true;
     }
-
-    // function _beforeTokenTransfer(address from, address to, uint256 amount)
-    //     internal
-    //     whenNotPaused
-    //     override
-    // {
-    //     super._beforeTokenTransfer(from, to, amount);
-    // }
 
     function _update(address from, address to, uint256 value)
         internal

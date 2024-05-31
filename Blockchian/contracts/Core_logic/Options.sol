@@ -11,25 +11,9 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import { OptionsV1 } from "../v1Contracts/OptionsV1.sol";
 
-contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
-
-    // uint256 private currentEMA;
-    // uint256 private constant smoothingFactor = 2;
-    // uint256 private index = 0; // To track the oldest variance
-    // uint256[30] private variances;
-    uint256 private PRECISION;
-    uint256 private ETH_PRICE_PRECISION;
-    uint256 private OPTION_PRICE_PRECISION;
-    uint128 private AMINT_PRECISION;
-
-    // enum for different strike price percentages
-    enum StrikePrice{FIVE,TEN,FIFTEEN,TWENTY,TWENTY_FIVE}
-
-    ITreasury treasury;
-    CDSInterface cds;
-    IBorrowing borrowing;
-    AggregatorV3Interface internal priceFeed; //ETH USD pricefeed address
+contract Options is OptionsV1, Initializable, UUPSUpgradeable,OwnableUpgradeable{
 
     function initialize(
         address _treasuryAddress,
@@ -44,7 +28,7 @@ contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
         PRECISION = 1e18;
         ETH_PRICE_PRECISION = 1e6;
         OPTION_PRICE_PRECISION = 1e5;
-        AMINT_PRECISION = 1e12;
+        USDA_PRECISION = 1e12;
     }
 
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
@@ -60,7 +44,7 @@ contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
      * @param strikePrice strikePrice,not percent, price
      * @param ethPrice eth price
      */
-    function withdrawOption(uint128 depositedAmount,uint128 strikePrice,uint64 ethPrice) external view onlyBorrowingContract returns(uint128){
+    function calculateStrikePriceGains(uint128 depositedAmount,uint128 strikePrice,uint64 ethPrice) external view onlyBorrowingContract returns(uint128){
         require(depositedAmount != 0 && strikePrice != 0 && ethPrice != 0,"Zero inputs in options");
         uint64 currentEthPrice = ethPrice;
         uint128 currentEthValue = depositedAmount * currentEthPrice;
@@ -119,13 +103,13 @@ contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
         //uint256 a = calculateStandardDeviation(); 
         uint256 a = _ethVolatility;
         uint256 ethPrice = _ethPrice;/*getLatestPrice();*/
-        uint256 E = treasury.totalVolumeOfBorrowersAmountinUSD() + (_amount * _ethPrice);
+        uint256 E = treasury.omniChainTreasuryTotalVolumeOfBorrowersAmountinUSD() + (_amount * _ethPrice);
         require(E != 0,"No borrowers in protocol");
         uint256 cdsVault;
-        if(treasury.noOfBorrowers() == 0){
-            cdsVault = cds.totalCdsDepositedAmount() * AMINT_PRECISION;
+        if(treasury.omniChainTreasuryNoOfBorrowers() == 0){
+            cdsVault = cds.omniChainCDSTotalCdsDepositedAmount() * USDA_PRECISION;
         }else{
-            cdsVault = borrowing.lastCDSPoolValue() * AMINT_PRECISION;
+            cdsVault = borrowing.omniChainBorrowingCDSPoolValue() * USDA_PRECISION;
         }
 
         require(E != 0, "Treasury balance is zero");
@@ -150,7 +134,7 @@ contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
         }else{
             revert("Incorrect Strike Price");
         }
-        return ((optionPrice * _amount)/PRECISION)/AMINT_PRECISION;
+        return ((optionPrice * _amount)/PRECISION)/USDA_PRECISION;
     }
 
     // Provided square root function

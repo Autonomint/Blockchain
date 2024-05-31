@@ -4,43 +4,9 @@ pragma solidity 0.8.20;
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import { MultiSignV1 } from "../v1Contracts/multiSignV1.sol";
 
-contract MultiSign is Initializable,OwnableUpgradeable,UUPSUpgradeable {
-
-    address[] private owners; // Owners array
-    uint8 private maxOwners;
-    uint8 private noOfOwners;
-    mapping(address => bool) public isOwner; // To check the address is owner
-    uint64 private requiredApprovals; // Required number of approvals to execute the function
-    enum SetterFunctions{
-        SetLTV,
-        SetAPR,
-        SetWithdrawTimeLimitBorrow,
-        SetWithdrawTimeLimitCDS,
-        SetAdminBorrow,
-        SetAdminCDS,
-        SetTreasuryBorrow,
-        SetTreasuryCDS,
-        SetBondRatio,
-        SetAmintLimit,
-        SetUsdtLimit
-    }
-    enum Functions{
-        BorrowingDeposit,
-        BorrowingWithdraw,
-        Liquidation,
-        SetAPR,
-        CDSDeposit,
-        CDSWithdraw,
-        RedeemUSDT
-    }
-
-    mapping(SetterFunctions => mapping(address owner => bool approved)) public approvedToUpdate; // Check which owners were approved
-
-    mapping (Functions => mapping(address owner => bool paused)) pauseApproved; // Store what functions are approved for pause by owners
-    mapping (Functions => mapping(address owner => bool unpaused)) unpauseApproved; // Store what functions are approved for unpause by owners
-
-    mapping (Functions => bool paused) public functionState; // Returns true if function is in pause state
+contract MultiSign is MultiSignV1, Initializable,OwnableUpgradeable,UUPSUpgradeable {
 
     function initialize(
         address[] memory _owners,

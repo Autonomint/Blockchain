@@ -7,14 +7,13 @@ interface IMultiSign{
     enum SetterFunctions{
         SetLTV,
         SetAPR,
-        SetWithdrawTimeLimitBorrow,
         SetWithdrawTimeLimitCDS,
         SetAdminBorrow,
         SetAdminCDS,
         SetTreasuryBorrow,
         SetTreasuryCDS,
         SetBondRatio,
-        SetAmintLimit,
+        SetUSDaLimit,
         SetUsdtLimit
     }
     enum Functions{

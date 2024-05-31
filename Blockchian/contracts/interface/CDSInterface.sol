@@ -1,18 +1,35 @@
 // SPDX-License-Identifier: unlicensed
 pragma solidity 0.8.20;
 
+import { MessagingReceipt, MessagingFee } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/interfaces/IOFT.sol";
+
 interface CDSInterface {
 
     struct CdsAccountDetails {
         uint64 depositedTime;
-        uint128 depositedAmount;
+        uint256 depositedAmount;
         uint64 withdrawedTime;
-        uint128 withdrawedAmount;
+        uint256 withdrawedAmount;
         bool withdrawed;
         uint128 depositPrice;
         uint128 depositValue;
+        bool depositValueSign;
         bool optedLiquidation;
-        uint128 profits; 
+        uint128 InitialLiquidationAmount;
+        uint128 liquidationAmount;
+        uint128 liquidationindex;
+        uint256 normalizedAmount;
+    }
+
+    struct CdsDetails {
+        uint64 index;
+        bool hasDeposited;
+        mapping ( uint64 => CdsAccountDetails) cdsAccountDetails;
+    }
+    
+    struct CalculateValueResult{
+        uint128 currentValue;
+        bool gains;
     }
 
     struct LiquidationInfo{
@@ -21,23 +38,75 @@ interface CDSInterface {
         uint128 ethAmount;
         uint256 availableLiquidationAmount;
     }
-    function pause() external;
-    function unpause() external;
-    function deposit(uint256 _amount, uint128 _timeStamp) external;
-    function withdraw(address _to, uint96 _index, uint64 _withdrawTime) external;
-    function withdraw_fee(address _to, uint96 _amount) external;
-    function totalCdsDepositedAmount() external view returns(uint128);
-    function amountAvailableToBorrow() external returns(uint128);
-    function updateAmountAvailabletoBorrow(uint128 _updatedCdsPercentage) external;
-    function approval(address _address, uint _amount) external;
-    function cdsCount() external returns(uint256);
+
+    struct OmniChainCDSData {
+        uint64  cdsCount;
+        uint256 totalCdsDepositedAmount;
+        uint256 totalCdsDepositedAmountWithOptionFees;
+        uint256 totalAvailableLiquidationAmount;
+        uint256 usdtAmountDepositedTillNow;
+        uint256 burnedUSDaInRedeem;
+        uint128 lastCumulativeRate;
+    }
+
+    enum FunctionToDo { DUMMY, UPDATE_GLOBAL, UPDATE_INDIVIDUAL }
+
+    function totalCdsDepositedAmount() external view returns(uint256);
+    function omniChainCDSTotalCdsDepositedAmount() external view returns(uint256);
     function totalAvailableLiquidationAmount() external returns(uint256);
+    function omniChainCDSTotalAvailableLiquidationAmount() external view returns(uint256);
+    function quote(
+        uint32 _dstEid,
+        FunctionToDo _functionToDo,
+        uint256 optionsFeesToGetFromOtherChain,
+        uint256 cdsAmountToGetFromOtherChain,
+        uint256 liqAmountToGetFromOtherChain,
+        LiquidationInfo memory liquidationInfo,
+        uint128 liqIndex,
+        bytes memory _options,
+        bool _payInLzToken
+    ) external view returns (MessagingFee memory fee);
 
-    function calculateCumulativeRate(uint128 fees) external;
+    function callLzSendFromExternal(
+        uint32 _dstEid,
+        FunctionToDo functionToDo,
+        uint256 optionsFeesToGetFromOtherChain,
+        uint256 cdsAmountToGetFromOtherChain,
+        uint256 liqAmountToGetFromOtherChain,
+        LiquidationInfo memory liquidationInfo,
+        uint128 liqIndex,
+        MessagingFee memory fee,
+        bytes memory _options
+    ) external payable returns (MessagingReceipt memory receipt);
 
-    function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory);
+    function calculateCumulativeRate(uint128 fees) external payable;
+
+    function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory,uint64);
     function updateTotalAvailableLiquidationAmount(uint256 amount) external;
     function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external;
     function updateTotalCdsDepositedAmount(uint128 _amount) external;
     function updateTotalCdsDepositedAmountWithOptionFees(uint128 _amount) external;
+
+    
+    event Deposit(
+        address user,
+        uint64 index,
+        uint128 depositedUSDa,
+        uint128 depositedUSDT,
+        uint256 depositedTime,
+        uint128 ethPriceAtDeposit,
+        uint128 lockingPeriod,
+        uint128 liquidationAmount,
+        bool optedForLiquidation
+    );
+    event Withdraw(
+        address user,
+        uint64 index,
+        uint256 withdrawUSDa,
+        uint256 withdrawTime,
+        uint128 withdrawETH,
+        uint128 ethPriceAtWithdraw,
+        uint256 optionsFees,
+        uint256 optionsFeesWithdrawn
+    );
 }

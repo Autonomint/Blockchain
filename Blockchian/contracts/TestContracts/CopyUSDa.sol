@@ -9,11 +9,18 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Pausable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import { OFT } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/OFT.sol";
+import { AMINTStablecoin } from "../v1Contracts/USDaV1.sol";
 
-contract TestAMINTStablecoin is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
+contract TestUSDaStablecoin is AMINTStablecoin, Initializable, UUPSUpgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, OFT{
+    
+    uint32 private dstEid;
 
-    function initialize() initializer public {
-        __ERC20_init("Test AMINT TOKEN", "TAMINT");
+    function initialize(
+        address _lzEndpoint,
+        address _delegate
+    ) initializer public {
+        __OFT_init("Test Autonomint USD", "TUSDa", _lzEndpoint, _delegate);
         __ERC20Burnable_init();
         __ERC20Pausable_init();
         __Ownable_init(msg.sender);
@@ -22,13 +29,16 @@ contract TestAMINTStablecoin is Initializable, ERC20Upgradeable, ERC20BurnableUp
 
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
 
-    mapping(address => bool) public whitelist;
-
     function isContract(address account) internal view returns (bool) {
         return account.code.length > 0;
     }
 
-    function decimals() public view override returns (uint8) {
+    function setDstEid(uint32 _eid) external onlyOwner{
+        require(_eid != 0, "EID can't be zero");
+        dstEid = _eid;
+    }
+
+    function decimals() public pure override returns (uint8) {
         return 6;
     }
 
@@ -49,14 +59,6 @@ contract TestAMINTStablecoin is Initializable, ERC20Upgradeable, ERC20BurnableUp
         burnFrom(to, amount);
         return true;
     }
-
-    // function _beforeTokenTransfer(address from, address to, uint256 amount)
-    //     internal
-    //     whenNotPaused
-    //     override
-    // {
-    //     super._beforeTokenTransfer(from, to, amount);
-    // }
 
     function _update(address from, address to, uint256 value)
         internal

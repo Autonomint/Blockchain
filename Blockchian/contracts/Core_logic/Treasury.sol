@@ -7,184 +7,62 @@ import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts/interfaces/IERC20.sol";
-import "../interface/IAmint.sol";
+import "../interface/IUSDa.sol";
+import { State,IABONDToken } from "../interface/IAbond.sol";
 import "../interface/IBorrowing.sol";
+import "../interface/ITreasury.sol";
 import "../interface/AaveInterfaces/IWETHGateway.sol";
 import "../interface/AaveInterfaces/IPoolAddressesProvider.sol";
-import "../interface/ICEther.sol";
+import "../interface/CometMainInterface.sol";
+import "../interface/IWETH9.sol";
+import "../lib/TreasuryLib.sol";
 import "hardhat/console.sol";
+import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
+import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
+import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
+import { TreasuryV1 } from "../v1Contracts/TreasuryV1.sol";
 
-contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,ReentrancyGuardUpgradeable {
+contract Treasury is TreasuryV1,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
 
-    error Treasury_ZeroDeposit();
-    error Treasury_ZeroWithdraw();
-    error Treasury_AavePoolAddressZero();
-    error Treasury_AaveDepositAndMintFailed();
-    error Treasury_AaveWithdrawFailed();
-    error Treasury_CompoundDepositAndMintFailed();
-    error Treasury_CompoundWithdrawFailed();
-    error Treasury_EthTransferToCdsLiquidatorFailed();
-    error Treasury_WithdrawExternalProtocolInterestFailed();
+    address private borrowLiquidation;
 
-    IBorrowing  public borrow;
-    IAMINT      public amint;
-    IWrappedTokenGatewayV3          public wethGateway; // Weth gateway is used to deposit eth in  and withdraw from aave
-    IPoolAddressesProvider   public aavePoolAddressProvider; // To get the current pool  address in Aave
-    IERC20  public usdt;
-    IERC20 public aToken; // aave token contract
-    ICEther public cEther; // To deposit in and withdraw eth from compound
-
-    address public borrowingContract;
-    address public cdsContract;  
-    address public compoundAddress;
-    address public aaveWETH;        //wethGateway Address for Approve
-
-    //Depositor's Details for each depsoit.
-    struct DepositDetails{
-        uint64  depositedTime;
-        uint128 depositedAmount;
-        uint128 depositedAmountUsdValue;
-        uint64  downsidePercentage;
-        uint128 ethPriceAtDeposit;
-        uint128 borrowedAmount;
-        uint128 normalizedAmount;
-        uint8   withdrawNo;
-        bool    withdrawed;
-        uint128 withdrawAmount;
-        bool    liquidated;
-        uint64  ethPriceAtWithdraw;
-        uint64  withdrawTime;
-        uint128 aBondTokensAmount;
-        uint128 strikePrice;
-        uint128 optionFees;
-        uint256 burnedAmint;
-        uint64  externalProtocolCount;
-        uint256 discountedPrice;
-        uint128 cTokensCredited;
-    }
-
-    //Borrower Details
-    struct BorrowerDetails {
-        uint256 depositedAmount;
-        mapping(uint64 => DepositDetails) depositDetails;
-        uint256 totalBorrowedAmount;
-        bool    hasBorrowed;
-        bool    hasDeposited;
-        //uint64 downsidePercentage;
-        //uint128 ETHPrice;
-        //uint64 depositedTime;
-        uint64  borrowerIndex;
-        uint128 totalAbondTokens;
-    }
-
-    //Each Deposit to Aave/Compound
-    struct EachDepositToProtocol{
-        uint64  depositedTime;
-        uint128 depositedAmount;
-        uint128 ethPriceAtDeposit;
-        uint256 depositedUsdValue;
-        uint128 tokensCredited;
-
-        bool    withdrawed;
-        uint128 ethPriceAtWithdraw;
-        uint64  withdrawTime;
-        uint256 withdrawedUsdValue;
-        uint128 interestGained;
-        uint256 discountedPrice;
-    }
-
-    //Total Deposit to Aave/Compound
-    struct ProtocolDeposit{
-        mapping (uint64 => EachDepositToProtocol) eachDepositToProtocol;
-        uint64  depositIndex;
-        uint256 depositedAmount;
-        uint256 totalCreditedTokens;
-        uint256 depositedUsdValue;
-        uint256 cumulativeRate;       
-    }
-
-    struct DepositResult{
-        bool hasDeposited;
-        uint64 borrowerIndex;
-    }
-
-    struct GetBorrowingResult{
-        uint64 totalIndex;
-        DepositDetails depositDetails;
-    }
-
-    enum Protocol{Aave,Compound}
-
-    // Get depositor details by address
-    mapping(address depositor => BorrowerDetails) public borrowing;
-    //Get external protocol deposit details by protocol name (enum)
-    mapping(Protocol => ProtocolDeposit) public protocolDeposit;
-    uint256 public totalVolumeOfBorrowersAmountinWei;
-    //eth vault value
-    uint256 public totalVolumeOfBorrowersAmountinUSD;
-    uint128 public noOfBorrowers;
-    uint256 public totalInterest;
-    uint256 public totalInterestFromLiquidation;
-    uint256 public abondAmintPool;
-    uint256 public ethProfitsOfLiquidators;
-    uint256 private interestFromExternalProtocolDuringLiquidation;
-
-    //no of times deposited in external protocol(always 1 ahead) 
-    uint64 public externalProtocolDepositCount;
-    uint256 private PRECISION;
-    uint256 private CUMULATIVE_PRECISION;
-
-    // Eth depsoited in particular index
-    mapping(uint256=>uint256) externalProtocolCountTotalValue;
-
-    event Deposit(address indexed user,uint256 amount);
-    event Withdraw(address indexed user,uint256 amount);
-    event DepositToAave(uint64 count,uint256 amount);
-    event WithdrawFromAave(uint64 count,uint256 amount);
-    event DepositToCompound(uint64 count,uint256 amount);
-    event WithdrawFromCompound(uint64 count,uint256 amount);
+    uint256 public usdaGainedFromLiquidation;
+    OmniChainTreasuryData private omniChainTreasury;//! omnichainTreasury contains global treasury data(all chains)
+    using OptionsBuilder for bytes;
+    uint32 private dstEid;
+    address private dstTreasuryAddress;
+    IABONDToken private abond;
+    IWETH9 private WETH;
 
     function initialize(
         address _borrowing,
         address _tokenAddress,
+        address _abondAddress,
         address _cdsContract,
-        address _wethGateway,
-        // address _cEther,
-        address _aavePoolAddressProvider,
-        address _aToken,
-        address _usdt
+        address _borrowLiquidation,
+        address _usdt,
+        address _endpoint,
+        address _delegate
         ) initializer public{
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
-        borrowingContract = _borrowing;
+        __oAppinit(_endpoint, _delegate);
         cdsContract = _cdsContract;
         borrow = IBorrowing(_borrowing);
-        amint = IAMINT(_tokenAddress);
-        wethGateway = IWrappedTokenGatewayV3(_wethGateway);       //0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
-        // cEther = ICEther(_cEther);                                //0x4Ddc2D193948926D02f9B1fE9e1daa0718270ED5
-        // compoundAddress = _cEther;
-        aavePoolAddressProvider = IPoolAddressesProvider(_aavePoolAddressProvider);  //0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
-        aToken = IERC20(_aToken);                                                   //0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
-        aaveWETH = _wethGateway;
+        usda = IUSDa(_tokenAddress);
+        abond = IABONDToken(_abondAddress);
         usdt = IERC20(_usdt);
-        externalProtocolDepositCount = 1;
+        borrowLiquidation = _borrowLiquidation;
         PRECISION = 1e18;
         CUMULATIVE_PRECISION = 1e27;
     }
 
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
 
-    modifier onlyBorrowingContract() {
-        require( msg.sender == borrowingContract, "This function can only called by borrowing contract");
-        _;
-    }
-
-    modifier onlyCDSContract() {
-        require( msg.sender == cdsContract, "This function can only called by CDS contract");
-        _;
-    }
-    modifier onlyCDSOrBorrowingContract() {
-        require( (msg.sender == cdsContract) || (msg.sender == borrowingContract), "This function can only called by Borrowing or CDS contract");
+    modifier onlyCoreContracts() {
+        require( 
+            msg.sender == address(borrow) ||  msg.sender == cdsContract || msg.sender == borrowLiquidation, 
+            "This function can only called by Core contracts");
         _;
     }
 
@@ -193,16 +71,19 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     }
 
     /**
-     * @dev This function takes ethPrice, depositTime parameters to deposit eth into the contract and mint them back the AMINT tokens.
+     * @dev This function takes ethPrice, depositTime parameters to deposit eth into the contract and mint them back the USDa tokens.
      * @param _ethPrice get current eth price 
      * @param _depositTime get unixtime stamp at the time of deposit
      **/
 
     function deposit(
+        uint256 _depositingAmount,
         address user,
         uint128 _ethPrice,
         uint64 _depositTime
-    ) external payable onlyBorrowingContract returns(DepositResult memory) {
+    ) external payable onlyCoreContracts returns(DepositResult memory) {
+
+        require (msg.value > _depositingAmount,"Treasury: Don't have enough LZ fee");
 
         uint64 borrowerIndex;
         //check if borrower is depositing for the first time or not
@@ -213,6 +94,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
             //change hasDeposited bool to true after first deposit
             borrowing[user].hasDeposited = true;
             ++noOfBorrowers;
+            ++omniChainTreasury.noOfBorrowers;
         }
         else {
             //increment the borrowerIndex for each deposit
@@ -221,16 +103,18 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         }
     
         // update total deposited amount of the user
-        borrowing[user].depositedAmount += msg.value;
+        borrowing[user].depositedAmount += _depositingAmount;
 
         // update deposited amount of the user
-        borrowing[user].depositDetails[borrowerIndex].depositedAmount = uint128(msg.value);
+        borrowing[user].depositDetails[borrowerIndex].depositedAmount = uint128(_depositingAmount);
 
         //Total volume of borrowers in USD
-        totalVolumeOfBorrowersAmountinUSD += (_ethPrice * msg.value);
+        totalVolumeOfBorrowersAmountinUSD += (_ethPrice * _depositingAmount);
+        omniChainTreasury.totalVolumeOfBorrowersAmountinUSD += (_ethPrice * _depositingAmount);
 
         //Total volume of borrowers in Wei
-        totalVolumeOfBorrowersAmountinWei += msg.value;
+        totalVolumeOfBorrowersAmountinWei += _depositingAmount;
+        omniChainTreasury.totalVolumeOfBorrowersAmountinWei += _depositingAmount;
 
         //Adding depositTime to borrowing struct
         borrowing[user].depositDetails[borrowerIndex].depositedTime = _depositTime;
@@ -238,23 +122,28 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         //Adding ethprice to struct
         borrowing[user].depositDetails[borrowerIndex].ethPriceAtDeposit = _ethPrice;
 
-        borrowing[user].depositDetails[borrowerIndex].depositedAmountUsdValue = uint128(msg.value) * _ethPrice;
-        
-        //having the count of the deposit done to Aave/Compound in batched
-        borrowing[user].depositDetails[borrowerIndex].externalProtocolCount = externalProtocolDepositCount;
+        borrowing[user].depositDetails[borrowerIndex].depositedAmountUsdValue = uint128(_depositingAmount) * _ethPrice;
 
-        externalProtocolCountTotalValue[externalProtocolDepositCount] += ((msg.value * 50)/100);
-
-        uint256 externalProtocolDepositEth = ((msg.value * 50)/100);
+        uint256 externalProtocolDepositEth = ((_depositingAmount * 25)/100);
 
         depositToAaveByUser(externalProtocolDepositEth);
+        depositToCompoundByUser(externalProtocolDepositEth);
 
-        // Compute the discounted price of the deposit using the cumulative rate.
-        borrowing[user].depositDetails[borrowerIndex].discountedPrice = externalProtocolDepositEth * CUMULATIVE_PRECISION / protocolDeposit[Protocol.Aave].cumulativeRate;
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
-        //borrowing[user].depositDetails[borrowerIndex].cTokensCredited = depositToCompoundByUser(externalProtocolDepositEth);
+        //! calculting fee 
+        MessagingFee memory fee = quote(
+            dstEid, 
+            FunctionToDo(1), 
+            USDaOftTransferData( address(0), 0),
+            NativeTokenTransferData( address(0), 0),
+            _options, 
+            false);
 
-        emit Deposit(user,msg.value);
+        //! Calling omnichain send function
+        send(dstEid, FunctionToDo(1), omniChainTreasury, fee, _options);
+
+        emit Deposit(user,_depositingAmount);
         return DepositResult(borrowing[user].hasDeposited,borrowerIndex);
     }
 
@@ -270,41 +159,63 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         address toAddress,
         uint256 _amount,
         uint64 index
-    ) external onlyBorrowingContract returns(bool){
+    ) external payable onlyCoreContracts returns(bool){
         // Check the _amount is non zero
         require(_amount > 0, "Cannot withdraw zero Ether");
-        require(borrowing[borrower].depositDetails[index].withdrawNo > 0,"");
+        require(borrowing[borrower].depositDetails[index].withdrawed,"");
         uint256 amount = _amount;
 
         // Updating lastEthVaultValue in borrowing
-        borrow.updateLastEthVaultValue((borrowing[borrower].depositDetails[index].depositedAmountUsdValue * 50)/100);
+        borrow.updateLastEthVaultValue(borrowing[borrower].depositDetails[index].depositedAmountUsdValue);
         // Updating total volumes
-        totalVolumeOfBorrowersAmountinUSD -= ((borrowing[borrower].depositDetails[index].depositedAmountUsdValue * 50)/100);
-        totalVolumeOfBorrowersAmountinWei -= amount;
+        totalVolumeOfBorrowersAmountinUSD -= borrowing[borrower].depositDetails[index].depositedAmountUsdValue;
+        totalVolumeOfBorrowersAmountinWei -= borrowing[borrower].depositDetails[index].depositedAmount;
+        omniChainTreasury.totalVolumeOfBorrowersAmountinUSD -= borrowing[borrower].depositDetails[index].depositedAmountUsdValue;
+        omniChainTreasury.totalVolumeOfBorrowersAmountinWei -= borrowing[borrower].depositDetails[index].depositedAmount;
 
-        // If withdrawing for second time
-        if(borrowing[borrower].depositDetails[index].withdrawNo == 2){
-            // Deduct tototalBorrowedAmountt
-            borrowing[borrower].totalBorrowedAmount -= borrowing[borrower].depositDetails[index].borrowedAmount;
-            // Ensure whether the withdraw is second
-            require(borrowing[borrower].depositDetails[index].withdrawNo == 2,"Invalid Withdraw");
-            // Withdraw from external protocol
-            // Get interest
-            uint256 externalProtocolInterest = withdrawFromAaveByUser(borrower,index); // + withdrawFromCompoundByUser(borrower,index)
-            // Add the external protocol interest to the withdraw amount
-            amount += externalProtocolInterest;
-            borrowing[borrower].depositDetails[index].depositedAmount = 0;
-        }
+        // Deduct tototalBorrowedAmountt
+        borrowing[borrower].totalBorrowedAmount -= borrowing[borrower].depositDetails[index].borrowedAmount;
+        borrowing[borrower].depositDetails[index].depositedAmount = 0;
+
         if(borrowing[borrower].depositedAmount == 0){
             --noOfBorrowers;
+            --omniChainTreasury.noOfBorrowers;
         }
         borrowing[borrower].depositDetails[index].withdrawAmount += uint128(amount);
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+
+        //! calculting fee 
+        MessagingFee memory fee = quote(
+            dstEid, 
+            FunctionToDo(1), 
+            USDaOftTransferData( address(0), 0), 
+            NativeTokenTransferData( address(0), 0),
+            _options, 
+            false);
+
+        //! Calling omnichain send function
+        send(dstEid, FunctionToDo(1), omniChainTreasury, fee, _options);
         // Send the ETH to Borrower
         (bool sent,) = payable(toAddress).call{value: amount}("");
         require(sent, "Failed to send Ether");
 
         emit Withdraw(toAddress,_amount);
         return true;
+    }
+
+    function withdrawFromExternalProtocol(address user, uint128 aBondAmount) external onlyCoreContracts returns(uint256){
+
+        uint256 aTokenBalance = aToken.balanceOf(address(this));
+        _calculateCumulativeRate(aTokenBalance, Protocol.Aave);
+
+        uint256 cETHBalance = comet.balanceOf(address(this));
+        _calculateCumulativeRate(cETHBalance, Protocol.Compound);
+
+        uint256 redeemAmount = withdrawFromAaveByUser(user,aBondAmount) + withdrawFromCompoundByUser(user,aBondAmount);
+        // Send the ETH to user
+        (bool sent,) = payable(user).call{value: redeemAmount}("");
+        require(sent, "Failed to send Ether");
+        return redeemAmount;
     }
 
     // //to increase the global external protocol count.
@@ -318,7 +229,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
      * @dev This function depsoit 25% of the deposited ETH to AAVE and mint aTokens 
     */
 
-    // function depositToAave() external onlyBorrowingContract{
+    // function depositToAave() external onlyCoreContracts{
 
     //     //Divide the Total ETH in the contract to 1/4
     //     uint256 share = (externalProtocolCountTotalValue[externalProtocolDepositCount]*50)/100;
@@ -425,7 +336,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
      * @param index index of aave deposit 
      */
 
-    // function withdrawFromAave(uint64 index) external onlyBorrowingContract{
+    // function withdrawFromAave(uint64 index) external onlyCoreContracts{
 
     //     //Check the deposited amount in the given index is already withdrawed
     //     require(!protocolDeposit[Protocol.Aave].eachDepositToProtocol[index].withdrawed,"Already withdrawed in this index");
@@ -481,7 +392,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
      * @dev This function depsoit 25% of the deposited ETH to COMPOUND and mint cETH. 
     */
 
-    // function depositToCompound() external onlyBorrowingContract{
+    // function depositToCompound() external onlyCoreContracts{
 
     //     //Divide the Total ETH in the contract to 1/4
     //     uint256 share = (externalProtocolCountTotalValue[externalProtocolDepositCount - 1]*50)/100;
@@ -492,9 +403,9 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     //     }
 
     //     // Call the deposit function in Coumpound to deposit eth.
-    //     cEther.mint{value: share}();
+    //     comet.mint{value: share}();
 
-    //     uint256 creditedAmount = cEther.balanceOf(address(this));
+    //     uint256 creditedAmount = comet.balanceOf(address(this));
 
     //     if(creditedAmount == protocolDeposit[Protocol.Compound].totalCreditedTokens){
     //         revert Treasury_CompoundDepositAndMintFailed();
@@ -532,7 +443,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
      * @dev This function withdraw ETH from COMPOUND.
      */
 
-    // function withdrawFromCompound(uint64 index) external onlyBorrowingContract{
+    // function withdrawFromCompound(uint64 index) external onlyCoreContracts{
 
     //     uint256 amount = protocolDeposit[Protocol.Compound].eachDepositToProtocol[index].tokensCredited;
 
@@ -545,8 +456,8 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     //     }
 
     //     // Call the redeem function in Compound to withdraw eth.
-    //     cEther.redeem(amount);
-    //     uint256 cToken = cEther.balanceOf(address(this));
+    //     comet.redeem(amount);
+    //     uint256 cToken = comet.balanceOf(address(this));
     //     if(cToken == protocolDeposit[Protocol.Compound].totalCreditedTokens){
     //         revert Treasury_CompoundWithdrawFailed();
     //     }
@@ -591,7 +502,7 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     //     DepositDetails memory depositDetails = borrowing[depositor].depositDetails[index];
         
     //     // Obtain the current exchange rate from the Compound protocol
-    //     uint256 currentExchangeRate = cEther.exchangeRateCurrent();
+    //     uint256 currentExchangeRate = comet.exchangeRateCurrent();
         
     //     // Compute the equivalent ETH value of the cTokens at the current exchange rate
     //     // Taking into account the fixed-point arithmetic (scaling factor of 1e18)
@@ -651,6 +562,37 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     //     return interestGainedByUser;
     // }
 
+    function calculateYieldsForExternalProtocol(address user,uint128 aBondAmount) external view onlyCoreContracts returns (uint256) {
+        
+        State memory userState = abond.userStates(user);
+
+        uint128 depositedAmount = (aBondAmount * userState.ethBacked)/uint128(PRECISION);
+        uint256 normalizedAmount = (depositedAmount * CUMULATIVE_PRECISION)/userState.cumulativeRate;
+
+        uint256 currentCumulativeRateAave = getCurrentCumulativeRate(aToken.balanceOf(address(this)),Protocol.Aave);
+        uint256 currentCumulativeRateComp = getCurrentCumulativeRate(comet.balanceOf(address(this)),Protocol.Compound);
+
+        uint256 currentCumulativeRate = currentCumulativeRateAave < currentCumulativeRateComp ? currentCumulativeRateAave : currentCumulativeRateComp;
+        //withdraw amount
+        uint256 amount = (currentCumulativeRate * normalizedAmount)/CUMULATIVE_PRECISION;
+        
+        return amount;
+    }
+
+    function getCurrentCumulativeRate(uint256 balanceBeforeEvent, Protocol _protocol) internal view returns (uint256){
+        uint256 currentCumulativeRate;
+        // If it's the first deposit, set the cumulative rate to precision (i.e., 1 in fixed-point representation).
+        if (protocolDeposit[_protocol].totalCreditedTokens == 0) {
+            currentCumulativeRate = CUMULATIVE_PRECISION;
+        } else {
+            // Calculate the change in the credited amount relative to the total credited tokens so far.
+            uint256 change = (balanceBeforeEvent - protocolDeposit[_protocol].totalCreditedTokens) * CUMULATIVE_PRECISION / protocolDeposit[_protocol].totalCreditedTokens;
+            // Update the cumulative rate using the calculated change.
+            currentCumulativeRate = ((CUMULATIVE_PRECISION + change) * protocolDeposit[_protocol].cumulativeRate) / CUMULATIVE_PRECISION;
+        }
+        return currentCumulativeRate;
+    }
+
     function getBalanceInTreasury() external view returns(uint256){
         return address(this).balance;
     }
@@ -658,54 +600,66 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
     function updateDepositDetails(
         address depositor,
         uint64 index,DepositDetails memory depositDetail
-    ) external onlyBorrowingContract{
+    ) external onlyCoreContracts{
             borrowing[depositor].depositDetails[index] = depositDetail;
     }
 
-    function updateHasBorrowed(address borrower,bool _bool) external onlyBorrowingContract{
+    function updateHasBorrowed(address borrower,bool _bool) external onlyCoreContracts{
         borrowing[borrower].hasBorrowed = _bool;
     }
-    function updateTotalDepositedAmount(address borrower,uint128 amount) external onlyBorrowingContract{
+    function updateTotalDepositedAmount(address borrower,uint128 amount) external onlyCoreContracts{
         borrowing[borrower].depositedAmount -= amount;
     }
-    function updateTotalBorrowedAmount(address borrower,uint256 amount) external onlyBorrowingContract{
+    function updateTotalBorrowedAmount(address borrower,uint256 amount) external onlyCoreContracts{
         borrowing[borrower].totalBorrowedAmount += amount;
     }
-    function updateTotalAbondTokensIncrease(address borrower,uint128 amount) external onlyBorrowingContract{
-        borrowing[borrower].totalAbondTokens += amount;
-    }
-    function updateTotalAbondTokensDecrease(address borrower,uint128 amount) external onlyBorrowingContract{
-        borrowing[borrower].totalAbondTokens -= amount;
-    }
 
-    function updateTotalInterest(uint256 _amount) external onlyBorrowingContract{
+    function updateTotalInterest(uint256 _amount) external onlyCoreContracts{
         totalInterest += _amount;
+        omniChainTreasury.totalInterest += _amount;
     }
 
-    function updateTotalInterestFromLiquidation(uint256 _amount) external onlyBorrowingContract{
+    function updateTotalInterestFromLiquidation(uint256 _amount) external onlyCoreContracts{
         totalInterestFromLiquidation += _amount;
+        omniChainTreasury.totalInterestFromLiquidation += _amount;
     }
 
-    function updateAbondAmintPool(uint256 amount,bool operation) external onlyBorrowingContract{
+    function updateAbondUSDaPool(uint256 amount,bool operation) external onlyCoreContracts{
         require(amount != 0, "Treasury:Amount should not be zero");
         if(operation){
-            abondAmintPool += amount;
+            abondUSDaPool += amount;
+            omniChainTreasury.abondUSDaPool += amount;
         }else{
-            abondAmintPool -= amount;
+            abondUSDaPool -= amount;
+            omniChainTreasury.abondUSDaPool -= amount;
         }
     }
 
-    function updateEthProfitsOfLiquidators(uint256 amount,bool operation) external onlyCDSOrBorrowingContract{
-        require(amount != 0, "Treasury:Amount should not be zero");
+    function updateUSDaGainedFromLiquidation(uint256 amount,bool operation) external onlyCoreContracts{
         if(operation){
-            ethProfitsOfLiquidators += amount;
+            usdaGainedFromLiquidation += amount;
+            omniChainTreasury.usdaGainedFromLiquidation += amount;
         }else{
-            ethProfitsOfLiquidators -= amount;
+            usdaGainedFromLiquidation -= amount;
+            omniChainTreasury.usdaGainedFromLiquidation -= amount;
         }
     }
 
-    function updateInterestFromExternalProtocol(uint256 amount) external onlyBorrowingContract{
+    function updateEthProfitsOfLiquidators(uint256 amount,bool operation) external onlyCoreContracts{
+        require(amount != 0, "Treasury:Amount should not be zero");
+        if(operation){
+            // ethProfitsOfLiquidators += amount;
+            omniChainTreasury.ethProfitsOfLiquidators += amount;
+
+        }else{
+            // ethProfitsOfLiquidators -= amount;
+            omniChainTreasury.ethProfitsOfLiquidators += amount;
+        }
+    }
+
+    function updateInterestFromExternalProtocol(uint256 amount) external onlyCoreContracts{
         interestFromExternalProtocolDuringLiquidation += amount;
+        omniChainTreasury.interestFromExternalProtocolDuringLiquidation += amount;
     }
 
     function getBorrowing(address depositor,uint64 index) external view returns(GetBorrowingResult memory){
@@ -714,21 +668,63 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
             borrowing[depositor].depositDetails[index]);
     }
 
+    function omniChainTreasuryNoOfBorrowers() external view returns(uint128){
+        return omniChainTreasury.noOfBorrowers;
+    }
+
+    function omniChainTreasuryTotalVolumeOfBorrowersAmountinWei() external view returns(uint256){
+        return omniChainTreasury.totalVolumeOfBorrowersAmountinWei;
+    }
+
+    function omniChainTreasuryTotalVolumeOfBorrowersAmountinUSD() external view returns(uint256){
+        return omniChainTreasury.totalVolumeOfBorrowersAmountinUSD;
+    }
+
+    function omniChainTreasuryEthProfitsOfLiquidators() external view returns(uint256){
+        return omniChainTreasury.ethProfitsOfLiquidators;
+    }
+
+    function getAaveCumulativeRate() private view returns(uint128){
+        return uint128(protocolDeposit[Protocol.Aave].cumulativeRate);
+    }
+
+    function getCompoundCumulativeRate() private view returns(uint128){
+        return uint128(protocolDeposit[Protocol.Compound].cumulativeRate);
+    }
+
+    function getExternalProtocolCumulativeRate(bool maximum) public view onlyCoreContracts returns(uint128){
+        uint128 aaveCumulativeRate = getAaveCumulativeRate();
+        uint128 compoundCumulativeRate = getCompoundCumulativeRate();
+        if(maximum){
+            if(aaveCumulativeRate > compoundCumulativeRate){
+                return aaveCumulativeRate;
+            }else{
+                return compoundCumulativeRate;
+            }
+        }else{
+            if(aaveCumulativeRate < compoundCumulativeRate){
+                return aaveCumulativeRate;
+            }else{
+                return compoundCumulativeRate;
+            }
+        }
+    }
+
     /**
-     * amint approval
+     * usda approval
      * @param _address address to spend
-     * @param _amount amint amount
+     * @param _amount usda amount
      */
-    function approveAmint(address _address, uint _amount) external onlyCDSOrBorrowingContract{
+    function approveUSDa(address _address, uint _amount) external onlyCoreContracts{
         require(_address != address(0) && _amount != 0, "Input address or amount is invalid");
-        bool state = amint.approve(_address, _amount);
+        bool state = usda.approve(_address, _amount);
         require(state == true, "Approve failed");
     }
 
     /**
      * usdt approval
      */
-    function approveUsdt(address _address, uint _amount) external onlyCDSContract{
+    function approveUsdt(address _address, uint _amount) external onlyCoreContracts{
         require(_address != address(0) && _amount != 0, "Input address or amount is invalid");
         bool state = usdt.approve(_address, _amount);
         require(state == true, "Approve failed");
@@ -744,17 +740,17 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         require(toAddress != address(0) && amount != 0, "Input address or amount is invalid");
         require(amount <= (totalInterest + totalInterestFromLiquidation),"Treasury don't have enough interest");
         totalInterest -= amount;
-        bool sent = amint.transfer(toAddress,amount);
+        bool sent = usda.transfer(toAddress,amount);
         require(sent, "Failed to send Ether");
     }
 
     /**
      * transfer eth from treasury
      */
-    function transferEthToCdsLiquidators(address borrower,uint128 amount) external onlyCDSContract{
+    function transferEthToCdsLiquidators(address borrower,uint128 amount) external onlyCoreContracts{
         require(borrower != address(0) && amount != 0, "Input address or amount is invalid");
-        require(amount <= ethProfitsOfLiquidators,"Treasury don't have enough ETH amount");
-        ethProfitsOfLiquidators -= amount;
+        require(amount <= omniChainTreasury.ethProfitsOfLiquidators,"Treasury don't have enough ETH amount");
+        omniChainTreasury.ethProfitsOfLiquidators -= amount;
         (bool sent,) = payable(borrower).call{value: amount}("");
         if(!sent){
             revert Treasury_EthTransferToCdsLiquidatorFailed();
@@ -771,23 +767,27 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         }
     }
 
-    // function compoundWithdraw(uint256 balance) external {
-    //     cEther.redeem(balance);
-    // }
+    function _calculateCumulativeRate(uint256 balanceBeforeEvent, Protocol _protocol) internal returns(uint256){
+        uint256 currentCumulativeRate;
+        // If it's the first deposit, set the cumulative rate to precision (i.e., 1 in fixed-point representation).
+        if (protocolDeposit[_protocol].totalCreditedTokens == 0) {
+            currentCumulativeRate = CUMULATIVE_PRECISION;
+        } else {
+            // Calculate the change in the credited amount relative to the total credited tokens so far.
+            uint256 change = (balanceBeforeEvent - protocolDeposit[_protocol].totalCreditedTokens) * CUMULATIVE_PRECISION / protocolDeposit[_protocol].totalCreditedTokens;
+            // Update the cumulative rate using the calculated change.
+            currentCumulativeRate = ((CUMULATIVE_PRECISION + change) * protocolDeposit[_protocol].cumulativeRate) / CUMULATIVE_PRECISION;
+        }
+        protocolDeposit[_protocol].cumulativeRate = currentCumulativeRate;
+        return currentCumulativeRate;
+    }
 
-    function depositToAaveByUser(uint256 depositAmount) internal onlyBorrowingContract{
+    function depositToAaveByUser(uint256 depositAmount) internal onlyCoreContracts{
         //Atoken balance before depsoit
         uint256 aTokenBeforeDeposit = aToken.balanceOf(address(this));
 
-        // If it's the first deposit, set the cumulative rate to precision (i.e., 1 in fixed-point representation).
-        if (protocolDeposit[Protocol.Aave].totalCreditedTokens == 0) {
-            protocolDeposit[Protocol.Aave].cumulativeRate = CUMULATIVE_PRECISION; 
-        } else {
-            // Calculate the change in the credited amount relative to the total credited tokens so far.
-            uint256 change = (aTokenBeforeDeposit - protocolDeposit[Protocol.Aave].totalCreditedTokens) * CUMULATIVE_PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
-            // Update the cumulative rate using the calculated change.
-            protocolDeposit[Protocol.Aave].cumulativeRate = ((CUMULATIVE_PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate) / CUMULATIVE_PRECISION;
-        }
+        _calculateCumulativeRate(aTokenBeforeDeposit, Protocol.Aave);
+
         address poolAddress = aavePoolAddressProvider.getPool();
 
         if(poolAddress == address(0)){
@@ -799,63 +799,258 @@ contract Treasury is  Initializable,OwnableUpgradeable,UUPSUpgradeable,Reentranc
         protocolDeposit[Protocol.Aave].totalCreditedTokens = creditedAmount;
     }
 
-    function depositToCompoundByUser(uint256 depositAmount) internal onlyBorrowingContract returns(uint128){
+    function depositToCompoundByUser(uint256 depositAmount) internal onlyCoreContracts {
+        //Ctoken balance before depsoit
+        uint256 cTokenBeforeDeposit = comet.balanceOf(address(this));
+
+        _calculateCumulativeRate(cTokenBeforeDeposit, Protocol.Compound);
+
+        // Changing ETH into WETH
+        WETH.deposit{value: depositAmount}();
+
+        // Approve WETH to Comet
+        WETH.approve(address(comet), depositAmount);
 
         // Call the deposit function in Coumpound to deposit eth.
-        cEther.mint{value: depositAmount}();
+        comet.supply(address(WETH), depositAmount);
 
-        uint256 creditedAmount = cEther.balanceOf(address(this));
-
-        uint128 newlyCreditedTokens = uint128(creditedAmount - protocolDeposit[Protocol.Compound].totalCreditedTokens);
+        uint256 creditedAmount = comet.balanceOf(address(this));
 
         protocolDeposit[Protocol.Compound].totalCreditedTokens = creditedAmount;
 
-        return newlyCreditedTokens;
     }
 
-    function withdrawFromAaveByUser(address depositor,uint64 index) public onlyBorrowingContract returns(uint256){
-        DepositDetails memory depositDetails = borrowing[depositor].depositDetails[index];
-
-        uint256 creditedAmount = aToken.balanceOf(address(this));
-        // Calculate the change rate based on the difference between the current credited amount and the total credited tokens 
-        uint256 change = (creditedAmount - protocolDeposit[Protocol.Aave].totalCreditedTokens) * CUMULATIVE_PRECISION / protocolDeposit[Protocol.Aave].totalCreditedTokens;
-
-        // Compute the current cumulative rate using the change and the stored cumulative rate
-        uint256 currentCumulativeRate = (CUMULATIVE_PRECISION + change) * protocolDeposit[Protocol.Aave].cumulativeRate / CUMULATIVE_PRECISION;
-        protocolDeposit[Protocol.Aave].cumulativeRate = currentCumulativeRate;
+    function withdrawFromAaveByUser(address user,uint128 aBondAmount) internal returns(uint256){
+        State memory userState = abond.userStates(user);
+        uint128 depositedAmount = (aBondAmount * userState.ethBacked)/uint128(PRECISION);
+        uint256 normalizedAmount = (depositedAmount * CUMULATIVE_PRECISION * 50)/ (userState.cumulativeRate * 100);
+        
         //withdraw amount
-        uint256 amount = (currentCumulativeRate * depositDetails.discountedPrice)/CUMULATIVE_PRECISION;
+        uint256 amount = (getExternalProtocolCumulativeRate(false) * normalizedAmount)/CUMULATIVE_PRECISION;
+
         address poolAddress = aavePoolAddressProvider.getPool();
 
         if(poolAddress == address(0)){
             revert Treasury_AavePoolAddressZero();
         }
 
-        aToken.approve(aaveWETH,amount);
+        aToken.approve(address(wethGateway),amount);
 
         // Call the withdraw function in aave to withdraw eth.
         wethGateway.withdrawETH(poolAddress,amount,address(this));
 
         protocolDeposit[Protocol.Aave].totalCreditedTokens = aToken.balanceOf(address(this));
-        return (amount - ((depositDetails.depositedAmount * 50)/100));
+        return amount;
     }
 
-    function withdrawFromCompoundByUser(address depositor,uint64 index) public onlyBorrowingContract returns(uint256){
-        DepositDetails memory depositDetails = borrowing[depositor].depositDetails[index];
+    function withdrawFromCompoundByUser(address user,uint128 aBondAmount) internal returns(uint256){
+        State memory userState = abond.userStates(user);
+        uint128 depositedAmount = (aBondAmount * userState.ethBacked)/uint128(PRECISION);
+        uint256 normalizedAmount = (depositedAmount * CUMULATIVE_PRECISION * 50)/ (userState.cumulativeRate * 100);
 
-        uint256 amount = depositDetails.cTokensCredited;
+        //withdraw amount
+        uint256 amount = (getExternalProtocolCumulativeRate(false) * normalizedAmount)/CUMULATIVE_PRECISION;
 
-        // Obtain the current exchange rate from the Compound protocol
-        uint256 currentExchangeRate = cEther.exchangeRateCurrent();
-        // Compute the equivalent ETH value of the cTokens at the current exchange rate
-        // Taking into account the fixed-point arithmetic (scaling factor of 1e18)
-        uint256 currentEquivalentEth = (depositDetails.cTokensCredited * currentExchangeRate) / PRECISION;
-        // Call the redeem function in Compound to withdraw eth.
-        cEther.redeem(amount);
-        protocolDeposit[Protocol.Compound].totalCreditedTokens = cEther.balanceOf(address(this));
-        // Calculate the accrued interest by subtracting the original deposited ETH 
-        // amount from the current equivalent ETH value
-        return (currentEquivalentEth - ((depositDetails.depositedAmount * 25)/100));
+        comet.withdraw(address(WETH), amount);
+
+        protocolDeposit[Protocol.Compound].totalCreditedTokens = comet.balanceOf(address(this));
+
+        WETH.withdraw(amount);
+        return amount;
+    }
+
+    function setExternalProtocolAddresses(
+        address _wethGateway,
+        address _comet,
+        address _aavePoolAddressProvider,
+        address _aToken,
+        address _weth
+    ) external onlyOwner{
+        wethGateway = IWrappedTokenGatewayV3(_wethGateway);     // 0xD322A49006FC828F9B5B37Ab215F99B4E5caB19C
+        comet = CometMainInterface(_comet);                     // 0xA17581A9E3356d9A858b789D68B4d866e593aE94
+        WETH = IWETH9(_weth);                                   // 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2
+        aavePoolAddressProvider = IPoolAddressesProvider(
+            _aavePoolAddressProvider);                          // 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
+        aToken = IERC20(_aToken);                               // 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
+    }
+
+    function setDstEid(uint32 _eid) external onlyOwner{
+        require(_eid != 0, "EID can't be zero");
+        dstEid = _eid;
+    }
+
+    function setDstTreasuryAddress(address _treasuryAddress) external onlyOwner{
+        require(_treasuryAddress != address(0), "Treasury address can't be zero address");
+        dstTreasuryAddress = _treasuryAddress;
+    }
+
+    function oftOrNativeReceiveFromOtherChains(
+        FunctionToDo _functionToDo,
+        USDaOftTransferData memory _oftTransferData,
+        NativeTokenTransferData memory _nativeTokenTransferData
+    ) external payable onlyCoreContracts returns (MessagingReceipt memory receipt) {
+
+        bytes memory _payload = abi.encode(
+            _functionToDo, 
+            omniChainTreasury, 
+            _oftTransferData,
+            _nativeTokenTransferData);
+
+        MessagingFee memory _fee;
+        bytes memory _options;
+
+        if(_functionToDo == FunctionToDo.TOKEN_TRANSFER || _functionToDo == FunctionToDo.BOTH_TRANSFER){
+
+            //! getting options since,the src don't know the dst state
+            bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
+
+            SendParam memory _sendParam = SendParam(
+                dstEid,
+                bytes32(uint256(uint160(_oftTransferData.recipient))),
+                _oftTransferData.tokensToSend,
+                _oftTransferData.tokensToSend,
+                options,
+                '0x',
+                '0x'
+            );
+            MessagingFee memory fee = usda.quoteSend( _sendParam, false);
+
+            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(350000, 0).addExecutorNativeDropOption(
+                uint128(fee.nativeFee), 
+                bytes32(uint256(uint160(dstTreasuryAddress)))
+            );
+
+            _fee = quote( dstEid, _functionToDo, _oftTransferData, _nativeTokenTransferData, _options, false);
+        }else if(_functionToDo == FunctionToDo.NATIVE_TRANSFER){
+            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(260000, 0);
+        }
+
+        //! Calling layer zero send function to send to dst chain
+        receipt = _lzSend(dstEid, _payload, _options, _fee, payable(msg.sender));
+    }
+
+    function send(
+        uint32 _dstEid,
+        FunctionToDo _functionToDo,
+        OmniChainTreasuryData memory _message,
+        MessagingFee memory _fee,
+        bytes memory _options
+    ) internal onlyCoreContracts returns (MessagingReceipt memory receipt) {
+        bytes memory _payload = abi.encode(
+            _functionToDo, 
+            _message, 
+            USDaOftTransferData(address(0),0),
+            NativeTokenTransferData(address(0), 0));
+        
+        //! Calling layer zero send function to send to dst chain
+        receipt = _lzSend(_dstEid, _payload, _options, _fee, payable(msg.sender));
+    }
+
+    function quote(
+        uint32 _dstEid,
+        FunctionToDo _functionToDo,
+        USDaOftTransferData memory _oftTransferData,
+        NativeTokenTransferData memory _nativeTokenTransferData,
+        bytes memory _options,
+        bool _payInLzToken
+    ) public view returns (MessagingFee memory fee) {
+        bytes memory payload = abi.encode(_functionToDo, omniChainTreasury, _oftTransferData, _nativeTokenTransferData);
+        fee = _quote(_dstEid, payload, _options, _payInLzToken);
+    }
+
+    function _lzReceive(
+        Origin calldata /*_origin*/,
+        bytes32 /*_guid*/,
+        bytes calldata payload,
+        address /*_executor*/,
+        bytes calldata /*_extraData*/
+    ) internal override {
+
+        FunctionToDo functionToDo;
+        OmniChainTreasuryData memory data;
+        USDaOftTransferData memory oftTransferData;
+        NativeTokenTransferData memory nativeTokenTransferData;
+        bytes memory _options;
+        MessagingFee memory _fee;
+
+        (
+            functionToDo,
+            data, 
+            oftTransferData, 
+            nativeTokenTransferData
+            ) = abi.decode(payload, ( FunctionToDo, OmniChainTreasuryData, USDaOftTransferData, NativeTokenTransferData));
+
+        if(functionToDo == FunctionToDo.TOKEN_TRANSFER){
+
+            omniChainTreasury = data;
+
+            //! getting options since,the src don't know the dst state
+            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
+
+            SendParam memory _sendParam = SendParam(
+                dstEid,
+                bytes32(uint256(uint160(oftTransferData.recipient))),
+                oftTransferData.tokensToSend,
+                oftTransferData.tokensToSend,
+                _options,
+                '0x',
+                '0x'
+            );
+            _fee = usda.quoteSend( _sendParam, false);
+
+            usda.send{ value: _fee.nativeFee}( _sendParam, _fee, address(this));
+
+        }else if(functionToDo == FunctionToDo.NATIVE_TRANSFER){
+
+            omniChainTreasury = data;
+
+            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(260000, 0).addExecutorNativeDropOption(
+                uint128(nativeTokenTransferData.nativeTokensToSend), 
+                bytes32(uint256(uint160(nativeTokenTransferData.recipient)))
+            );
+
+            bytes memory _payload = abi.encode(
+                FunctionToDo(1), 
+                omniChainTreasury, 
+                USDaOftTransferData(address(0),0),
+                NativeTokenTransferData(address(0), 0));
+
+            _fee = quote( 
+                dstEid, 
+                FunctionToDo(1), 
+                USDaOftTransferData(address(0),0),
+                NativeTokenTransferData(address(0), 0), 
+                _options, 
+                false);
+
+            _lzSend(dstEid, _payload, _options, _fee, payable(msg.sender));
+
+        }else if(functionToDo == FunctionToDo.BOTH_TRANSFER){
+
+            omniChainTreasury = data;
+
+            // _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
+
+            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(260000, 0).addExecutorNativeDropOption(
+                uint128(nativeTokenTransferData.nativeTokensToSend), 
+                bytes32(uint256(uint160(nativeTokenTransferData.recipient)))
+            );
+
+            SendParam memory _sendParam = SendParam(
+                dstEid,
+                bytes32(uint256(uint160(oftTransferData.recipient))),
+                oftTransferData.tokensToSend,
+                oftTransferData.tokensToSend,
+                _options,
+                '0x',
+                '0x'
+            );
+            _fee = usda.quoteSend( _sendParam, false);
+
+            usda.send{ value: _fee.nativeFee}( _sendParam, _fee, address(this));
+
+        }
+
     }
 
     receive() external payable{}
