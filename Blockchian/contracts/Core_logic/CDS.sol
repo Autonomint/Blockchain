@@ -17,39 +17,11 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
+import { CDSV1 } from "../v1Contracts/CDSV1.sol";
 
-contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp{
+contract CDS is CDSV1,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp{
 
-    IUSDa      private usda; // our stablecoin
-    IBorrowing  private borrowing; // Borrowing contract interface
-    ITreasury   private treasury; // Treasury contrcat interface
-    AggregatorV3Interface internal dataFeed;
-    IMultiSign  private multiSign;
-    IERC20      private usdt; // USDT interface
-
-    address private admin; // admin address
-    address private treasuryAddress; // treasury address
     address private borrowLiquidation;
-
-    uint128 private lastEthPrice;
-    uint128 private fallbackEthPrice;
-    uint64  public cdsCount; // cds depositors count
-    uint64  private withdrawTimeLimit; // Fixed Time interval between deposit and withdraw
-    uint256 public  totalCdsDepositedAmount; // total usda and usdt deposited in cds
-    uint256 private totalCdsDepositedAmountWithOptionFees;
-    uint256 public  totalAvailableLiquidationAmount; // total deposited usda available for liquidation
-    uint128 private lastCumulativeRate; 
-    uint8   public usdaLimit; // usda limit in percent
-    uint64  public usdtLimit; // usdt limit in number
-    uint256 public usdtAmountDepositedTillNow; // total usdt deposited till now
-    uint256 private burnedUSDaInRedeem;
-    uint128 private cumulativeValue;
-    bool    private cumulativeValueSign;
-
-    mapping (address => CdsDetails) public cdsDetails;
-
-    // liquidations info based on liquidation numbers
-    mapping (uint128 liquidationIndex => LiquidationInfo) private omniChainCDSLiqIndexToInfo;
 
     using OptionsBuilder for bytes;
     OmniChainCDSData private omniChainCDS;//! omnichainCDS contains global CDS data(all chains)

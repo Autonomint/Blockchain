@@ -342,7 +342,7 @@ describe("Borrowing Contract",function(){
 
     describe("Should deposit ETH and mint Trinity",function(){
 
-        it.only("Should deposit ETH with two cds deposits",async function(){
+        it("Should deposit ETH with two cds deposits",async function(){
             const {
                 BorrowingContractA,BorrowingContractB,
                 CDSContractA,CDSContractB,

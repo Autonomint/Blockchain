@@ -19,36 +19,13 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
 import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
+import { BorrowingV1 } from "../v1Contracts/BorrowingV1.sol";
 
-contract Borrowing is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
+contract Borrowing is BorrowingV1,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
 
-    IUSDa  private usda; // our stablecoin
-    CDSInterface    private cds;
-    IABONDToken private abond; // abond stablecoin
-    ITreasury   private treasury;
-    IOptions    private options; // options contract interface
-    IMultiSign  private multiSign;
-    IBorrowLiquidation private borrowLiquiation;
-
-    uint256 private _downSideProtectionLimit;
-    address private treasuryAddress; // treasury contract address
-    address private admin; // admin address
-    uint8   private LTV; // LTV is a percentage eg LTV = 60 is 60%, must be divided by 100 in calculations
-    uint8   private APY; 
-    uint256 private totalNormalizedAmount; // total normalized amount in protocol
-    address private priceFeedAddress; // ETH USD pricefeed address
-    uint128 private lastEthprice; // previous eth price
-    uint256 private lastEthVaultValue; // previous eth vault value
-    uint256 private lastCDSPoolValue; // previous CDS pool value
-    uint256 private lastTotalCDSPool;
-    uint256 public  lastCumulativeRate; // previous cumulative rate
-    uint128 private lastEventTime;
-    uint128 private noOfLiquidations; // total number of liquidation happened till now
-    uint128 private ratePerSec;
-    uint64  private bondRatio;
-    bytes32 private DOMAIN_SEPARATOR;
     uint256 private ethRemainingInWithdraw;
     uint256 private ethValueRemainingInWithdraw;
+    IBorrowLiquidation private borrowLiquiation;
     uint32  private dstEid; //! dst id
     using OptionsBuilder for bytes;
     OmniChainBorrowingData private omniChainBorrowing; //! omniChainBorrowing contains global borrowing data(all chains)

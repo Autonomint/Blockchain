@@ -11,25 +11,9 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import { OptionsV1 } from "../v1Contracts/OptionsV1.sol";
 
-contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
-
-    // uint256 private currentEMA;
-    // uint256 private constant smoothingFactor = 2;
-    // uint256 private index = 0; // To track the oldest variance
-    // uint256[30] private variances;
-    uint256 private PRECISION;
-    uint256 private ETH_PRICE_PRECISION;
-    uint256 private OPTION_PRICE_PRECISION;
-    uint128 private USDA_PRECISION;
-
-    // enum for different strike price percentages
-    enum StrikePrice{FIVE,TEN,FIFTEEN,TWENTY,TWENTY_FIVE}
-
-    ITreasury treasury;
-    CDSInterface cds;
-    IBorrowing borrowing;
-    AggregatorV3Interface internal priceFeed; //ETH USD pricefeed address
+contract Options is OptionsV1, Initializable, UUPSUpgradeable,OwnableUpgradeable{
 
     function initialize(
         address _treasuryAddress,

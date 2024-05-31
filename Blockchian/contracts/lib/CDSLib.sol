@@ -8,7 +8,7 @@ pragma solidity 0.8.20;
 import "../interface/ITreasury.sol";
 import "../interface/IUSDa.sol";
 import "../interface/IBorrowing.sol";
-import "../interface/CDSInterface.sol";
+import "../v1Contracts/CDSV1.sol";
 import "hardhat/console.sol";
 
 
@@ -23,7 +23,7 @@ library CDSLib {
         uint128 lastEthPrice,
         uint128 fallbackEthPrice,
         uint256  vaultBal
-    ) public pure returns(CDSInterface.CalculateValueResult memory) {
+    ) public pure returns(CDSV1.CalculateValueResult memory) {
         uint128 _amount = 1000;
         uint128 priceDiff;
         uint128 value;
@@ -61,7 +61,7 @@ library CDSLib {
             value = uint128((_amount * vaultBal * priceDiff * 1e6) / (PRECISION * totalCdsDepositedAmount));
             // console.log("value",value);
         }
-        return CDSInterface.CalculateValueResult(value,gains);
+        return CDSV1.CalculateValueResult(value,gains);
     }
 
     function getOptionsFeesProportions(

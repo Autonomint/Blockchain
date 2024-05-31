@@ -10,22 +10,22 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import { OFT } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/OFT.sol";
+import { AMINTStablecoin } from "../v1Contracts/USDaV1.sol";
 
-contract TestUSDaStablecoin is Initializable, OFT, UUPSUpgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable{
+contract TestUSDaStablecoin is AMINTStablecoin, Initializable, UUPSUpgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, OFT{
+    
     uint32 private dstEid;
 
-    function initialize(        
+    function initialize(
         address _lzEndpoint,
         address _delegate
     ) initializer public {
-        __OFT_init("Test USDa TOKEN", "TUSDa",_lzEndpoint, _delegate);
+        __OFT_init("Test Autonomint USD", "TUSDa", _lzEndpoint, _delegate);
         __ERC20Burnable_init();
         __ERC20Pausable_init();
-        __UUPSUpgradeable_init();
         __Ownable_init(msg.sender);
+        __UUPSUpgradeable_init();
     }
-
-    mapping(address => bool) public whitelist;
 
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
 

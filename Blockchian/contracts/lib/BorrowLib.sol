@@ -8,7 +8,7 @@ pragma solidity 0.8.20;
 import { State, IABONDToken } from "../interface/IAbond.sol";
 import "../interface/ITreasury.sol";
 import "../interface/IUSDa.sol";
-import "../interface/IBorrowing.sol";
+import "../v1Contracts/BorrowingV1.sol";
 import "hardhat/console.sol";
 
 
@@ -71,8 +71,8 @@ library BorrowLib {
         uint128 lastEthprice,
         uint128 noOfBorrowers,
         uint256 latestTotalCDSPool,
-        IBorrowing.OmniChainBorrowingData memory previousData
-    ) public pure returns(uint64, IBorrowing.OmniChainBorrowingData memory){
+        BorrowingV1.OmniChainBorrowingData memory previousData
+    ) public pure returns(uint64, BorrowingV1.OmniChainBorrowingData memory){
 
         uint256 netPLCdsPool;
 

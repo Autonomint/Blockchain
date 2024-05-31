@@ -9,8 +9,9 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import { State } from "../interface/IAbond.sol";
 import "../lib/Colors.sol";
+import { ABONDTokenV1 } from "../v1Contracts/Abond_TokenV1.sol";
 
-contract ABONDToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
+contract ABONDToken is ABONDTokenV1, Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
 
     mapping(address user => State) public userStates;
     mapping(address user => mapping(uint64 index => State)) public userStatesAtDeposits;
@@ -26,9 +27,6 @@ contract ABONDToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable
     }
 
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
-
-    mapping(address => bool) private whitelist;
-    address private borrowingContract;
 
     modifier onlyBorrowingContract() {
         require(msg.sender == borrowingContract, "This function can only called by borrowing contract");
@@ -106,14 +104,6 @@ contract ABONDToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable
         burnFrom(to, amount);
         return true;
     }
-
-    // function _beforeTokenTransfer(address from, address to, uint256 amount)
-    //     internal
-    //     whenNotPaused
-    //     override
-    // {
-    //     super._beforeTokenTransfer(from, to, amount);
-    // }
 
     function burn(uint256 value) public override onlyBorrowingContract {
         super.burn(value);

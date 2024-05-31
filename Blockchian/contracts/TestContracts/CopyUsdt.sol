@@ -10,8 +10,9 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import { OFT } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/OFT.sol";
+import { TestUSDTV1 } from "../v1Contracts/Copy_UsdtV1.sol";
 
-contract TestUSDT is Initializable, OFT, UUPSUpgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable{
+contract TestUSDT is TestUSDTV1, Initializable, UUPSUpgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, OFT{
 
     uint32 private dstEid;
 
@@ -27,8 +28,6 @@ contract TestUSDT is Initializable, OFT, UUPSUpgradeable, ERC20BurnableUpgradeab
     }
 
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
-
-    mapping(address => bool) private whitelist;
 
     function setDstEid(uint32 _eid) external onlyOwner{
         require(_eid != 0, "EID can't be zero");
@@ -55,14 +54,6 @@ contract TestUSDT is Initializable, OFT, UUPSUpgradeable, ERC20BurnableUpgradeab
         burnFrom(to, amount);
         return true;
     }
-
-    // function _beforeTokenTransfer(address from, address to, uint256 amount)
-    //     internal
-    //     whenNotPaused
-    //     override
-    // {
-    //     super._beforeTokenTransfer(from, to, amount);
-    // }
 
     function _update(address from, address to, uint256 value)
         internal
