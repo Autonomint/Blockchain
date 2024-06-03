@@ -15,7 +15,7 @@ import "../interface/IMultiSign.sol";
 import "hardhat/console.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract BorrowingV1 {
+contract Borrowing {
 
     error Borrowing_DepositFailed();
     error Borrowing_GettingETHPriceFailed();

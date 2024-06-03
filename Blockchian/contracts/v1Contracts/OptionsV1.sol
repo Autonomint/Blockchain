@@ -7,7 +7,7 @@ import "../interface/CDSInterface.sol";
 import "../interface/IBorrowing.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract OptionsV1 {
+contract Options {
 
     // uint256 internal currentEMA;
     // uint256 internal constant smoothingFactor = 2;

@@ -20,9 +20,9 @@ import "hardhat/console.sol";
 import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
-import { TreasuryV1 } from "../v1Contracts/TreasuryV1.sol";
+import { Treasury } from "../v1Contracts/TreasuryV1.sol";
 
-contract Treasury is TreasuryV1,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
+contract TreasuryV2 is Treasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
 
     address private borrowLiquidation;
 
@@ -68,6 +68,15 @@ contract Treasury is TreasuryV1,Initializable,UUPSUpgradeable,ReentrancyGuardUpg
 
     function isContract(address account) internal view returns (bool) {
         return account.code.length > 0;
+    }
+
+    function oApp_init(address _endpoint, address _delegate) external onlyOwner{
+        __oAppinit(_endpoint, _delegate);
+    }
+
+    function setBorrowLiquidation(address _address) external onlyOwner {
+        require(_address != address(0) && isContract(_address) != false, "Input address is invalid");
+        borrowLiquidation = _address;
     }
 
     /**

@@ -23,7 +23,7 @@ library CDSLib {
         uint128 lastEthPrice,
         uint128 fallbackEthPrice,
         uint256  vaultBal
-    ) public pure returns(CDSV1.CalculateValueResult memory) {
+    ) public pure returns(CDS.CalculateValueResult memory) {
         uint128 _amount = 1000;
         uint128 priceDiff;
         uint128 value;
@@ -61,7 +61,7 @@ library CDSLib {
             value = uint128((_amount * vaultBal * priceDiff * 1e6) / (PRECISION * totalCdsDepositedAmount));
             // console.log("value",value);
         }
-        return CDSV1.CalculateValueResult(value,gains);
+        return CDS.CalculateValueResult(value,gains);
     }
 
     function getOptionsFeesProportions(

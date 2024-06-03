@@ -4,9 +4,9 @@ pragma solidity 0.8.20;
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import { MultiSignV1 } from "../v1Contracts/multiSignV1.sol";
+import { MultiSign } from "../v1Contracts/multiSignV1.sol";
 
-contract MultiSign is MultiSignV1, Initializable,OwnableUpgradeable,UUPSUpgradeable {
+contract MultiSignV2 is MultiSign, Initializable,OwnableUpgradeable,UUPSUpgradeable {
 
     function initialize(
         address[] memory _owners,

@@ -22,35 +22,33 @@ async function main() {
 
   // const AMINTStablecoin = await ethers.getContractFactory("USDaStablecoin");
   // const deployedAMINTStablecoin = await upgrades.deployProxy(AMINTStablecoin,[
-  //   endpointBaseSepolia,
+  //   endpointModeSepolia,
   //   owner1
   // ],{initializer:'initialize'}, {kind:'uups'});
   // await deployedAMINTStablecoin.waitForDeployment();
   // console.log("PROXY AMINT ADDRESS",await deployedAMINTStablecoin.getAddress());
 
-  // const ABONDToken = await ethers.getContractFactory("ABONDToken");
+  // const ABONDToken = await ethers.getContractFactory("ABONDTokenV2");
   // const deployedABONDToken = await upgrades.deployProxy(ABONDToken,{initializer:'initialize'}, {kind:'uups'});
   // await deployedABONDToken.waitForDeployment();
   // console.log("PROXY ABOND ADDRESS",await deployedABONDToken.getAddress());
 
-  // const TestUSDT = await ethers.getContractFactory("TestUSDT");
+  // const TestUSDT = await ethers.getContractFactory("TestUSDTV2");
   // const deployedTestUSDT = await upgrades.deployProxy(TestUSDT,[
-  //   "Test USDT",
-  //   "TUSDT",
   //   endpointBaseSepolia,
   //   owner1
   // ],{initializer:'initialize'}, {kind:'uups'});
   // await deployedTestUSDT.waitForDeployment();
   // console.log("PROXY TEST USDT ADDRESS",await deployedTestUSDT.getAddress());
 
-  // const multiSign = await ethers.getContractFactory("MultiSign");
+  // const multiSign = await ethers.getContractFactory("MultiSignV2");
   // const deployedMultisign = await upgrades.deployProxy(multiSign,[[owner1,owner2,owner3],2],{initializer:'initialize'},{kind:'uups'});
   // await deployedMultisign.waitForDeployment();
   // console.log("PROXY MULTISIGN ADDRESS",await deployedMultisign.getAddress());
   
   // const CDSLibFactory = await ethers.getContractFactory("CDSLib");
   // const CDSLib = await CDSLibFactory.deploy();
-  // const CDS = await ethers.getContractFactory("CDS",{
+  // const CDS = await ethers.getContractFactory("CDSV2",{
   //   libraries: {
   //       CDSLib:await CDSLib.getAddress()
   //   }
@@ -70,7 +68,7 @@ async function main() {
   
   // const borrowLibFactory = await ethers.getContractFactory("BorrowLib");
   // const borrowLib = await borrowLibFactory.deploy();
-  // const Borrowing = await ethers.getContractFactory("Borrowing",{
+  // const Borrowing = await ethers.getContractFactory("BorrowingV2",{
   //   libraries: {
   //       BorrowLib:await borrowLib.getAddress()
   //   }
@@ -105,7 +103,7 @@ async function main() {
   // await deployedLiquidation.waitForDeployment();
   // console.log("PROXY BORROW LIQUIDATION ADDRESS",await deployedLiquidation.getAddress());
 
-  // const Treasury = await ethers.getContractFactory("Treasury");
+  // const Treasury = await ethers.getContractFactory("TreasuryV2");
   // const deployedTreasury = await upgrades.deployProxy(Treasury,[
   //   await deployedBorrowing.getAddress(),
   //   await deployedAMINTStablecoin.getAddress(),
@@ -118,7 +116,7 @@ async function main() {
   // await deployedTreasury.waitForDeployment();
   // console.log("PROXY TREASURY ADDRESS",await deployedTreasury.getAddress());
 
-  // const Option = await ethers.getContractFactory("Options");
+  // const Option = await ethers.getContractFactory("OptionsV2");
   // const deployedOptions = await upgrades.deployProxy(Option,[await deployedTreasury.getAddress(),await deployedCDS.getAddress(),await deployedBorrowing.getAddress()],{initializer:'initialize'},{kind:'uups'});
   // await deployedOptions.waitForDeployment();
   // console.log("PROXY OPTIONS ADDRESS",await deployedOptions.getAddress());
@@ -131,48 +129,48 @@ async function main() {
   // await sleep(30 * 1000);
 
   // await hre.run("verify:verify", {
-  //   address: "0xC713EDf7ef83F8a1393415833083cBEDF690A0E0",
+  //   address: "0x6502432f446402b8f225e639b95d4d03317a26e4",
   //   contract: "contracts/Token/USDa.sol:USDaStablecoin"
   // });
 
   // await hre.run("verify:verify", {
-  //   address: "0x2b77d91d67642659924f8e339547f46a70992c62",
-  //   contract: "contracts/Token/Abond_Token.sol:ABONDToken"
+  //   address: "0x9eb1fc4bdf917e75d455d70f38d6689b10ec6919",
+  //   contract: "contracts/Token/Abond_Token.sol:ABONDTokenV2"
   // });
 
   // await hre.run("verify:verify", {
-  //   address: "0x17656a9cab0112193afad5cec417e975ef9a37a4",
-  //   contract: "contracts/TestContracts/CopyUsdt.sol:TestUSDT"
+  //   address: "0x13a7b78e65c7e389cc56fc66a0342f90730120a8",
+  //   contract: "contracts/TestContracts/CopyUsdt.sol:TestUSDTV2"
   // });
 
   // await hre.run("verify:verify", {
-  //   address: "0x809b57518a5319a1cf348f9425ec7721bd472719",
-  //   contract: "contracts/Core_logic/multiSign.sol:MultiSign",
+  //   address: "0x4440fce307e3cac1734a80e844918e5acf089503",
+  //   contract: "contracts/Core_logic/multiSign.sol:MultiSignV2",
   // });
 
   // await hre.run("verify:verify", {
-  //   address: "0xd418ff9b6df4fa01b61823c5ea74021cfec28c06",
-  //   contract: "contracts/Core_logic/CDS.sol:CDS",
+  //   address: "0x52c8dde1acb2c6530801f7fb35eb83cea5948356",
+  //   contract: "contracts/Core_logic/CDS.sol:CDSV2",
   // });
 
   // await hre.run("verify:verify", {
-  //   address: "0x62b83355088e1f8f7468182eadb984773034d7ca",
-  //   contract: "contracts/Core_logic/borrowing.sol:Borrowing",
+  //   address: "0x2eac75c1DF39cc7c26E3bF996eE279d34529f7DE",
+  //   contract: "contracts/Core_logic/borrowing.sol:BorrowingV2",
   // });
 
   // await hre.run("verify:verify", {
-  //   address: "0xf2474533a55455207c485c654d3d29f7013f5084",
+  //   address: "0xc2c4c0bb1a29c0aa0fd948e807075859603b5a4c",
   //   contract: "contracts/Core_logic/borrowLiquidation.sol:BorrowLiquidation",
   // });
 
   // await hre.run("verify:verify", {
-  //   address: "0xf474fc19e874d8e638643cc053eeef44c5c8362e",
-  //   contract: "contracts/Core_logic/Treasury.sol:Treasury",
+  //   address: "0x9d88EfAE2D501FcbAf2D7887Cd85130A6A378837",
+  //   contract: "contracts/Core_logic/Treasury.sol:TreasuryV2",
   // });
 
   // await hre.run("verify:verify", {
-  //   address: "0xb573579adcba8a685f8484128927c683e0938ec1",
-  //   contract: "contracts/Core_logic/Options.sol:Options",
+  //   address: "0xF4e5bD7996aA356651FE2E9233ddf0f04F36D567",
+  //   contract: "contracts/Core_logic/Options.sol:OptionsV2",
   // });
 
   // await deployedTreasury.setExternalProtocolAddresses(

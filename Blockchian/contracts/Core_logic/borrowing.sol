@@ -19,9 +19,9 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
 import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
-import { BorrowingV1 } from "../v1Contracts/BorrowingV1.sol";
+import { Borrowing } from "../v1Contracts/BorrowingV1.sol";
 
-contract Borrowing is BorrowingV1,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
+contract BorrowingV2 is Borrowing,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
 
     uint256 private ethRemainingInWithdraw;
     uint256 private ethValueRemainingInWithdraw;
@@ -108,6 +108,10 @@ contract Borrowing is BorrowingV1,Initializable,UUPSUpgradeable,ReentrancyGuardU
     function setBorrowLiquidation(address _borrowLiquidation) external onlyAdmin{
         require(_borrowLiquidation != address(0) && isContract(_borrowLiquidation) != false, "Borrow Liquidation must be contract address & can't be zero address");
         borrowLiquiation = IBorrowLiquidation(_borrowLiquidation);
+    }
+
+    function oApp_init(address _endpoint, address _delegate) external onlyAdmin{
+        __oAppinit(_endpoint, _delegate);
     }
 
     /**

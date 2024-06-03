@@ -11,9 +11,9 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
-import { OptionsV1 } from "../v1Contracts/OptionsV1.sol";
+import { Options } from "../v1Contracts/OptionsV1.sol";
 
-contract Options is OptionsV1, Initializable, UUPSUpgradeable,OwnableUpgradeable{
+contract OptionsV2 is Options, Initializable, UUPSUpgradeable,OwnableUpgradeable{
 
     function initialize(
         address _treasuryAddress,

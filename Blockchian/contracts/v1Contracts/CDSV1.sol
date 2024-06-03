@@ -17,7 +17,7 @@ import "../interface/IMultiSign.sol";
 import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
-contract CDSV1 {
+contract CDS {
 
     struct CdsAccountDetails {
         uint64 depositedTime;

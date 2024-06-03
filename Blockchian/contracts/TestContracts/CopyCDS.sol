@@ -17,9 +17,9 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
-import { CDSV1 } from "../v1Contracts/CDSV1.sol";
+import { CDS } from "../v1Contracts/CDSV1.sol";
 
-contract CDSTest is CDSV1,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp{
+contract CDSTest is CDS,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp{
 
     address private borrowLiquidation;
 

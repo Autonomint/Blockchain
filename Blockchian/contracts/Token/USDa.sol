@@ -9,18 +9,19 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Pausable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import { OFT } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/OFT.sol";
+import { OFTAdapter } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/OFTAdapter.sol";
 import { AMINTStablecoin } from "../v1Contracts/USDaV1.sol";
 
-contract USDaStablecoin is AMINTStablecoin, Initializable, UUPSUpgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, OFT{
+contract USDaStablecoin is AMINTStablecoin, Initializable, UUPSUpgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, OFTAdapter{
     
     uint32 private dstEid;
 
     function initialize(
+        address _token,
         address _lzEndpoint,
         address _delegate
     ) initializer public {
-        __OFT_init("Autonomint USD", "USDa", _lzEndpoint, _delegate);
+        __OFTAdapter_init(_token,_lzEndpoint,_delegate);
         __ERC20Burnable_init();
         __ERC20Pausable_init();
         __Ownable_init(msg.sender);
@@ -80,5 +81,9 @@ contract USDaStablecoin is AMINTStablecoin, Initializable, UUPSUpgradeable, ERC2
     function setCdsContract(address _address) external onlyOwner {
         require(_address != address(0) && isContract(_address) != false, "Input address is invalid");
         cdsContract = _address;
+    }
+
+    function OFTAdapter_init(address _token,address _lzEndpoint,address _delegate) external onlyOwner{
+        __OFTAdapter_init(_token,_lzEndpoint,_delegate);
     }
 }

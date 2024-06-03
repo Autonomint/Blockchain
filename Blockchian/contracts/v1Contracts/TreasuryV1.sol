@@ -14,7 +14,7 @@ import "../interface/AaveInterfaces/IPoolAddressesProvider.sol";
 import "../interface/CometMainInterface.sol";
 import "hardhat/console.sol";
 
-contract TreasuryV1 {
+contract Treasury {
 
     error Treasury_ZeroDeposit();
     error Treasury_ZeroWithdraw();

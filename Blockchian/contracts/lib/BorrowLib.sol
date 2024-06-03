@@ -71,8 +71,8 @@ library BorrowLib {
         uint128 lastEthprice,
         uint128 noOfBorrowers,
         uint256 latestTotalCDSPool,
-        BorrowingV1.OmniChainBorrowingData memory previousData
-    ) public pure returns(uint64, BorrowingV1.OmniChainBorrowingData memory){
+        Borrowing.OmniChainBorrowingData memory previousData
+    ) public pure returns(uint64, Borrowing.OmniChainBorrowingData memory){
 
         uint256 netPLCdsPool;
 

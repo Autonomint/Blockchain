@@ -9,18 +9,17 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Pausable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import { OFT } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/OFT.sol";
-import { TestUSDTV1 } from "../v1Contracts/Copy_UsdtV1.sol";
+import { OFTAdapter } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/OFTAdapter.sol";
+import { TestUSDT } from "../v1Contracts/Copy_UsdtV1.sol";
 
-contract TestUSDT is TestUSDTV1, Initializable, UUPSUpgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, OFT{
+contract TestUSDTV2 is TestUSDT, Initializable, UUPSUpgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, OFTAdapter{
 
-    uint32 private dstEid;
-
-    function initialize(        
+    function initialize(      
+        address _token,  
         address _lzEndpoint,
         address _delegate
     ) initializer public {
-        __OFT_init("Test Tether", "TUSDT", _lzEndpoint, _delegate);
+        __OFTAdapter_init(_token,_lzEndpoint,_delegate);
         __ERC20Burnable_init();
         __ERC20Pausable_init();
         __UUPSUpgradeable_init();
@@ -60,5 +59,9 @@ contract TestUSDT is TestUSDTV1, Initializable, UUPSUpgradeable, ERC20BurnableUp
         override(ERC20Upgradeable, ERC20PausableUpgradeable)
     {
         super._update(from, to, value);
+    }
+
+    function OFTAdapter_init(address _token,address _lzEndpoint,address _delegate) external onlyOwner{
+        __OFTAdapter_init(_token,_lzEndpoint,_delegate);
     }
 }

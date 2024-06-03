@@ -17,9 +17,9 @@ import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
-import { CDSV1 } from "../v1Contracts/CDSV1.sol";
+import { CDS } from "../v1Contracts/CDSV1.sol";
 
-contract CDS is CDSV1,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp{
+contract CDSV2 is CDS,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp{
 
     address private borrowLiquidation;
 
@@ -534,6 +534,10 @@ contract CDS is CDSV1,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,O
     function setBorrowLiquidation(address _address) external onlyAdmin {
         require(_address != address(0) && isContract(_address) != false, "Input address is invalid");
         borrowLiquidation = _address;
+    }
+
+    function oApp_init(address _endpoint, address _delegate) external onlyAdmin{
+        __oAppinit(_endpoint, _delegate);
     }
 
     function setUSDaLimit(uint8 percent) external onlyAdmin{

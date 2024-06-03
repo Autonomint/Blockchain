@@ -19,9 +19,9 @@ import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/Ag
 import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
-import { BorrowingV1 } from "../v1Contracts/BorrowingV1.sol";
+import { Borrowing } from "../v1Contracts/BorrowingV1.sol";
 
-contract BorrowingTest is BorrowingV1,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
+contract BorrowingTest is Borrowing,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
 
     uint256 private ethRemainingInWithdraw;
     uint256 private ethValueRemainingInWithdraw;
