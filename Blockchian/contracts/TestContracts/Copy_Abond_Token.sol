@@ -9,13 +9,14 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import { State } from "../interface/IAbond.sol";
 import "../lib/Colors.sol";
-import { ABONDToken } from "../v1Contracts/Abond_TokenV1.sol";
 
-contract TestABONDToken is ABONDToken, Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
+contract TestABONDToken is Initializable, ERC20Upgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, UUPSUpgradeable, OwnableUpgradeable {
 
     mapping(address user => State) public userStates;
     mapping(address user => mapping(uint64 index => State)) public userStatesAtDeposits;
     uint128 PRECISION;
+    mapping(address => bool) private whitelist;
+    address private borrowingContract;
 
     function initialize() initializer public {
         __ERC20_init("Test ABOND Token", "TABOND");
@@ -134,5 +135,4 @@ contract TestABONDToken is ABONDToken, Initializable, ERC20Upgradeable, ERC20Bur
 
         userStatesAtDeposits[user][index] = state;
     }
-
 }

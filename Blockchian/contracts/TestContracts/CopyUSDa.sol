@@ -10,10 +10,12 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import { OFT } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oft/OFT.sol";
-import { AMINTStablecoin } from "../v1Contracts/USDaV1.sol";
 
-contract TestUSDaStablecoin is AMINTStablecoin, Initializable, UUPSUpgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable, OFT{
+contract TestUSDaStablecoin is Initializable, OFT, UUPSUpgradeable, ERC20BurnableUpgradeable, ERC20PausableUpgradeable{
     
+    mapping(address => bool) private whitelist;
+    address private borrowingContract;
+    address private cdsContract;
     uint32 private dstEid;
 
     function initialize(

@@ -28,9 +28,9 @@ interface IBorrowing{
         uint256  ethVaultValue;
         uint256  cdsPoolValue;
         uint256  totalCDSPool;
-        uint128  noOfLiquidations;
         uint256  ethRemainingInWithdraw;
         uint256  ethValueRemainingInWithdraw;
+        uint128  noOfLiquidations;
         uint64 nonce;
     }
 

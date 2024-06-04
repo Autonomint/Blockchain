@@ -12,6 +12,16 @@ import {
   TESTNET_SEPOLIA_TREASURY_ADDRESS,
   TESTNET_SEPOLIA_OPTIONS_ADDRESS,
 
+  TESTNET_BASE_SEPOLIA_USDA_ADDRESS,
+  TESTNET_BASE_SEPOLIA_ABOND_ADDRESS,
+  TESTNET_BASE_SEPOLIA_TESTUSDT_ADDRESS,
+  TESTNET_BASE_SEPOLIA_MULTISIGN_ADDRESS,
+  TESTNET_BASE_SEPOLIA_CDS_ADDRESS,
+  TESTNET_BASE_SEPOLIA_BORROWING_ADDRESS,
+  TESTNET_BASE_SEPOLIA_BORROW_LIQUIDATION_ADDRESS,
+  TESTNET_BASE_SEPOLIA_TREASURY_ADDRESS,
+  TESTNET_BASE_SEPOLIA_OPTIONS_ADDRESS,
+
   SEPOLIA_USDA_ADDRESS,
   SEPOLIA_ABOND_ADDRESS,
   SEPOLIA_TESTUSDT_ADDRESS,
@@ -33,7 +43,6 @@ import {
   BASE_SEPOLIA_OPTIONS_ADDRESS,
   endpointSepolia,
   owner1,
-  TESTNET_BASE_SEPOLIA_MULTISIGN_ADDRESS
 } from"./index"
 
 async function main() {
@@ -65,23 +74,23 @@ async function main() {
   //       CDSLib:await CDSLib.getAddress()
   //   }
   // });
-  // const deployedCDS = await upgrades.upgradeProxy(TESTNET_SEPOLIA_CDS_ADDRESS,CDS,{unsafeAllowLinkedLibraries:true},{kind:'uups'})
+  // const deployedCDS = await upgrades.upgradeProxy(TESTNET_BASE_SEPOLIA_CDS_ADDRESS,CDS,{unsafeAllowLinkedLibraries:true},{kind:'uups'})
   // await deployedCDS.waitForDeployment();
   // console.log("NEW IMP CDS ADDRESS",await deployedCDS.getAddress());
 
-  // const borrowLibFactory = await ethers.getContractFactory("BorrowLib");
-  // const borrowLib = await borrowLibFactory.deploy();
-  // const Borrowing = await ethers.getContractFactory("BorrowingV2",{
-  //   libraries: {
-  //       BorrowLib:await borrowLib.getAddress()
-  //   }
-  // });  
-  // const deployedBorrowing = await upgrades.upgradeProxy(TESTNET_SEPOLIA_BORROWING_ADDRESS,Borrowing,{unsafeAllowLinkedLibraries:true},{kind:'uups'});
-  // await deployedBorrowing.waitForDeployment();
-  // console.log("NEW IMP BORROWING ADDRESS",await deployedBorrowing.getAddress());
+  const borrowLibFactory = await ethers.getContractFactory("BorrowLib");
+  const borrowLib = await borrowLibFactory.deploy();
+  const Borrowing = await ethers.getContractFactory("BorrowingV2",{
+    libraries: {
+        BorrowLib:await borrowLib.getAddress()
+    }
+  });  
+  const deployedBorrowing = await upgrades.upgradeProxy(TESTNET_SEPOLIA_BORROWING_ADDRESS,Borrowing,{unsafeAllowLinkedLibraries:true},{kind:'uups'});
+  await deployedBorrowing.waitForDeployment();
+  console.log("NEW IMP BORROWING ADDRESS",await deployedBorrowing.getAddress());
 
   // const Treasury = await ethers.getContractFactory("TreasuryV2");
-  // const deployedTreasury = await upgrades.upgradeProxy(TESTNET_SEPOLIA_TREASURY_ADDRESS,Treasury,{kind:'uups'});
+  // const deployedTreasury = await upgrades.upgradeProxy(TESTNET_BASE_SEPOLIA_TREASURY_ADDRESS,Treasury,{kind:'uups'});
   // await deployedTreasury.waitForDeployment();
   // console.log("NEW IMP TREASURY ADDRESS",await deployedTreasury.getAddress());
 

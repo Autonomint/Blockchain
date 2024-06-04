@@ -524,16 +524,6 @@ describe("Borrowing Contract",function(){
             const tx = await BorrowingContractA.getUSDValue();
             expect(tx).to.be.equal(100000);
         })
-
-        it("Should Change token Name",async function(){
-            const {TokenA} = await loadFixture(deployer);
-            console.log(await TokenA.name());
-            console.log(await TokenA.symbol());
-
-            await TokenA.changeName("Autonomint USD", "USDa");
-            console.log(await TokenA.name());
-            console.log(await TokenA.symbol());
-        })
     })
 
     describe("Should revert errors",function(){

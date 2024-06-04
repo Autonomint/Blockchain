@@ -11,9 +11,21 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
-import { Options } from "../v1Contracts/OptionsV1.sol";
 
-contract OptionsV2 is Options, Initializable, UUPSUpgradeable,OwnableUpgradeable{
+contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
+
+    uint256 private PRECISION;
+    uint256 private ETH_PRICE_PRECISION;
+    uint256 private OPTION_PRICE_PRECISION;
+    uint128 private USDA_PRECISION;
+
+    // enum for different strike price percentages
+    enum StrikePrice{FIVE,TEN,FIFTEEN,TWENTY,TWENTY_FIVE}
+
+    ITreasury treasury;
+    CDSInterface cds;
+    IBorrowing borrowing;
+    AggregatorV3Interface internal priceFeed; //ETH USD pricefeed address
 
     function initialize(
         address _treasuryAddress,
@@ -56,47 +68,6 @@ contract OptionsV2 is Options, Initializable, UUPSUpgradeable,OwnableUpgradeable
         }
         return ethToReturn;
     }
-
-    // Chainlink function to get the latest Ethereum price
-    // function getLatestPrice() public view returns (uint) {
-    //     (
-    //         ,int price,,,
-    //     ) = priceFeed.latestRoundData();
-    //     return (uint(price)/ETH_PRICE_PRECISION);
-    // }
-
-    // Function to update EMA daily
-    // function updateDailyEMA() external {
-    //     uint latestPrice = getLatestPrice();
-    //     uint256 latestPriceUint = uint256(latestPrice);
-
-    //     // Update EMA
-    //     if (index < 30) {
-    //         currentEMA = (currentEMA * index + latestPriceUint) / (index + 1); // Simple average for initial values
-    //     } else {
-    //         uint256 k = smoothingFactor / (31);
-    //         currentEMA = latestPriceUint * k + currentEMA * (1 - k);
-    //     }
-
-    //     // Calculate and store variance
-    //     uint256 deviation = latestPriceUint > currentEMA ? latestPriceUint - currentEMA : currentEMA - latestPriceUint;
-    //     variances[index % 30] = deviation * deviation;
-        
-    //     index++;
-    // }
-
-    // Function to calculate the standard deviation
-    // function calculateStandardDeviation() external view returns (uint256) {
-    //     uint256 sum = 0;
-    //     uint256 count = index < 30 ? index : 30; // Use all available variances
-
-    //     for (uint256 i = 0; i < count; i++) {
-    //         sum += variances[i];
-    //     }
-
-    //     uint256 meanVariance = sum / count;
-    //     return sqrt(meanVariance);
-    // }
 
     // Function to calculate option price
     function calculateOptionPrice(uint128 _ethPrice,uint256 _ethVolatility,uint256 _amount,StrikePrice _strikePrice) public view returns (uint256) {

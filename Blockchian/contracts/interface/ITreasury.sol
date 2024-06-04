@@ -85,11 +85,11 @@ interface ITreasury{
         uint256  totalVolumeOfBorrowersAmountinUSD;
         uint128  noOfBorrowers;
         uint256  totalInterest;
-        uint256  totalInterestFromLiquidation;
         uint256  abondUSDaPool;
         uint256  ethProfitsOfLiquidators;
-        uint256  interestFromExternalProtocolDuringLiquidation;
         uint256  usdaGainedFromLiquidation;
+        uint256  totalInterestFromLiquidation;
+        uint256  interestFromExternalProtocolDuringLiquidation;
     }
 
     struct USDaOftTransferData {

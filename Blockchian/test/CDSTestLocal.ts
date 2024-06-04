@@ -31,6 +31,7 @@ describe("CDS Contract",function(){
     let user3: any;
     const eidA = 1
     const eidB = 2
+    const eidC = 3
     const ethVolatility = 50622665;
 
 
@@ -40,6 +41,7 @@ describe("CDS Contract",function(){
         const EndpointV2Mock = await ethers.getContractFactory('EndpointV2Mock')
         const mockEndpointV2A = await EndpointV2Mock.deploy(eidA)
         const mockEndpointV2B = await EndpointV2Mock.deploy(eidB)
+        const mockEndpointV2C = await EndpointV2Mock.deploy(eidC)
 
         const USDaStablecoin = await ethers.getContractFactory("TestUSDaStablecoin");
         const TokenA = await upgrades.deployProxy(USDaStablecoin,[
@@ -47,6 +49,10 @@ describe("CDS Contract",function(){
             await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
         const TokenB = await upgrades.deployProxy(USDaStablecoin,[
+            await mockEndpointV2B.getAddress(),
+            await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
+
+        const TokenC = await upgrades.deployProxy(USDaStablecoin,[
             await mockEndpointV2B.getAddress(),
             await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
@@ -190,7 +196,12 @@ describe("CDS Contract",function(){
         const optionsB = await upgrades.deployProxy(Option,[await treasuryB.getAddress(),await CDSContractB.getAddress(),await BorrowingContractB.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
         await mockEndpointV2B.setDestLzEndpoint(await TokenA.getAddress(), mockEndpointV2A.getAddress())
+        await mockEndpointV2B.setDestLzEndpoint(await TokenC.getAddress(), mockEndpointV2C.getAddress())
         await mockEndpointV2A.setDestLzEndpoint(await TokenB.getAddress(), mockEndpointV2B.getAddress())
+        await mockEndpointV2A.setDestLzEndpoint(await TokenC.getAddress(), mockEndpointV2C.getAddress())
+        await mockEndpointV2C.setDestLzEndpoint(await TokenA.getAddress(), mockEndpointV2A.getAddress())
+        await mockEndpointV2C.setDestLzEndpoint(await TokenB.getAddress(), mockEndpointV2B.getAddress())
+
 
         await mockEndpointV2B.setDestLzEndpoint(await multiSignA.getAddress(), mockEndpointV2A.getAddress())
         await mockEndpointV2A.setDestLzEndpoint(await multiSignB.getAddress(), mockEndpointV2B.getAddress())
@@ -220,7 +231,12 @@ describe("CDS Contract",function(){
         await treasuryB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await treasuryA.getAddress(), 32))
 
         await TokenA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await TokenB.getAddress(), 32))
+        await TokenA.connect(owner).setPeer(eidC, ethers.zeroPadValue(await TokenC.getAddress(), 32))
         await TokenB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await TokenA.getAddress(), 32))
+        await TokenB.connect(owner).setPeer(eidC, ethers.zeroPadValue(await TokenC.getAddress(), 32))
+        await TokenC.connect(owner).setPeer(eidA, ethers.zeroPadValue(await TokenA.getAddress(), 32))
+        await TokenC.connect(owner).setPeer(eidB, ethers.zeroPadValue(await TokenB.getAddress(), 32))
+
 
         await usdtA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await usdtB.getAddress(), 32))
         await usdtB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await usdtA.getAddress(), 32))
@@ -320,7 +336,7 @@ describe("CDS Contract",function(){
             treasuryB,optionsB,multiSignB,
 
             owner,user1,user2,user3,
-            provider,signer,
+            provider,signer,TokenC
         }
     }
 

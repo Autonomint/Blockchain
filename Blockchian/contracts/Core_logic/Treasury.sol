@@ -20,19 +20,45 @@ import "hardhat/console.sol";
 import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
-import { Treasury } from "../v1Contracts/TreasuryV1.sol";
 
-contract TreasuryV2 is Treasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
+contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp {
 
+    IBorrowing  private borrow;
+    IUSDa      public usda;
+    IABONDToken private abond;
+    IWrappedTokenGatewayV3  private wethGateway; // Weth gateway is used to deposit eth in  and withdraw from aave
+    IPoolAddressesProvider  private aavePoolAddressProvider; // To get the current pool  address in Aave
+    IERC20  private usdt;
+    IERC20  private aToken; // aave token contract
+    CometMainInterface private comet; // To deposit in and withdraw eth from compound
+    IWETH9 private WETH;
+
+    address private cdsContract;
     address private borrowLiquidation;
+    address private compoundAddress;
+
+    // Get depositor details by address
+    mapping(address depositor => BorrowerDetails) public borrowing;
+    //Get external protocol deposit details by protocol name (enum)
+    mapping(Protocol => ProtocolDeposit) private protocolDeposit;
+    uint256 public totalVolumeOfBorrowersAmountinWei;
+    //eth vault value
+    uint256 public totalVolumeOfBorrowersAmountinUSD;
+    uint128 public noOfBorrowers;
+    uint256 private totalInterest;
+    uint256 private totalInterestFromLiquidation;
+    uint256 public abondUSDaPool;
+    uint256 private ethProfitsOfLiquidators;
+    uint256 private interestFromExternalProtocolDuringLiquidation;
+
+    uint128 private PRECISION;
+    uint256 private CUMULATIVE_PRECISION;
 
     uint256 public usdaGainedFromLiquidation;
     OmniChainTreasuryData private omniChainTreasury;//! omnichainTreasury contains global treasury data(all chains)
     using OptionsBuilder for bytes;
     uint32 private dstEid;
     address private dstTreasuryAddress;
-    IABONDToken private abond;
-    IWETH9 private WETH;
 
     function initialize(
         address _borrowing,
@@ -68,15 +94,6 @@ contract TreasuryV2 is Treasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpg
 
     function isContract(address account) internal view returns (bool) {
         return account.code.length > 0;
-    }
-
-    function oApp_init(address _endpoint, address _delegate) external onlyOwner{
-        __oAppinit(_endpoint, _delegate);
-    }
-
-    function setBorrowLiquidation(address _address) external onlyOwner {
-        require(_address != address(0) && isContract(_address) != false, "Input address is invalid");
-        borrowLiquidation = _address;
     }
 
     /**
@@ -575,7 +592,7 @@ contract TreasuryV2 is Treasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpg
         
         State memory userState = abond.userStates(user);
 
-        uint128 depositedAmount = (aBondAmount * userState.ethBacked)/uint128(PRECISION);
+        uint128 depositedAmount = (aBondAmount * userState.ethBacked)/PRECISION;
         uint256 normalizedAmount = (depositedAmount * CUMULATIVE_PRECISION)/userState.cumulativeRate;
 
         uint256 currentCumulativeRateAave = getCurrentCumulativeRate(aToken.balanceOf(address(this)),Protocol.Aave);
@@ -831,7 +848,7 @@ contract TreasuryV2 is Treasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpg
 
     function withdrawFromAaveByUser(address user,uint128 aBondAmount) internal returns(uint256){
         State memory userState = abond.userStates(user);
-        uint128 depositedAmount = (aBondAmount * userState.ethBacked)/uint128(PRECISION);
+        uint128 depositedAmount = (aBondAmount * userState.ethBacked)/PRECISION;
         uint256 normalizedAmount = (depositedAmount * CUMULATIVE_PRECISION * 50)/ (userState.cumulativeRate * 100);
         
         //withdraw amount
@@ -854,7 +871,7 @@ contract TreasuryV2 is Treasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpg
 
     function withdrawFromCompoundByUser(address user,uint128 aBondAmount) internal returns(uint256){
         State memory userState = abond.userStates(user);
-        uint128 depositedAmount = (aBondAmount * userState.ethBacked)/uint128(PRECISION);
+        uint128 depositedAmount = (aBondAmount * userState.ethBacked)/PRECISION;
         uint256 normalizedAmount = (depositedAmount * CUMULATIVE_PRECISION * 50)/ (userState.cumulativeRate * 100);
 
         //withdraw amount
