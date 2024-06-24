@@ -275,14 +275,14 @@ describe("CDS Contract",function(){
         await BorrowingContractA.connect(owner).setBorrowLiquidation(await BorrowingLiquidationA.getAddress());
         await BorrowingContractA.connect(owner).setLTV(80);
         await BorrowingContractA.connect(owner).setBondRatio(4);
-        await BorrowingContractA.connect(owner).setAPR(BigInt("1000000001547125957863212449"));
+        await BorrowingContractA.connect(owner).setAPR(BigInt("1000000001547125957863212448"));
 
         await BorrowingContractB.connect(owner).setTreasury(await treasuryB.getAddress());
         await BorrowingContractB.connect(owner).setOptions(await optionsB.getAddress());
         await BorrowingContractB.connect(owner).setBorrowLiquidation(await BorrowingLiquidationB.getAddress());
         await BorrowingContractB.connect(owner).setLTV(80);
         await BorrowingContractB.connect(owner).setBondRatio(4);
-        await BorrowingContractB.connect(owner).setAPR(BigInt("1000000001547125957863212449"));
+        await BorrowingContractB.connect(owner).setAPR(BigInt("1000000001547125957863212448"));
 
         await BorrowingLiquidationA.connect(owner).setTreasury(await treasuryA.getAddress());
         await BorrowingLiquidationB.connect(owner).setTreasury(await treasuryB.getAddress());
@@ -368,7 +368,7 @@ describe("CDS Contract",function(){
 
             await usdtB.connect(user1).mint(user1.getAddress(),10000000000);
             await usdtB.connect(user1).approve(CDSContractB.getAddress(),10000000000);
-            await CDSContractB.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
+            await CDSContractB.connect(user1).deposit(10000000000,0,false,10000000000, { value: nativeFee.toString()});
             
             expect(await CDSContractB.totalCdsDepositedAmount()).to.be.equal(10000000000);
 
@@ -544,6 +544,61 @@ describe("CDS Contract",function(){
         it("Should revert if the caller is not owner for setUsdtLImit",async function(){
             const {CDSContractA} = await loadFixture(deployer);
             await expect(CDSContractA.connect(user1).setUsdtLimit(1000)).to.be.revertedWith("Caller is not an admin");
+        })
+
+        
+        it("Should revert This function can only called by borrowing or Liquidation contract",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).calculateCumulativeRate(1000)).to.be.revertedWith("This function can only called by borrowing or Liquidation contract");
+        })
+        it("Should revert This function can only called by borrowing or Liquidation contract",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).calculateCumulativeRate(1000)).to.be.revertedWith("This function can only called by borrowing or Liquidation contract");
+        })        
+        it("Should revert This function can only called by borrowing or Liquidation contract",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).updateLiquidationInfo(1,[0,1,2,3])).to.be.revertedWith("This function can only called by borrowing or Liquidation contract");
+        })        
+        it("Should revert This function can only called by borrowing or Liquidation contract",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).updateTotalAvailableLiquidationAmount(1000)).to.be.revertedWith("This function can only called by borrowing or Liquidation contract");
+        })        
+        it("Should revert This function can only called by borrowing or Liquidation contract",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).updateTotalCdsDepositedAmount(1000)).to.be.revertedWith("This function can only called by borrowing or Liquidation contract");
+        })        
+        it("Should revert This function can only called by borrowing or Liquidation contract",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).updateTotalCdsDepositedAmountWithOptionFees(1000)).to.be.revertedWith("This function can only called by borrowing or Liquidation contract");
+        })
+
+        it("Should revert This function can only called by borrowing or Liquidation contract",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).callLzSendFromExternal(
+                1,
+                1,
+                1,
+                1,
+                1,
+                [0,1,2,3],
+                1,
+                [0,1],
+                '0x'
+            )).to.be.revertedWith("This function can only called by borrowing or Liquidation contract");
+        })
+
+        it("should revert Surplus USDT amount",async function(){
+            const {CDSContractA,CDSContractB,usdtA,usdtB} = await loadFixture(deployer);
+
+            await usdtA.connect(user1).mint(user1.getAddress(),30000000000);
+            await usdtA.connect(user1).approve(CDSContractA.getAddress(),30000000000);
+            const options = "0x00030100110100000000000000000000000000030d40";
+
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,123,123,[0,0,0,0],0,options, false)
+            const tx = CDSContractA.connect(user1).deposit(30000000000,0,true,10000000000, { value: nativeFee.toString()});
+            await expect(tx).to.be.revertedWith("Surplus USDT amount");
+
         })
     })
 

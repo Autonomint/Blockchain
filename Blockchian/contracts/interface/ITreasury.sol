@@ -106,7 +106,6 @@ interface ITreasury{
     enum FunctionToDo { DUMMY, UPDATE, TOKEN_TRANSFER, NATIVE_TRANSFER, BOTH_TRANSFER}
 
         function deposit(
-            uint256 _depositingAmount,
             address user,
             uint128 _ethPrice,
             uint64 _depositTime
@@ -131,25 +130,6 @@ interface ITreasury{
         function usdaGainedFromLiquidation() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinWei() external view returns(uint256);
         function totalVolumeOfBorrowersAmountinUSD() external view returns(uint256);
-        function omniChainTreasuryNoOfBorrowers() external view returns(uint128);
-        function omniChainTreasuryTotalVolumeOfBorrowersAmountinWei() external view returns(uint256);
-        function omniChainTreasuryTotalVolumeOfBorrowersAmountinUSD() external view returns(uint256);
-        function omniChainTreasuryEthProfitsOfLiquidators() external view returns(uint256);
-
-        function quote(
-            uint32 _dstEid,
-            FunctionToDo _functionToDo,
-            USDaOftTransferData memory _oftTransferData,
-            NativeTokenTransferData memory _nativeTokenTransferData,
-            bytes memory _options,
-            bool _payInLzToken
-        ) external view returns (MessagingFee memory fee);
-
-        function oftOrNativeReceiveFromOtherChains(
-            FunctionToDo _functionToDo,
-            USDaOftTransferData memory _oftTransferData,
-            NativeTokenTransferData memory nativeTokenTransferData
-        ) external payable returns (MessagingReceipt memory receipt);
 
         function updateHasBorrowed(address borrower,bool _bool) external;
         function updateTotalDepositedAmount(address borrower,uint128 amount) external;
@@ -164,6 +144,8 @@ interface ITreasury{
         function updateUSDaGainedFromLiquidation(uint256 amount,bool operation) external;
         function updateEthProfitsOfLiquidators(uint256 amount,bool operation) external;
         function updateInterestFromExternalProtocol(uint256 amount) external;
+        function updateUsdaCollectedFromCdsWithdraw(uint256 amount) external;
+        function updateLiquidatedETHCollectedFromCdsWithdraw(uint256 amount) external;
 
     event Deposit(address indexed user,uint256 amount);
     event Withdraw(address indexed user,uint256 amount);

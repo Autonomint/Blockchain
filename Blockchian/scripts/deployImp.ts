@@ -67,20 +67,20 @@ async function main() {
   // await deployedMultisign.waitForDeployment();
   // console.log("NEW IMP MULTISIGN ADDRESS",await deployedMultisign.getAddress());
 
-  // const CDSLibFactory = await ethers.getContractFactory("CDSLib");
-  // const CDSLib = await CDSLibFactory.deploy();
-  // const CDS = await ethers.getContractFactory("CDSV2",{
-  //   libraries: {
-  //       CDSLib:await CDSLib.getAddress()
-  //   }
-  // });
-  // const deployedCDS = await upgrades.upgradeProxy(TESTNET_BASE_SEPOLIA_CDS_ADDRESS,CDS,{unsafeAllowLinkedLibraries:true},{kind:'uups'})
-  // await deployedCDS.waitForDeployment();
-  // console.log("NEW IMP CDS ADDRESS",await deployedCDS.getAddress());
+  const CDSLibFactory = await ethers.getContractFactory("CDSLib");
+  const CDSLib = await CDSLibFactory.deploy();
+  const CDS = await ethers.getContractFactory("CDS",{
+    libraries: {
+        CDSLib:await CDSLib.getAddress()
+    }
+  });
+  const deployedCDS = await upgrades.upgradeProxy(TESTNET_SEPOLIA_CDS_ADDRESS,CDS,{unsafeAllowLinkedLibraries:true},{kind:'uups'})
+  await deployedCDS.waitForDeployment();
+  console.log("NEW IMP CDS ADDRESS",await deployedCDS.getAddress());
 
   const borrowLibFactory = await ethers.getContractFactory("BorrowLib");
   const borrowLib = await borrowLibFactory.deploy();
-  const Borrowing = await ethers.getContractFactory("BorrowingV2",{
+  const Borrowing = await ethers.getContractFactory("Borrowing",{
     libraries: {
         BorrowLib:await borrowLib.getAddress()
     }
@@ -89,10 +89,10 @@ async function main() {
   await deployedBorrowing.waitForDeployment();
   console.log("NEW IMP BORROWING ADDRESS",await deployedBorrowing.getAddress());
 
-  // const Treasury = await ethers.getContractFactory("TreasuryV2");
-  // const deployedTreasury = await upgrades.upgradeProxy(TESTNET_BASE_SEPOLIA_TREASURY_ADDRESS,Treasury,{kind:'uups'});
-  // await deployedTreasury.waitForDeployment();
-  // console.log("NEW IMP TREASURY ADDRESS",await deployedTreasury.getAddress());
+  const Treasury = await ethers.getContractFactory("Treasury");
+  const deployedTreasury = await upgrades.upgradeProxy(TESTNET_SEPOLIA_TREASURY_ADDRESS,Treasury,{kind:'uups'});
+  await deployedTreasury.waitForDeployment();
+  console.log("NEW IMP TREASURY ADDRESS",await deployedTreasury.getAddress());
 
   // const Option = await ethers.getContractFactory("OptionsV2");
   // const deployedOptions = await upgrades.upgradeProxy(TESTNET_SEPOLIA_OPTIONS_ADDRESS,Option,{unsafeSkipStorageCheck:true},{kind:'uups'});

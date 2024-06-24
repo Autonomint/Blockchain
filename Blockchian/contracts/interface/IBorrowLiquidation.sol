@@ -11,8 +11,7 @@ interface IBorrowLiquidation{
         uint64 _index,
         uint64 _currentEthPrice,
         uint128 _globalNoOfLiquidations,
-        uint256 _lastCumulativeRate,
-        uint32 _dstEid
+        uint256 _lastCumulativeRate
     ) external payable;
 
     event Liquidate(uint64 index,uint128 liquidationAmount,uint128 profits,uint128 ethAmount,uint256 availableLiquidationAmount);

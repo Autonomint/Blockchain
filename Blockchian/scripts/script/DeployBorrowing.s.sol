@@ -81,6 +81,7 @@ contract DeployBorrowing is Script {
         usdt.initialize(address(endPointV2A),owners[0]);
         cds.initialize(address(usda),priceFeedAddress,address(usdt),address(multiSign),address(endPointV2A),owners[0]);
         borrow.initialize(address(usda),address(cds),address(abond),address(multiSign),priceFeedAddress,11155111,address(endPointV2A),owners[0]);
+        borrowLiquidation.initialize(address(borrow),address(cds),address(usda));
         treasury.initialize(
             address(borrow),
             address(usda),
@@ -111,6 +112,7 @@ contract DeployBorrowing is Script {
         usdt.initialize(address(endPointV2B),owners[0]);
         cds.initialize(address(usda),priceFeedAddress,address(usdt),address(multiSign),address(endPointV2B),owners[0]);
         borrow.initialize(address(usda),address(cds),address(abond),address(multiSign),priceFeedAddress,11155111,address(endPointV2B),owners[0]);
+        borrowLiquidation.initialize(address(borrow),address(cds),address(usda));
         treasury.initialize(
             address(borrow),
             address(usda),
@@ -170,7 +172,8 @@ contract DeployBorrowing is Script {
         contractsB.usda.setDstEid(eidA);
         contractsB.usdt.setDstEid(eidA);
         contractsB.treasury.setDstEid(eidA);
-        multiSign.approveSetterFunction(functions);
+        contractsA.multiSign.approveSetterFunction(functions);
+        contractsB.multiSign.approveSetterFunction(functions);
 
         vm.stopBroadcast();
         return(contractsA,contractsB);

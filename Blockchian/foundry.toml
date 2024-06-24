@@ -12,6 +12,9 @@ remappings = [
 
 [invariant]
 runs = 256
-depth = 128
+depth = 1000
 fail_on_revert = true
+
+# [coverage]
+# via_ir = true
 # See more config options https://github.com/foundry-rs/foundry/tree/master/config

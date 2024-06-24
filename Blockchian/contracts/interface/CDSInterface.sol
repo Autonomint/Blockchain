@@ -52,34 +52,9 @@ interface CDSInterface {
     enum FunctionToDo { DUMMY, UPDATE_GLOBAL, UPDATE_INDIVIDUAL }
 
     function totalCdsDepositedAmount() external view returns(uint256);
-    function omniChainCDSTotalCdsDepositedAmount() external view returns(uint256);
     function totalAvailableLiquidationAmount() external returns(uint256);
-    function omniChainCDSTotalAvailableLiquidationAmount() external view returns(uint256);
-    function quote(
-        uint32 _dstEid,
-        FunctionToDo _functionToDo,
-        uint256 optionsFeesToGetFromOtherChain,
-        uint256 cdsAmountToGetFromOtherChain,
-        uint256 liqAmountToGetFromOtherChain,
-        LiquidationInfo memory liquidationInfo,
-        uint128 liqIndex,
-        bytes memory _options,
-        bool _payInLzToken
-    ) external view returns (MessagingFee memory fee);
 
-    function callLzSendFromExternal(
-        uint32 _dstEid,
-        FunctionToDo functionToDo,
-        uint256 optionsFeesToGetFromOtherChain,
-        uint256 cdsAmountToGetFromOtherChain,
-        uint256 liqAmountToGetFromOtherChain,
-        LiquidationInfo memory liquidationInfo,
-        uint128 liqIndex,
-        MessagingFee memory fee,
-        bytes memory _options
-    ) external payable returns (MessagingReceipt memory receipt);
-
-    function calculateCumulativeRate(uint128 fees) external payable;
+    function calculateCumulativeRate(uint128 fees) external;
 
     function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory,uint64);
     function updateTotalAvailableLiquidationAmount(uint256 amount) external;

@@ -9,6 +9,7 @@ import { State, IABONDToken } from "../interface/IAbond.sol";
 import "../interface/ITreasury.sol";
 import "../interface/IUSDa.sol";
 import "../interface/IBorrowing.sol";
+import "../interface/IGlobalVariables.sol";
 import "hardhat/console.sol";
 
 
@@ -71,8 +72,8 @@ library BorrowLib {
         uint128 lastEthprice,
         uint128 noOfBorrowers,
         uint256 latestTotalCDSPool,
-        IBorrowing.OmniChainBorrowingData memory previousData
-    ) public pure returns(uint64, IBorrowing.OmniChainBorrowingData memory){
+        IGlobalVariables.OmniChainData memory previousData
+    ) public pure returns(uint64, IGlobalVariables.OmniChainData memory){
 
         uint256 netPLCdsPool;
 
@@ -177,6 +178,48 @@ library BorrowLib {
         uint64 _bondRatio
     ) public pure returns(uint128 amount){
         amount = (uint128(_amount) * USDA_PRECISION)/_bondRatio;
+    }
+
+    function calculateBaseToMultiply(uint32 usdaPrice) public pure returns (uint16 baseToMultiply){
+        if(usdaPrice < 9500){
+            baseToMultiply = 50;
+        }else if(usdaPrice < 9700 && usdaPrice >= 9500){
+            baseToMultiply = 30;
+        }else if(usdaPrice < 9800 && usdaPrice >= 9700){
+            baseToMultiply = 20;
+        }else if(usdaPrice < 9900 && usdaPrice >= 9800){
+            baseToMultiply = 15;
+        }else if(usdaPrice < 10100 && usdaPrice >= 9900){
+            baseToMultiply = 10;
+        }else if(usdaPrice < 10200 && usdaPrice >= 10100){
+            baseToMultiply = 8;
+        }else if(usdaPrice < 10500 && usdaPrice >= 10200){
+            baseToMultiply = 5;
+        }else{
+            baseToMultiply = 1;
+        }
+    }
+
+    function calculateNewAPRToUpdate(uint32 usdaPrice) public pure returns(uint128 newAPR){
+        require(usdaPrice != 0, "Invalid USDa price");
+        uint32 newBorrowingFeesRate = 5 * calculateBaseToMultiply(usdaPrice);
+        if(newBorrowingFeesRate == 250){
+            newAPR = 1000000007075835619725814915;
+        }else if (newBorrowingFeesRate == 150){
+            newAPR = 1000000004431822129783699001;
+        }else if(newBorrowingFeesRate == 100){
+            newAPR = 1000000003022265980097387650;
+        }else if(newBorrowingFeesRate == 75){
+            newAPR = 1000000002293273137447730714;
+        }else if(newBorrowingFeesRate == 50){
+            newAPR = 1000000001547125957863212448;
+        }else if(newBorrowingFeesRate == 40){
+            newAPR = 1000000001243680656318820312;
+        }else if(newBorrowingFeesRate == 25){
+            newAPR = 1000000000782997609082909351;
+        }else if(newBorrowingFeesRate == 5){
+            newAPR = 1000000000158153903837946257;
+        }
     }
 
     function getAbondYields(

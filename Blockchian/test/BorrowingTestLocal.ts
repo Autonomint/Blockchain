@@ -92,9 +92,7 @@ describe("Borrowing Contract",function(){
             await TokenA.getAddress(),
             priceFeedAddressMainnetA,
             await usdtA.getAddress(),
-            await multiSignA.getAddress(),
-            await mockEndpointV2A.getAddress(),
-            await owner.getAddress()
+            await multiSignA.getAddress()
         ],{initializer:'initialize',
             unsafeAllowLinkedLibraries:true
         },{kind:'uups'})
@@ -103,12 +101,23 @@ describe("Borrowing Contract",function(){
             await TokenB.getAddress(),
             priceFeedAddressMainnetB,
             await usdtB.getAddress(),
-            await multiSignB.getAddress(),
-            await mockEndpointV2B.getAddress(),
-            await owner.getAddress()
+            await multiSignB.getAddress()
         ],{initializer:'initialize',
             unsafeAllowLinkedLibraries:true
         },{kind:'uups'})
+
+        const GlobalVariables = await ethers.getContractFactory("GlobalVariables");
+        const globalVariablesA = await upgrades.deployProxy(GlobalVariables,[
+            await TokenA.getAddress(),
+            await CDSContractA.getAddress(),
+            await mockEndpointV2A.getAddress(),
+            await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
+
+        const globalVariablesB = await upgrades.deployProxy(GlobalVariables,[
+            await TokenB.getAddress(),
+            await CDSContractB.getAddress(),
+            await mockEndpointV2B.getAddress(),
+            await owner.getAddress()],{initializer:'initialize'},{kind:'uups'});
 
         const borrowLibFactory = await ethers.getContractFactory("BorrowLib");
         const borrowLib = await borrowLibFactory.deploy();
@@ -126,8 +135,7 @@ describe("Borrowing Contract",function(){
             await multiSignA.getAddress(),
             priceFeedAddressMainnetA,
             1,
-            await mockEndpointV2A.getAddress(),
-            await owner.getAddress()
+            await globalVariablesA.getAddress()
         ],{initializer:'initialize',
             unsafeAllowLinkedLibraries:true
         },{kind:'uups'});
@@ -139,12 +147,10 @@ describe("Borrowing Contract",function(){
             await multiSignB.getAddress(),
             priceFeedAddressMainnetB,
             1,
-            await mockEndpointV2B.getAddress(),
-            await owner.getAddress()
+            await globalVariablesB.getAddress()
         ],{initializer:'initialize',
             unsafeAllowLinkedLibraries:true
         },{kind:'uups'});
-
 
         const BorrowLiq = await ethers.getContractFactory("BorrowLiquidation",{
             libraries: {
@@ -156,6 +162,7 @@ describe("Borrowing Contract",function(){
             await BorrowingContractA.getAddress(),
             await CDSContractA.getAddress(),
             await TokenA.getAddress(),
+            await globalVariablesA.getAddress()
         ],{initializer:'initialize',
             unsafeAllowLinkedLibraries:true
         },{kind:'uups'}); 
@@ -164,6 +171,7 @@ describe("Borrowing Contract",function(){
             await BorrowingContractB.getAddress(),
             await CDSContractB.getAddress(),
             await TokenB.getAddress(),
+            await globalVariablesB.getAddress()
         ],{initializer:'initialize',
             unsafeAllowLinkedLibraries:true
         },{kind:'uups'}); 
@@ -176,8 +184,7 @@ describe("Borrowing Contract",function(){
             await CDSContractA.getAddress(),
             await BorrowingLiquidationA.getAddress(),
             await usdtA.getAddress(),
-            await mockEndpointV2A.getAddress(),
-            await owner.getAddress()
+            await globalVariablesA.getAddress()
         ],{initializer:'initialize'},{kind:'uups'});
 
         const treasuryB = await upgrades.deployProxy(Treasury,[
@@ -187,48 +194,35 @@ describe("Borrowing Contract",function(){
             await CDSContractB.getAddress(),
             await BorrowingLiquidationB.getAddress(),
             await usdtB.getAddress(),
-            await mockEndpointV2B.getAddress(),
-            await owner.getAddress()
+            await globalVariablesB.getAddress()
         ],{initializer:'initialize'},{kind:'uups'});
 
         const Option = await ethers.getContractFactory("Options");
-        const optionsA = await upgrades.deployProxy(Option,[await treasuryA.getAddress(),await CDSContractA.getAddress(),await BorrowingContractA.getAddress()],{initializer:'initialize'},{kind:'uups'});
-        const optionsB = await upgrades.deployProxy(Option,[await treasuryB.getAddress(),await CDSContractB.getAddress(),await BorrowingContractB.getAddress()],{initializer:'initialize'},{kind:'uups'});
+        const optionsA = await upgrades.deployProxy(Option,[
+            await treasuryA.getAddress(),
+            await CDSContractA.getAddress(),
+            await BorrowingContractA.getAddress(),
+            await globalVariablesA.getAddress()
+        ],{initializer:'initialize'},{kind:'uups'});
+        const optionsB = await upgrades.deployProxy(Option,[
+            await treasuryB.getAddress(),
+            await CDSContractB.getAddress(),
+            await BorrowingContractB.getAddress(),
+            await globalVariablesB.getAddress()
+        ],{initializer:'initialize'},{kind:'uups'});
 
-        await mockEndpointV2B.setDestLzEndpoint(await TokenA.getAddress(), mockEndpointV2A.getAddress())
-        await mockEndpointV2B.setDestLzEndpoint(await TokenC.getAddress(), mockEndpointV2C.getAddress())
         await mockEndpointV2A.setDestLzEndpoint(await TokenB.getAddress(), mockEndpointV2B.getAddress())
         await mockEndpointV2A.setDestLzEndpoint(await TokenC.getAddress(), mockEndpointV2C.getAddress())
+        await mockEndpointV2B.setDestLzEndpoint(await TokenA.getAddress(), mockEndpointV2A.getAddress())
+        await mockEndpointV2B.setDestLzEndpoint(await TokenC.getAddress(), mockEndpointV2C.getAddress())
         await mockEndpointV2C.setDestLzEndpoint(await TokenA.getAddress(), mockEndpointV2A.getAddress())
         await mockEndpointV2C.setDestLzEndpoint(await TokenB.getAddress(), mockEndpointV2B.getAddress())
-
-
-        await mockEndpointV2B.setDestLzEndpoint(await multiSignA.getAddress(), mockEndpointV2A.getAddress())
-        await mockEndpointV2A.setDestLzEndpoint(await multiSignB.getAddress(), mockEndpointV2B.getAddress())
 
         await mockEndpointV2B.setDestLzEndpoint(await usdtA.getAddress(), mockEndpointV2A.getAddress())
         await mockEndpointV2A.setDestLzEndpoint(await usdtB.getAddress(), mockEndpointV2B.getAddress())
 
-        await mockEndpointV2B.setDestLzEndpoint(await CDSContractA.getAddress(), mockEndpointV2A.getAddress())
-        await mockEndpointV2A.setDestLzEndpoint(await CDSContractB.getAddress(), mockEndpointV2B.getAddress())
-
-        await mockEndpointV2B.setDestLzEndpoint(await BorrowingContractA.getAddress(), mockEndpointV2A.getAddress())
-        await mockEndpointV2A.setDestLzEndpoint(await BorrowingContractB.getAddress(), mockEndpointV2B.getAddress())
-
-        await mockEndpointV2B.setDestLzEndpoint(await treasuryA.getAddress(), mockEndpointV2A.getAddress())
-        await mockEndpointV2A.setDestLzEndpoint(await treasuryB.getAddress(), mockEndpointV2B.getAddress())
-
-        await mockEndpointV2B.setDestLzEndpoint(await optionsA.getAddress(), mockEndpointV2A.getAddress())
-        await mockEndpointV2A.setDestLzEndpoint(await optionsB.getAddress(), mockEndpointV2B.getAddress())
-
-        await BorrowingContractA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await BorrowingContractB.getAddress(), 32))
-        await BorrowingContractB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await BorrowingContractA.getAddress(), 32))
-
-        await CDSContractA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await CDSContractB.getAddress(), 32))
-        await CDSContractB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await CDSContractA.getAddress(), 32))
-
-        await treasuryA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await treasuryB.getAddress(), 32))
-        await treasuryB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await treasuryA.getAddress(), 32))
+        await mockEndpointV2A.setDestLzEndpoint(await globalVariablesB.getAddress(), mockEndpointV2B.getAddress())
+        await mockEndpointV2B.setDestLzEndpoint(await globalVariablesA.getAddress(), mockEndpointV2A.getAddress())
 
         await TokenA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await TokenB.getAddress(), 32))
         await TokenA.connect(owner).setPeer(eidC, ethers.zeroPadValue(await TokenC.getAddress(), 32))
@@ -237,9 +231,11 @@ describe("Borrowing Contract",function(){
         await TokenC.connect(owner).setPeer(eidA, ethers.zeroPadValue(await TokenA.getAddress(), 32))
         await TokenC.connect(owner).setPeer(eidB, ethers.zeroPadValue(await TokenB.getAddress(), 32))
 
-
         await usdtA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await usdtB.getAddress(), 32))
         await usdtB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await usdtA.getAddress(), 32))
+
+        await globalVariablesA.connect(owner).setPeer(eidB, ethers.zeroPadValue(await globalVariablesB.getAddress(), 32))
+        await globalVariablesB.connect(owner).setPeer(eidA, ethers.zeroPadValue(await globalVariablesA.getAddress(), 32))
 
         await abondTokenA.setBorrowingContract(await BorrowingContractA.getAddress());
         await abondTokenB.setBorrowingContract(await BorrowingContractB.getAddress());
@@ -255,34 +251,28 @@ describe("Borrowing Contract",function(){
         await CDSContractA.connect(owner).setAdmin(owner.getAddress());
         await CDSContractB.connect(owner).setAdmin(owner.getAddress());
 
-        await BorrowingContractA.setDstEid(eidB);
-        await BorrowingContractB.setDstEid(eidA);
-
-        await CDSContractA.setDstEid(eidB);
-        await CDSContractB.setDstEid(eidA);
-
-        await treasuryA.setDstEid(eidB);
-        await treasuryB.setDstEid(eidA);
-
         await TokenA.setDstEid(eidB);
         await TokenB.setDstEid(eidA);
 
         await usdtA.setDstEid(eidB);
         await usdtB.setDstEid(eidA);
 
+        await globalVariablesA.setDstEid(eidB);
+        await globalVariablesB.setDstEid(eidA);
+
         await BorrowingContractA.connect(owner).setTreasury(await treasuryA.getAddress());
         await BorrowingContractA.connect(owner).setOptions(await optionsA.getAddress());
         await BorrowingContractA.connect(owner).setBorrowLiquidation(await BorrowingLiquidationA.getAddress());
         await BorrowingContractA.connect(owner).setLTV(80);
         await BorrowingContractA.connect(owner).setBondRatio(4);
-        await BorrowingContractA.connect(owner).setAPR(BigInt("1000000001547125957863212449"));
+        await BorrowingContractA.connect(owner).setAPR(BigInt("1000000001547125957863212448"));
 
         await BorrowingContractB.connect(owner).setTreasury(await treasuryB.getAddress());
         await BorrowingContractB.connect(owner).setOptions(await optionsB.getAddress());
         await BorrowingContractB.connect(owner).setBorrowLiquidation(await BorrowingLiquidationB.getAddress());
         await BorrowingContractB.connect(owner).setLTV(80);
         await BorrowingContractB.connect(owner).setBondRatio(4);
-        await BorrowingContractB.connect(owner).setAPR(BigInt("1000000001547125957863212449"));
+        await BorrowingContractB.connect(owner).setAPR(BigInt("1000000001547125957863212448"));
 
         await BorrowingLiquidationA.connect(owner).setTreasury(await treasuryA.getAddress());
         await BorrowingLiquidationB.connect(owner).setTreasury(await treasuryB.getAddress());
@@ -292,17 +282,18 @@ describe("Borrowing Contract",function(){
         await CDSContractA.connect(owner).setBorrowLiquidation(await BorrowingLiquidationA.getAddress());
         await CDSContractA.connect(owner).setUSDaLimit(80);
         await CDSContractA.connect(owner).setUsdtLimit(20000000000);
+        await CDSContractA.connect(owner).setGlobalVariables(await globalVariablesA.getAddress());
 
         await CDSContractB.connect(owner).setTreasury(await treasuryB.getAddress());
         await CDSContractB.connect(owner).setBorrowingContract(await BorrowingContractB.getAddress());
         await CDSContractB.connect(owner).setBorrowLiquidation(await BorrowingLiquidationB.getAddress());
         await CDSContractB.connect(owner).setUSDaLimit(80);
         await CDSContractB.connect(owner).setUsdtLimit(20000000000);
+        await CDSContractB.connect(owner).setGlobalVariables(await globalVariablesB.getAddress());
 
         await BorrowingContractA.calculateCumulativeRate();
         await BorrowingContractB.calculateCumulativeRate();
 
-        await treasuryA.connect(owner).setDstTreasuryAddress(await treasuryB.getAddress());
         await treasuryA.connect(owner).setExternalProtocolAddresses(
             wethGatewayMainnet,
             cometMainnet,
@@ -311,7 +302,6 @@ describe("Borrowing Contract",function(){
             wethAddressMainnet,
         )
 
-        await treasuryB.connect(owner).setDstTreasuryAddress(await treasuryA.getAddress());
         await treasuryB.connect(owner).setExternalProtocolAddresses(
             wethGatewayMainnet,
             cometMainnet,
@@ -330,10 +320,12 @@ describe("Borrowing Contract",function(){
             TokenA,abondTokenA,usdtA,
             CDSContractA,BorrowingContractA,
             treasuryA,optionsA,multiSignA,
+            BorrowingLiquidationA,globalVariablesA,
 
             TokenB,abondTokenB,usdtB,
             CDSContractB,BorrowingContractB,
             treasuryB,optionsB,multiSignB,
+            BorrowingLiquidationB,globalVariablesB,
 
             owner,user1,user2,user3,
             provider,signer,TokenC
@@ -347,7 +339,7 @@ describe("Borrowing Contract",function(){
                 BorrowingContractA,BorrowingContractB,
                 CDSContractA,CDSContractB,
                 usdtA,usdtB,
-                treasuryA
+                treasuryA,globalVariablesA
             } = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
@@ -356,7 +348,7 @@ describe("Borrowing Contract",function(){
             const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,123,123,[0,0,0,0],0,options, false)
+            ;[nativeFee] = await globalVariablesA.quote(1,options, false)
             await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
 
             await usdtB.connect(user1).mint(user1.getAddress(),10000000000);
@@ -365,11 +357,6 @@ describe("Borrowing Contract",function(){
             
             const depositAmount = ethers.parseEther("50");
 
-            let nativeFee1 = 0
-            ;[nativeFee1] = await BorrowingContractA.quote(eidB, [5,10,15,20,25,30,35,40],options, false)
-            let nativeFee2 = 0
-            ;[nativeFee2] = await treasuryA.quote(eidB,1, [ZeroAddress,0],[ZeroAddress,0],options, false)
-
             await BorrowingContractB.connect(user2).depositTokens(
                 100000,
                 timeStamp,
@@ -377,11 +364,11 @@ describe("Borrowing Contract",function(){
                 110000,
                 ethVolatility,
                 depositAmount,
-                {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2) + BigInt(nativeFee))})
+                {value: (depositAmount + BigInt(nativeFee))})
         })
 
-        it("Should deposit ETH in different chain with cds deposits",async function(){
-            const {BorrowingContractB,CDSContractA,usdtA,treasuryB} = await loadFixture(deployer);
+        it.only("Should deposit ETH in different chain with cds deposits",async function(){
+            const {BorrowingContractB,CDSContractA,usdtA,globalVariablesA} = await loadFixture(deployer);
             const timeStamp = await time.latest();
 
             await usdtA.connect(user1).mint(user1.getAddress(),10000000000);
@@ -389,15 +376,10 @@ describe("Borrowing Contract",function(){
             const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
 
             let nativeFee = 0
-            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,123,123,[0,0,0,0],0,options, false)
+            ;[nativeFee] = await globalVariablesA.quote(1,options, false);
             await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
             
             const depositAmount = ethers.parseEther("50");
-
-            let nativeFee1 = 0
-            ;[nativeFee1] = await BorrowingContractB.quote(eidA, [5,10,15,20,25,30,35,40],options, false)
-            let nativeFee2 = 0
-            ;[nativeFee2] = await treasuryB.quote(eidA,1, [ZeroAddress,0],[ZeroAddress,0],options, false)
 
             await BorrowingContractB.connect(user2).depositTokens(
                 100000,
@@ -406,7 +388,7 @@ describe("Borrowing Contract",function(){
                 110000,
                 ethVolatility,
                 depositAmount,
-                {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2) + BigInt(nativeFee))})
+                {value: (depositAmount + BigInt(nativeFee))})
         })
 
         it("Should transfer USDa from A to B",async function(){
@@ -485,15 +467,15 @@ describe("Borrowing Contract",function(){
             const {BorrowingContractA,multiSignA} = await loadFixture(deployer);
             await multiSignA.connect(owner).approveSetterFunction([1]);
             await multiSignA.connect(owner1).approveSetterFunction([1]);
-            await BorrowingContractA.setAPR(BigInt("1000000001547125957863212449"));
-            await expect(await BorrowingContractA.ratePerSec()).to.be.equal(BigInt("1000000001547125957863212449"));
+            await BorrowingContractA.setAPR(BigInt("1000000001547125957863212448"));
+            await expect(await BorrowingContractA.ratePerSec()).to.be.equal(BigInt("1000000001547125957863212448"));
         })
 
         it("Should called by only owner(setAPR)",async function(){
             const {BorrowingContractA,multiSignA} = await loadFixture(deployer);
             await multiSignA.connect(owner).approveSetterFunction([1]);
             await multiSignA.connect(owner1).approveSetterFunction([1]);
-            const tx = BorrowingContractA.connect(user1).setAPR(BigInt("1000000001547125957863212449"));
+            const tx = BorrowingContractA.connect(user1).setAPR(BigInt("1000000001547125957863212448"));
             await expect(tx).to.be.revertedWith("Caller is not an admin");
         })
     
@@ -508,7 +490,7 @@ describe("Borrowing Contract",function(){
     
         it("Should revert if set APY without approval",async function(){
             const {BorrowingContractA} = await loadFixture(deployer);
-            const tx = BorrowingContractA.connect(owner).setAPR(BigInt("1000000001547125957863212449"));    
+            const tx = BorrowingContractA.connect(owner).setAPR(BigInt("1000000001547125957863212448"));    
             await expect(tx).to.be.revertedWith("Required approvals not met");
         })
     
@@ -600,6 +582,66 @@ describe("Borrowing Contract",function(){
             await expect(BorrowingContractA.connect(owner).setTreasury(ZeroAddress)).to.be.revertedWith("Treasury must be contract address & can't be zero address");
         })
 
+        it("Should revert if the caller is not owner for setBorrowLiquidation",async function(){
+            const {BorrowingContractA,BorrowingLiquidationA} = await loadFixture(deployer);
+            await expect(BorrowingContractA.connect(user1).setBorrowLiquidation(await BorrowingLiquidationA.getAddress())).to.be.revertedWith("Caller is not an admin");
+        })
+
+        it("Should revert if the BorrowLiquidation address is zero",async function(){
+            const {BorrowingContractA} = await loadFixture(deployer);
+            await expect(BorrowingContractA.connect(owner).setBorrowLiquidation(ZeroAddress)).to.be.revertedWith("Borrow Liquidation must be contract address & can't be zero address");
+        })
+
+        it("Should revert if the caller is not owner for setBorrowLiquidation",async function(){
+            const {CDSContractA,BorrowingLiquidationA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).setBorrowLiquidation(await BorrowingLiquidationA.getAddress())).to.be.revertedWith("Caller is not an admin");
+        })
+
+        it("Should revert if the BorrowLiquidation address is zero",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(owner).setBorrowLiquidation(ZeroAddress)).to.be.revertedWith("Input address is invalid");
+        })
+
+        it("Should revert if the caller is not owner for setDstEid",async function(){
+            const {BorrowingContractA} = await loadFixture(deployer);
+            await expect(BorrowingContractA.connect(user1).setDstEid(1)).to.be.revertedWith("Caller is not an admin");
+        })
+
+        it("Should revert if the EID is zero",async function(){
+            const {BorrowingContractA} = await loadFixture(deployer);
+            await expect(BorrowingContractA.connect(owner).setDstEid(0)).to.be.revertedWith("EID can't be zero");
+        })
+
+        it("Should revert if the caller is not owner for setDstEid",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).setDstEid(1)).to.be.revertedWith("Caller is not an admin");
+        })
+
+        it("Should revert if the EID is zero",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(owner).setDstEid(0)).to.be.revertedWith("EID can't be zero");
+        })
+
+        it("Should revert if the EID is zero",async function(){
+            const {treasuryA} = await loadFixture(deployer);
+            await expect(treasuryA.connect(owner).setDstEid(0)).to.be.revertedWith("EID can't be zero");
+        })
+
+        it("Should revert if the caller is not owner for setBondRatio",async function(){
+            const {BorrowingContractA} = await loadFixture(deployer);
+            await expect(BorrowingContractA.connect(user1).setBondRatio(4)).to.be.revertedWith("Caller is not an admin");
+        })
+
+        it("Should revert if the BOND RATIO is zero",async function(){
+            const {BorrowingContractA} = await loadFixture(deployer);
+            await expect(BorrowingContractA.connect(owner).setBondRatio(0)).to.be.revertedWith("Bond Ratio can't be zero");
+        })
+
+        it("Should revert if the DstTreasuryAddress address is zero",async function(){
+            const {treasuryA} = await loadFixture(deployer);
+            await expect(treasuryA.connect(owner).setDstTreasuryAddress(ZeroAddress)).to.be.revertedWith("Treasury address can't be zero address");
+        })
+
         it("Should revert if the caller is not owner for setOptions",async function(){
             const {BorrowingContractA,optionsA} = await loadFixture(deployer);
             await expect(BorrowingContractA.connect(user1).setOptions(await optionsA.getAddress())).to.be.revertedWith("Caller is not an admin");
@@ -618,6 +660,21 @@ describe("Borrowing Contract",function(){
         it("Should revert if the Admin address is zero",async function(){
             const {BorrowingContractA} = await loadFixture(deployer);
             await expect(BorrowingContractA.connect(owner).setAdmin(ZeroAddress)).to.be.revertedWith("Admin can't be contract address & zero address");
+        })
+
+        it("Should revert if the Treasury address is zero",async function(){
+            const {BorrowingLiquidationA} = await loadFixture(deployer);
+            await expect(BorrowingLiquidationA.connect(owner).setTreasury(ZeroAddress)).to.be.revertedWith("Treasury must be contract address & can't be zero address");
+        })
+
+        it("Should revert if the caller is not owner for setAdmin",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(user1).setAdmin(owner.getAddress())).to.be.revertedWith("Ownable: caller is not the owner");
+        })
+
+        it("Should revert if the Admin address is zero",async function(){
+            const {CDSContractA} = await loadFixture(deployer);
+            await expect(CDSContractA.connect(owner).setAdmin(ZeroAddress)).to.be.revertedWith("Admin can't be contract address & zero address");
         })
 
         it("Should revert if caller is not owner(setLTV)",async function(){
@@ -711,6 +768,165 @@ describe("Borrowing Contract",function(){
             await expect(treasuryA.connect(owner).withdrawInterest(user1.getAddress(),100)).to.be.revertedWith("Treasury don't have enough interest");
         })
 
+        it("Should revert if msg.value is less than depositing amount in borrow deposit",async function(){
+            const {
+                BorrowingContractA,BorrowingContractB,
+                CDSContractA,CDSContractB,
+                usdtA,usdtB,
+                treasuryA
+            } = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,123,123,[0,0,0,0],0,options, false)
+            
+            const depositAmount = ethers.parseEther("50");
+
+            let nativeFee1 = 0
+            ;[nativeFee1] = await BorrowingContractA.quote(eidB, [5,10,15,20,25,30,35,40],options, false)
+            let nativeFee2 = 0
+            ;[nativeFee2] = await treasuryA.quote(eidB,1, [ZeroAddress,0],[ZeroAddress,0],options, false)
+
+            const tx =  BorrowingContractB.connect(user2).depositTokens(
+                100000,
+                timeStamp,
+                1,
+                110000,
+                ethVolatility,
+                (depositAmount + depositAmount),
+                {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2) + BigInt(nativeFee))})
+            await expect(tx).to.be.revertedWith("Borrowing: Don't have enough LZ fee");
+        })
+
+        it("Should revert if msg.value is less than depositing amount in treasury deposit",async function(){
+            const {
+                BorrowingContractA,BorrowingContractB,
+                CDSContractA,CDSContractB,
+                usdtA,usdtB,
+                treasuryA
+            } = await loadFixture(deployer);
+            const timeStamp = await time.latest();
+
+            await usdtA.connect(user1).mint(user1.getAddress(),10000000000);
+            await usdtA.connect(user1).approve(CDSContractA.getAddress(),10000000000);
+            const options = Options.newOptions().addExecutorLzReceiveOption(200000, 0).toHex().toString()
+
+            let nativeFee = 0
+            ;[nativeFee] = await CDSContractA.quote(eidB,1,123,123,123,[0,0,0,0],0,options, false)
+            await CDSContractA.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
+
+            await usdtB.connect(user1).mint(user1.getAddress(),10000000000);
+            await usdtB.connect(user1).approve(CDSContractB.getAddress(),10000000000);
+            await CDSContractB.connect(user1).deposit(10000000000,0,true,10000000000, { value: nativeFee.toString()});
+            
+            const depositAmount = ethers.parseEther("50");
+
+            let nativeFee1 = 0
+            ;[nativeFee1] = await BorrowingContractA.quote(eidB, [5,10,15,20,25,30,35,40],options, false)
+            let nativeFee2 = 0
+            ;[nativeFee2] = await treasuryA.quote(eidB,1, [ZeroAddress,0],[ZeroAddress,0],options, false)
+
+            const tx =  BorrowingContractB.connect(user2).depositTokens(
+                100000,
+                timeStamp,
+                1,
+                110000,
+                ethVolatility,
+                depositAmount,
+                {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee))})
+            await expect(tx).to.be.revertedWith("Treasury: Don't have enough LZ fee");
+        })
+
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.withdrawFromExternalProtocol(await user1.getAddress(),100);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.calculateYieldsForExternalProtocol(await user1.getAddress(),100);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })        
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.updateDepositDetails(
+                await user1.getAddress(),
+                1,
+            [1,2,3,4,5,6,78,false,9,true,4,5,2,4,5]);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.updateHasBorrowed(await user1.getAddress(),true);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.updateTotalDepositedAmount(await user1.getAddress(),100);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.updateTotalBorrowedAmount(await user1.getAddress(),100);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.updateTotalInterest(100);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.updateTotalInterestFromLiquidation(100);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.updateAbondUSDaPool(100,true);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.updateUSDaGainedFromLiquidation(100,true);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.updateEthProfitsOfLiquidators(100,true);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.updateInterestFromExternalProtocol(100);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.getExternalProtocolCumulativeRate(true);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.approveUSDa(await user1.getAddress(),100);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.approveUsdt(await user1.getAddress(),100);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.oftOrNativeReceiveFromOtherChains(1,[ZeroAddress,1],[ZeroAddress,1]);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
+        it("Should revert This function can only called by Core contracts",async function(){
+            const { treasuryA } = await loadFixture(deployer);
+            const tx = treasuryA.transferEthToCdsLiquidators(await user1.getAddress(),100);
+            await expect(tx).to.be.revertedWith("This function can only called by Core contracts");
+        })
     })
 
     describe("Should update all state changes correctly",function(){
@@ -1229,6 +1445,15 @@ describe("Borrowing Contract",function(){
             ;[nativeFee1] = await BorrowingContractA.quote(eidB, [5,10,15,20,25,30,35,40],options, false)
             let nativeFee2 = 0
             ;[nativeFee2] = await treasuryA.quote(eidB,1, [ZeroAddress,0],[ZeroAddress,0],options, false)
+
+            await BorrowingContractA.connect(user1).depositTokens(
+                100000,
+                timeStamp,
+                1,
+                110000,
+                ethVolatility,
+                depositAmount,
+                {value: (depositAmount + BigInt(nativeFee1) + BigInt(nativeFee2) + BigInt(nativeFee))})
 
             await BorrowingContractA.connect(user1).depositTokens(
                 100000,
@@ -1999,5 +2224,94 @@ describe("Borrowing Contract",function(){
 
     })
 
+    describe("Should change apr based on USDa price", function(){
+        it("Should change the apr $0.90",async function(){
+            const {
+                BorrowingContractA,BorrowingContractB,
+                CDSContractA,CDSContractB,
+                usdtA,usdtB,
+                treasuryA,abondTokenB
+            } = await loadFixture(deployer);
 
+            await BorrowingContractA.connect(owner).updateRatePerSecByUSDaPrice(9000);
+            expect(await BorrowingContractA.ratePerSec()).to.be.equal(BigInt('1000000007075835619725814915'));
+        })
+        it("Should change the apr for $0.95",async function(){
+            const {
+                BorrowingContractA,BorrowingContractB,
+                CDSContractA,CDSContractB,
+                usdtA,usdtB,
+                treasuryA,abondTokenB
+            } = await loadFixture(deployer);
+
+            await BorrowingContractA.connect(owner).updateRatePerSecByUSDaPrice(9500);
+            expect(await BorrowingContractA.ratePerSec()).to.be.equal(BigInt('1000000004431822129783699001'));
+        })
+        it("Should change the apr $0.975",async function(){
+            const {
+                BorrowingContractA,BorrowingContractB,
+                CDSContractA,CDSContractB,
+                usdtA,usdtB,
+                treasuryA,abondTokenB
+            } = await loadFixture(deployer);
+
+            await BorrowingContractA.connect(owner).updateRatePerSecByUSDaPrice(9750);
+            expect(await BorrowingContractA.ratePerSec()).to.be.equal(BigInt('1000000003022265980097387650'));
+        })
+        it("Should change the apr $0.985",async function(){
+            const {
+                BorrowingContractA,BorrowingContractB,
+                CDSContractA,CDSContractB,
+                usdtA,usdtB,
+                treasuryA,abondTokenB
+            } = await loadFixture(deployer);
+
+            await BorrowingContractA.connect(owner).updateRatePerSecByUSDaPrice(9850);
+            expect(await BorrowingContractA.ratePerSec()).to.be.equal(BigInt('1000000002293273137447730714'));
+        })
+        it("Should change the apr $1.00",async function(){
+            const {
+                BorrowingContractA,BorrowingContractB,
+                CDSContractA,CDSContractB,
+                usdtA,usdtB,
+                treasuryA,abondTokenB
+            } = await loadFixture(deployer);
+
+            await BorrowingContractA.connect(owner).updateRatePerSecByUSDaPrice(10000);
+            expect(await BorrowingContractA.ratePerSec()).to.be.equal(BigInt('1000000001547125957863212448'));
+        })
+        it("Should change the apr $1.015",async function(){
+            const {
+                BorrowingContractA,BorrowingContractB,
+                CDSContractA,CDSContractB,
+                usdtA,usdtB,
+                treasuryA,abondTokenB
+            } = await loadFixture(deployer);
+
+            await BorrowingContractA.connect(owner).updateRatePerSecByUSDaPrice(10150);
+            expect(await BorrowingContractA.ratePerSec()).to.be.equal(BigInt('1000000001243680656318820312'));
+        })
+        it("Should change the apr $1.045",async function(){
+            const {
+                BorrowingContractA,BorrowingContractB,
+                CDSContractA,CDSContractB,
+                usdtA,usdtB,
+                treasuryA,abondTokenB
+            } = await loadFixture(deployer);
+
+            await BorrowingContractA.connect(owner).updateRatePerSecByUSDaPrice(10450);
+            expect(await BorrowingContractA.ratePerSec()).to.be.equal(BigInt('1000000000782997609082909351'));
+        })
+        it("Should change the apr $1.1",async function(){
+            const {
+                BorrowingContractA,BorrowingContractB,
+                CDSContractA,CDSContractB,
+                usdtA,usdtB,
+                treasuryA,abondTokenB
+            } = await loadFixture(deployer);
+
+            await BorrowingContractA.connect(owner).updateRatePerSecByUSDaPrice(11000);
+            await expect(await BorrowingContractA.ratePerSec()).to.be.equal(BigInt('1000000000158153903837946257'));
+        })
+    })
 })

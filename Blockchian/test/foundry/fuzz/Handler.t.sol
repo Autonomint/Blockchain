@@ -1,249 +1,274 @@
-// // SPDX-License-Identifier: UNLICENSED
-// pragma solidity 0.8.20;
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity 0.8.20;
 
-// import {Test} from "../../../lib/forge-std/src/Test.sol";
-// import {console} from "../../../lib/forge-std/src/console.sol";
-// import {BorrowingTest} from "../../../contracts/TestContracts/CopyBorrowing.sol";
-// import {Treasury} from "../../../contracts/Core_logic/Treasury.sol";
-// import {CDSTest} from "../../../contracts/TestContracts/CopyCDS.sol";
-// import {Options} from "../../../contracts/Core_logic/Options.sol";
-// import {MultiSign} from "../../../contracts/Core_logic/multiSign.sol";
-// import {TestUSDaStablecoin} from "../../../contracts/TestContracts/CopyUSDa.sol";
-// import {TestABONDToken} from "../../../contracts/TestContracts/Copy_Abond_Token.sol";
-// import {TestUSDT} from "../../../contracts/TestContracts/CopyUsdt.sol";
-// import {ITreasury} from "../../../contracts/interface/ITreasury.sol";
-// import {IOptions} from "../../../contracts/interface/IOptions.sol";
+import {Test} from "../../../lib/forge-std/src/Test.sol";
+import {console} from "../../../lib/forge-std/src/console.sol";
+import {BorrowingTest} from "../../../contracts/TestContracts/CopyBorrowing.sol";
+import {Treasury} from "../../../contracts/Core_logic/Treasury.sol";
+import {CDSTest} from "../../../contracts/TestContracts/CopyCDS.sol";
+import {Options} from "../../../contracts/Core_logic/Options.sol";
+import {MultiSign} from "../../../contracts/Core_logic/multiSign.sol";
+import {TestUSDaStablecoin} from "../../../contracts/TestContracts/CopyUSDa.sol";
+import {TestABONDToken} from "../../../contracts/TestContracts/Copy_Abond_Token.sol";
+import {TestUSDT} from "../../../contracts/TestContracts/CopyUsdt.sol";
+import {ITreasury} from "../../../contracts/interface/ITreasury.sol";
+import {IOptions} from "../../../contracts/interface/IOptions.sol";
+import {DeployBorrowing} from "../../../scripts/script/DeployBorrowing.s.sol";
+import { MessagingFee } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
+import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
+import {IBorrowing} from "../../../contracts/interface/IBorrowing.sol";
+import {CDSInterface} from "../../../contracts/interface/CDSInterface.sol";
 
-// contract Handler is Test{
-//     BorrowingTest borrow;
-//     CDSTest cds;
-//     TestUSDaStablecoin usda;
-//     Treasury treasury;
-//     TestABONDToken abond;
-//     TestUSDT usdt;
-//     uint256 MAX_DEPOSIT = type(uint96).max;
-//     uint public withdrawCalled;
+contract Handler is Test{
+    DeployBorrowing.Contracts contractsA;
+    DeployBorrowing.Contracts contractsB;
+    uint256 MAX_DEPOSIT = type(uint96).max;
+    uint public withdrawCalled;
 
-//     address public owner = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
-//     address public user = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8;
+    address public owner = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+    address public user = 0x70997970C51812dc3A010C7d01b50e0d17dc79C8;
+    using OptionsBuilder for bytes;
+    bytes options;
+    MessagingFee borrowFee;
+    MessagingFee cdsFee;
+    MessagingFee treasuryFee;
+    uint32 eidA = 1;
+    uint32 eidB = 2;
+    uint32 eidC = 3;
 
-//     constructor(
-//         BorrowingTest _borrow,
-//         CDSTest _cds,
-//         Treasury _treasury,
-//         TestUSDaStablecoin _usda,
-//         TestABONDToken _abond,
-//         TestUSDT _usdt
-//     )
-//     {
-//         borrow = _borrow;
-//         cds = _cds;
-//         usda = _usda;
-//         treasury = _treasury;
-//         abond = _abond;
-//         usdt = _usdt;
-//     }
+    constructor(
+        DeployBorrowing.Contracts memory _contractsA,
+        DeployBorrowing.Contracts memory _contractsB)
+    {
+        contractsA = _contractsA;
+        contractsB = _contractsB;
+        feeSetup();
+    }
 
-//     function depositBorrowing(uint128 amount,uint64 ethPrice,uint8 strikePricePercent) public { 
-//         if(cds.totalCdsDepositedAmount() == 0){
-//             return;
-//         }
-//         vm.deal(user,type(uint128).max);
-//         amount = uint128(bound(amount,0,MAX_DEPOSIT));
-//         ethPrice = uint64(bound(ethPrice,0,type(uint24).max));
-//         strikePricePercent = uint8(bound(strikePricePercent,0,type(uint8).max));
+    function feeSetup() internal {
+        options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
-//         if(ethPrice <= 3500){
-//             return;
-//         }
+        borrowFee = contractsA.borrow.quote(
+            eidB, 
+            IBorrowing.OmniChainBorrowingData(5,10,15,20,25,30,35,40), 
+            options, 
+            false);
+        cdsFee =  contractsA.cds.quote(
+            eidB, 
+            CDSInterface.FunctionToDo(1), 
+            123, 123, 123, 
+            CDSInterface.LiquidationInfo(0,0,0,0), 0, 
+            options, 
+            false);
+        treasuryFee = contractsA.treasury.quote(
+            eidB, 
+            ITreasury.FunctionToDo(1), 
+            ITreasury.USDaOftTransferData(address(0),0), 
+            ITreasury.NativeTokenTransferData(address(0),0), 
+            options, 
+            false);
+    }
 
-//         if(strikePricePercent == 0 || strikePricePercent > 4){
-//             return;
-//         }
+    // function depositBorrowing(uint128 amount,uint64 ethPrice,uint8 strikePricePercent) public { 
+    //     if(cds.totalCdsDepositedAmount() == 0){
+    //         return;
+    //     }
+    //     vm.deal(user,type(uint128).max);
+    //     amount = uint128(bound(amount,0,MAX_DEPOSIT));
+    //     ethPrice = uint64(bound(ethPrice,0,type(uint24).max));
+    //     strikePricePercent = uint8(bound(strikePricePercent,0,type(uint8).max));
 
-//         if(amount == 0 || amount < 1e13){
-//             return;
-//         }
+    //     if(ethPrice <= 3500){
+    //         return;
+    //     }
 
-//         uint64 ratio = borrow.calculateRatio(amount,ethPrice);
+    //     if(strikePricePercent == 0 || strikePricePercent > 4){
+    //         return;
+    //     }
 
-//         if(ratio < 20000){
-//             return;
-//         }
-//         uint64 strikePrice = uint64(ethPrice + (ethPrice * ((strikePricePercent*5) + 5))/100);
+    //     if(amount == 0 || amount < 1e13){
+    //         return;
+    //     }
 
-//         // depositCDS(uint128((((amount * ethPrice)/1e12)*25)/100),ethPrice);
-//         vm.startPrank(user);
-//         borrow.depositTokens{value: amount}(
-//             ethPrice,
-//             uint64(block.timestamp),
-//             IOptions.StrikePrice(strikePricePercent),
-//             strikePrice,
-//             50622665);
-//         vm.stopPrank();
-//     }
+    //     uint64 ratio = borrow.calculateRatio(amount,ethPrice);
 
-//     function withdrawBorrowing(uint64 index,uint64 ethPrice) public{
-//         (,,,,uint64 maxIndex) = treasury.borrowing(user);
-//         index = uint64(bound(index,0,maxIndex));
-//         ethPrice = uint64(bound(ethPrice,0,type(uint24).max));
+    //     if(ratio < 20000){
+    //         return;
+    //     }
+    //     uint64 strikePrice = uint64(ethPrice + (ethPrice * ((strikePricePercent*5) + 5))/100);
 
-//         if(index == 0){
-//             return;
-//         }
+    //     // depositCDS(uint128((((amount * ethPrice)/1e12)*25)/100),ethPrice);
+    //     vm.startPrank(user);
+    //     borrow.depositTokens{value: (amount+cdsFee.nativeFee+borrowFee.nativeFee+treasuryFee.nativeFee)}(
+    //         ethPrice,
+    //         uint64(block.timestamp),
+    //         IOptions.StrikePrice(strikePricePercent),
+    //         strikePrice,
+    //         50622665,
+    //         amount);
+    //     vm.stopPrank();
+    // }
 
-//         Treasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(user,index);
-//         Treasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
+    // function withdrawBorrowing(uint64 index,uint64 ethPrice) public{
+    //     (,,,,uint64 maxIndex) = treasury.borrowing(user);
+    //     index = uint64(bound(index,0,maxIndex));
+    //     ethPrice = uint64(bound(ethPrice,0,type(uint24).max));
 
-//         if(depositDetail.withdrawed){
-//             return;
-//         }
+    //     if(index == 0){
+    //         return;
+    //     }
 
-//         if(depositDetail.liquidated){
-//             return;
-//         }
+    //     Treasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(user,index);
+    //     Treasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
 
-//         if(ethPrice <= (depositDetail.ethPriceAtDeposit * 80)/100){
-//             return;
-//         }
+    //     if(depositDetail.withdrawed){
+    //         return;
+    //     }
 
-//         uint256 currentCumulativeRate = borrow.calculateCumulativeRate();
-//         uint256 tokenBalance = usda.balanceOf(user);
+    //     if(depositDetail.liquidated){
+    //         return;
+    //     }
 
-//         if((currentCumulativeRate*depositDetail.normalizedAmount)/1e27 > tokenBalance){
-//             return;
-//         }
+    //     if(ethPrice <= (depositDetail.ethPriceAtDeposit * 80)/100){
+    //         return;
+    //     }
 
-//         vm.startPrank(user);
-//         usda.approve(address(borrow),tokenBalance);
+    //     uint256 currentCumulativeRate = borrow.calculateCumulativeRate();
+    //     uint256 tokenBalance = usda.balanceOf(user);
 
-//         borrow.withDraw(user,index,ethPrice,uint64(block.timestamp));
-//         vm.stopPrank();
-//     }
+    //     if((currentCumulativeRate*depositDetail.normalizedAmount)/1e27 > tokenBalance){
+    //         return;
+    //     }
 
+    //     vm.startPrank(user);
+    //     usda.approve(address(borrow),tokenBalance);
 
-//     function depositCDS(uint128 usdtToDeposit,uint128 usdaToDeposit,uint64 ethPrice) public {
+    //     borrow.withDraw{value:(borrowFee.nativeFee + treasuryFee.nativeFee)}(user,index,ethPrice,uint64(block.timestamp));
+    //     vm.stopPrank();
+    // }
 
-//         usdtToDeposit = uint128(bound(usdtToDeposit,0,type(uint64).max));
-//         usdaToDeposit = uint128(bound(usdaToDeposit,0,type(uint64).max));
+    // function depositCDS(uint128 usdtToDeposit,uint128 usdaToDeposit,uint64 ethPrice) public {
 
-//         ethPrice = uint64(bound(ethPrice,0,type(uint24).max));
-//         if(ethPrice <= 3500){
-//             return;
-//         }
+    //     usdtToDeposit = uint128(bound(usdtToDeposit,0,type(uint64).max));
+    //     usdaToDeposit = uint128(bound(usdaToDeposit,0,type(uint64).max));
 
-//         if(usdaToDeposit == 0){
-//             return;
-//         }
+    //     ethPrice = uint64(bound(ethPrice,0,type(uint24).max));
+    //     if(ethPrice <= 3500){
+    //         return;
+    //     }
 
-//         if(usdtToDeposit == 0 || usdtToDeposit > 20000000000){
-//             return;
-//         }
+    //     if(usdaToDeposit == 0){
+    //         return;
+    //     }
 
-//         if((cds.usdtAmountDepositedTillNow() + usdtToDeposit) > cds.usdtLimit()){
-//             return;
-//         }    
+    //     if(usdtToDeposit == 0 || usdtToDeposit > 20000000000){
+    //         return;
+    //     }
 
-//         if((cds.usdtAmountDepositedTillNow() + usdtToDeposit) <= cds.usdtLimit()){
-//             usdaToDeposit = 0;
-//         }    
+    //     if((cds.usdtAmountDepositedTillNow() + usdtToDeposit) > cds.usdtLimit()){
+    //         return;
+    //     }    
 
-//         if((cds.usdtAmountDepositedTillNow()) == cds.usdtLimit()){
-//             usdaToDeposit = (usdaToDeposit * 80)/100;
-//             usdtToDeposit = (usdaToDeposit * 20)/100;
-//         }
+    //     if((cds.usdtAmountDepositedTillNow() + usdtToDeposit) <= cds.usdtLimit()){
+    //         usdaToDeposit = 0;
+    //     }    
 
-//         if((usdaToDeposit + usdtToDeposit) < 100000000){
-//             return;
-//         }
+    //     if((cds.usdtAmountDepositedTillNow()) == cds.usdtLimit()){
+    //         usdaToDeposit = (usdaToDeposit * 80)/100;
+    //         usdtToDeposit = (usdaToDeposit * 20)/100;
+    //     }
 
-//         uint256 liquidationAmount = ((usdaToDeposit + usdtToDeposit) * 50)/100;
+    //     if((usdaToDeposit + usdtToDeposit) < 100000000){
+    //         return;
+    //     }
 
-//         if(usda.balanceOf(user) < usdaToDeposit){
-//             return;
-//         }
-//         vm.startPrank(user);
+    //     uint256 liquidationAmount = ((usdaToDeposit + usdtToDeposit) * 50)/100;
 
-//         usdt.mint(user,usdtToDeposit);
-//         usdt.approve(address(cds),usdtToDeposit);
-//         usda.approve(address(cds),usdaToDeposit);
+    //     if(usda.balanceOf(user) < usdaToDeposit){
+    //         return;
+    //     }
+    //     vm.startPrank(user);
 
-//         cds.deposit(usdtToDeposit,usdaToDeposit,true,uint128(liquidationAmount),ethPrice);
+    //     usdt.mint(user,usdtToDeposit);
+    //     usdt.approve(address(cds),usdtToDeposit);
+    //     usda.approve(address(cds),usdaToDeposit);
 
-//         vm.stopPrank();
-//     }
+    //     cds.deposit{value:cdsFee.nativeFee}(usdtToDeposit,usdaToDeposit,true,uint128(liquidationAmount),ethPrice);
 
-//     function withdrawCDS(uint64 index,uint64 ethPrice) public{
-//         (uint64 maxIndex,) = cds.cdsDetails(user);
-//         index = uint64(bound(index,0,maxIndex));
-//         ethPrice = uint64(bound(ethPrice,0,type(uint24).max));
+    //     vm.stopPrank();
+    // }
 
-//         if(ethPrice <= 3500 || ethPrice > (cds.lastEthPrice() * 5)/100){
-//             return;
-//         }
-//         if(index == 0){
-//             return;
-//         }
+    // function withdrawCDS(uint64 index,uint64 ethPrice) public{
+    //     (uint64 maxIndex,) = cds.cdsDetails(user);
+    //     index = uint64(bound(index,0,maxIndex));
+    //     ethPrice = uint64(bound(ethPrice,0,type(uint24).max));
 
-//         (CDSTest.CdsAccountDetails memory accDetails,) = cds.getCDSDepositDetails(user,index);
+    //     if(ethPrice <= 3500 || ethPrice > (cds.lastEthPrice() * 5)/100){
+    //         return;
+    //     }
+    //     if(index == 0){
+    //         return;
+    //     }
 
-//         if(accDetails.withdrawed){
-//             return;
-//         }
-//         vm.startPrank(user);
+    //     (CDSTest.CdsAccountDetails memory accDetails,) = cds.getCDSDepositDetails(user,index);
 
-//         cds.withdraw(index,ethPrice);
+    //     if(accDetails.withdrawed){
+    //         return;
+    //     }
+    //     vm.startPrank(user);
 
-//         vm.stopPrank();
-//     }
+    //     cds.withdraw(index,ethPrice);
 
-//     function liquidation(uint64 index,uint64 ethPrice) public{
-//         (,,,,uint64 maxIndex) = treasury.borrowing(user);
-//         index = uint64(bound(index,0,maxIndex));
-//         ethPrice = uint64(bound(ethPrice,0,type(uint24).max));
+    //     vm.stopPrank();
+    // }
 
-//         if(ethPrice == 0){
-//             return;
-//         }
-//         if(index == 0){
-//             return;
-//         }
+    // function liquidation(uint64 index,uint64 ethPrice) public{
+    //     (,,,,uint64 maxIndex) = treasury.borrowing(user);
+    //     index = uint64(bound(index,0,maxIndex));
+    //     ethPrice = uint64(bound(ethPrice,0,type(uint24).max));
 
-//         Treasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(user,index);
-//         Treasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
+    //     if(ethPrice == 0){
+    //         return;
+    //     }
+    //     if(index == 0){
+    //         return;
+    //     }
 
-//         if(depositDetail.liquidated){
-//             return;
-//         }
+    //     Treasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(user,index);
+    //     Treasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
 
-//         if(ethPrice > ((depositDetail.ethPriceAtDeposit * 80)/100)){
-//             return;
-//         }
-//         vm.startPrank(owner);
-//         borrow.liquidate(user,index,ethPrice);
-//         vm.stopPrank();
-//     }
+    //     if(depositDetail.liquidated){
+    //         return;
+    //     }
 
-//     function redeemUSDT(uint128 amount,uint16 usdaPrice,uint16 usdtPrice) public {
-//         amount = uint128(bound(amount,0,type(uint64).max));
-//         usdaPrice = uint16(bound(usdaPrice,0,1200));
-//         usdtPrice = uint16(bound(usdaPrice,0,1200));
+    //     if(ethPrice > ((depositDetail.ethPriceAtDeposit * 80)/100)){
+    //         return;
+    //     }
+    //     vm.startPrank(owner);
+    //     borrow.liquidate(user,index,ethPrice);
+    //     vm.stopPrank();
+    // }
 
-//         if(amount == 0 || usdaPrice == 0 || usdtPrice == 0){
-//             return;
-//         }
+    // function redeemUSDT(uint128 amount,uint16 usdaPrice,uint16 usdtPrice) public {
+    //     amount = uint128(bound(amount,0,type(uint64).max));
+    //     usdaPrice = uint16(bound(usdaPrice,0,1200));
+    //     usdtPrice = uint16(bound(usdaPrice,0,1200));
 
-//         if(usda.balanceOf(user) < amount){
-//             return;
-//         }
+    //     if(amount == 0 || usdaPrice == 0 || usdtPrice == 0){
+    //         return;
+    //     }
 
-//         if(usdt.balanceOf(address(treasury)) < amount){
-//             return;
-//         }
+    //     if(usda.balanceOf(user) < amount){
+    //         return;
+    //     }
 
-//         vm.startPrank(user);
-//         cds.redeemUSDT(amount,usdaPrice,usdtPrice);
-//         vm.stopPrank();
+    //     if(usdt.balanceOf(address(treasury)) < amount){
+    //         return;
+    //     }
 
-//     }
-// }
+    //     vm.startPrank(user);
+    //     cds.redeemUSDT(amount,usdaPrice,usdtPrice);
+    //     vm.stopPrank();
+
+    // }
+}

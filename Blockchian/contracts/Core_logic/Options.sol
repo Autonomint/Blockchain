@@ -5,6 +5,7 @@ pragma solidity 0.8.20;
 import "../interface/ITreasury.sol";
 import "../interface/CDSInterface.sol";
 import "../interface/IBorrowing.sol";
+import "../interface/IGlobalVariables.sol";
 
 import "hardhat/console.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
@@ -26,17 +27,20 @@ contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
     CDSInterface cds;
     IBorrowing borrowing;
     AggregatorV3Interface internal priceFeed; //ETH USD pricefeed address
+    IGlobalVariables private globalVariables;
 
     function initialize(
         address _treasuryAddress,
         address _cdsAddress,
-        address _borrowingAddress
+        address _borrowingAddress,
+        address _globalVariables
     ) initializer public{
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
         treasury = ITreasury(_treasuryAddress);
         cds = CDSInterface(_cdsAddress);
         borrowing = IBorrowing(_borrowingAddress);
+        globalVariables = IGlobalVariables(_globalVariables);
         PRECISION = 1e18;
         ETH_PRICE_PRECISION = 1e6;
         OPTION_PRICE_PRECISION = 1e5;
@@ -74,13 +78,14 @@ contract Options is Initializable, UUPSUpgradeable,OwnableUpgradeable{
         //uint256 a = calculateStandardDeviation(); 
         uint256 a = _ethVolatility;
         uint256 ethPrice = _ethPrice;/*getLatestPrice();*/
-        uint256 E = treasury.omniChainTreasuryTotalVolumeOfBorrowersAmountinUSD() + (_amount * _ethPrice);
+        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
+        uint256 E = omniChainData.totalVolumeOfBorrowersAmountinUSD + (_amount * _ethPrice);
         require(E != 0,"No borrowers in protocol");
         uint256 cdsVault;
-        if(treasury.omniChainTreasuryNoOfBorrowers() == 0){
-            cdsVault = cds.omniChainCDSTotalCdsDepositedAmount() * USDA_PRECISION;
+        if(omniChainData.noOfBorrowers == 0){
+            cdsVault = omniChainData.totalCdsDepositedAmount * USDA_PRECISION;
         }else{
-            cdsVault = borrowing.omniChainBorrowingCDSPoolValue() * USDA_PRECISION;
+            cdsVault = omniChainData.cdsPoolValue * USDA_PRECISION;
         }
 
         require(E != 0, "Treasury balance is zero");
