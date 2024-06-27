@@ -142,10 +142,10 @@ interface ITreasury{
         function updateTotalInterestFromLiquidation(uint256 _amount) external;
         function updateAbondUSDaPool(uint256 amount,bool operation) external;
         function updateUSDaGainedFromLiquidation(uint256 amount,bool operation) external;
-        function updateEthProfitsOfLiquidators(uint256 amount,bool operation) external;
         function updateInterestFromExternalProtocol(uint256 amount) external;
         function updateUsdaCollectedFromCdsWithdraw(uint256 amount) external;
         function updateLiquidatedETHCollectedFromCdsWithdraw(uint256 amount) external;
+        function transferFundsToGlobal(uint256 usdaAmount, uint256 ethAmount) external;
 
     event Deposit(address indexed user,uint256 amount);
     event Withdraw(address indexed user,uint256 amount);

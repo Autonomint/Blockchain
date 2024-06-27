@@ -51,7 +51,8 @@ interface IBorrowing{
         uint256 borrowAmount,
         uint64 strikePrice,
         uint256 optionsFees,
-        IOptions.StrikePrice strikePricePercent
+        IOptions.StrikePrice strikePricePercent,
+        uint8 APR
         );
     event Withdraw(
         address user,

@@ -81,8 +81,13 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         _;
     }
 
-    modifier onlyBorrowOrLiquidationContract() {
-        require( msg.sender == address(borrowing) || msg.sender == address(borrowLiquidation), "This function can only called by borrowing or Liquidation contract");
+    modifier onlyGlobalOrLiquidationContract() {
+        require( msg.sender == address(globalVariables) || msg.sender == address(borrowLiquidation), "This function can only called by Global variables or Liquidation contract");
+        _;
+    }
+
+    modifier onlyBorrowingContract() {
+        require( msg.sender == address(borrowing), "This function can only called by Borrowing contract");
         _;
     }
 
@@ -249,7 +254,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         }
 
         //! getting options since,the src don't know the dst state
-        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(250000, 0);
 
         //! calculting fee 
         MessagingFee memory fee = globalVariables.quote(IGlobalVariables.FunctionToDo(1), _options, false);
@@ -361,7 +366,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
 
                 }
 
-                if(optionsFeesToGetFromOtherChain > 0 || ethAmount >0 ){
+                if(optionsFeesToGetFromOtherChain > 0 || ethAmount > 0 ){
                     // treasury.oftOrNativeReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
                     //     functionToDo,
                     //     ITreasury.USDaOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
@@ -370,7 +375,8 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                     globalVariables.oftOrNativeReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
                         functionToDo,
                         IGlobalVariables.USDaOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
-                        IGlobalVariables.NativeTokenTransferData(treasuryAddress, ethAmount));
+                        IGlobalVariables.NativeTokenTransferData(treasuryAddress, ethAmount),
+                        msg.sender);
                 }
                 (uint256 usdaToTransfer, uint128 ethToTransfer) = CDSLib.calculateUserProportionInWithdraw(
                    cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount,
@@ -390,7 +396,8 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                 require(success == true, "Transsuccessed in cds withdraw");
                 
                 if(ethToTransfer != 0){
-                    treasury.updateEthProfitsOfLiquidators(ethToTransfer,false);
+                    omniChainData.ethProfitsOfLiquidators -= ethToTransfer;
+                    // treasury.updateEthProfitsOfLiquidators(ethToTransfer,false);
                     // Call transferEthToCdsLiquidators to tranfer eth
                     treasury.transferEthToCdsLiquidators(msg.sender,ethToTransfer);
                 }
@@ -409,7 +416,8 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                 globalVariables.oftOrNativeReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
                     IGlobalVariables.FunctionToDo(3),
                     IGlobalVariables.USDaOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
-                    IGlobalVariables.NativeTokenTransferData(address(0), 0));
+                    IGlobalVariables.NativeTokenTransferData(address(0), 0),
+                    msg.sender);
             }
             
             // usda.approve(msg.sender, returnAmount);
@@ -608,7 +616,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
      * @dev calculate cumulative rate
      * @param fees fees to split
      */
-    function calculateCumulativeRate(uint128 fees) external onlyBorrowOrLiquidationContract{
+    function calculateCumulativeRate(uint128 fees) external onlyBorrowingContract{
         IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
 
         (
@@ -621,8 +629,9 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
             omniChainData.totalCdsDepositedAmountWithOptionFees,
             omniChainData.lastCumulativeRate,
             omniChainData.noOfBorrowers
-
         );
+
+        globalVariables.setOmniChainData(omniChainData);
     }
 
     /**
@@ -650,20 +659,26 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         );
     }
 
-    function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external onlyBorrowOrLiquidationContract{
+    function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external onlyGlobalOrLiquidationContract{
         omniChainCDSLiqIndexToInfo[index] = liquidationData;
     }
 
-    function updateTotalAvailableLiquidationAmount(uint256 amount) external onlyBorrowOrLiquidationContract{
-        totalAvailableLiquidationAmount -= amount;
+    function updateTotalAvailableLiquidationAmount(uint256 amount) external onlyGlobalOrLiquidationContract{
+        if(totalAvailableLiquidationAmount != 0){
+            totalAvailableLiquidationAmount -= amount;
+        }
     }
 
-    function updateTotalCdsDepositedAmount(uint128 _amount) external onlyBorrowOrLiquidationContract{
-        totalCdsDepositedAmount -= _amount;
+    function updateTotalCdsDepositedAmount(uint128 _amount) external onlyGlobalOrLiquidationContract{
+        if(totalCdsDepositedAmount != 0){
+            totalCdsDepositedAmount -= _amount;
+        }
     }
 
-    function updateTotalCdsDepositedAmountWithOptionFees(uint128 _amount) external onlyBorrowOrLiquidationContract{
-        totalCdsDepositedAmountWithOptionFees -= _amount;
+    function updateTotalCdsDepositedAmountWithOptionFees(uint128 _amount) external onlyGlobalOrLiquidationContract{
+        if(totalCdsDepositedAmountWithOptionFees != 0){
+            totalCdsDepositedAmountWithOptionFees -= _amount;
+        }
     }
 
     function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory,uint64){

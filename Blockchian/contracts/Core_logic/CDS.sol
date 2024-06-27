@@ -11,6 +11,7 @@ import "../interface/IBorrowing.sol";
 import "../interface/ITreasury.sol";
 import "../interface/CDSInterface.sol";
 import "../interface/IMultiSign.sol";
+import "../interface/IGlobalVariables.sol";
 import "../lib/CDSLib.sol";
 import "hardhat/console.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
@@ -18,7 +19,7 @@ import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contra
 import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
 
-contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OApp{
+contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgradeable,OwnableUpgradeable{
 
     IUSDa      public usda; // our stablecoin
     IBorrowing  private borrowing; // Borrowing contract interface
@@ -52,27 +53,24 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
     mapping (uint128 liquidationIndex => LiquidationInfo) private omniChainCDSLiqIndexToInfo;
 
     using OptionsBuilder for bytes;
-    OmniChainCDSData private omniChainCDS;//! omnichainCDS contains global CDS data(all chains)
-    uint32 private dstEid;
+    // OmniChainCDSData private omniChainCDS;//! omnichainCDS contains global CDS data(all chains)
+    // uint32 private dstEid;
+    IGlobalVariables private globalVariables;
 
     function initialize(
         address _usda,
         address priceFeed,
         address _usdt,
-        address _multiSign,
-        address _endpoint,
-        address _delegate
+        address _multiSign
     ) initializer public{
         __Ownable_init(msg.sender);
         __UUPSUpgradeable_init();
-        __oAppinit(_endpoint, _delegate);
         usda = IUSDa(_usda); // usda token contract address
         usdt = IERC20(_usdt);
         multiSign = IMultiSign(_multiSign);
         dataFeed = AggregatorV3Interface(priceFeed);
         lastEthPrice = getLatestData();
         fallbackEthPrice = lastEthPrice;
-        omniChainCDS.lastCumulativeRate = CDSLib.PRECISION;
         cumulativeValueSign = true;
     }
 
@@ -83,8 +81,13 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
         _;
     }
 
-    modifier onlyBorrowOrLiquidationContract() {
-        require( msg.sender == address(borrowing) || msg.sender == address(borrowLiquidation), "This function can only called by borrowing or Liquidation contract");
+    modifier onlyGlobalOrLiquidationContract() {
+        require( msg.sender == address(globalVariables) || msg.sender == address(borrowLiquidation), "This function can only called by Global variables or Liquidation contract");
+        _;
+    }
+
+    modifier onlyBorrowingContract() {
+        require( msg.sender == address(borrowing), "This function can only called by Borrowing contract");
         _;
     }
 
@@ -122,11 +125,6 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
         require(_admin != address(0) && isContract(_admin) != true, "Admin can't be contract address & zero address");
         require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(4)));
         admin = _admin;    
-    }
-
-    function setDstEid(uint32 _eid) external onlyAdmin{
-        require(_eid != 0, "EID can't be zero");
-        dstEid = _eid;
     }
 
     /**
@@ -167,6 +165,7 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
         require(ethPrice != 0,"Oracle Failed");
 
         uint64 index;
+        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
 
         // check if msg.sender is depositing for the first time
         // if yes change hasDeposited from desDeposit structure of msg.sender to true.
@@ -181,7 +180,7 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
             //Increase cdsCount if msg.sender is depositing for the first time
             ++cdsCount;
             //! updating global data 
-            ++omniChainCDS.cdsCount;
+            ++omniChainData.cdsCount;
         }
         else {
             //increase index value by 1
@@ -203,29 +202,29 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
         totalCdsDepositedAmountWithOptionFees += totalDepositingAmount;
 
         //! updating global data 
-        omniChainCDS.totalCdsDepositedAmount += totalDepositingAmount;
-        omniChainCDS.totalCdsDepositedAmountWithOptionFees += totalDepositingAmount;
+        omniChainData.totalCdsDepositedAmount += totalDepositingAmount;
+        omniChainData.totalCdsDepositedAmountWithOptionFees += totalDepositingAmount;
 
         //increment usdtAmountDepositedTillNow
         usdtAmountDepositedTillNow += usdtAmount;
 
         //! updating global data 
-        omniChainCDS.usdtAmountDepositedTillNow += usdtAmount;
+        omniChainData.usdtAmountDepositedTillNow += usdtAmount;
         
         //add deposited time of perticular index and amount in cdsAccountDetails
         cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = uint64(block.timestamp);
-        cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount = ((totalDepositingAmount * CDSLib.PRECISION)/omniChainCDS.lastCumulativeRate);
+        cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount = ((totalDepositingAmount * CDSLib.PRECISION)/omniChainData.lastCumulativeRate);
        
         cdsDetails[msg.sender].cdsAccountDetails[index].optedLiquidation = _liquidate;
         //If user opted for liquidation
         if(_liquidate){
-            cdsDetails[msg.sender].cdsAccountDetails[index].liquidationindex = borrowing.omniChainBorrowingNoOfLiquidations();
+            cdsDetails[msg.sender].cdsAccountDetails[index].liquidationindex = omniChainData.noOfLiquidations;
             cdsDetails[msg.sender].cdsAccountDetails[index].liquidationAmount = _liquidationAmount;
             cdsDetails[msg.sender].cdsAccountDetails[index].InitialLiquidationAmount = _liquidationAmount;
             totalAvailableLiquidationAmount += _liquidationAmount;
             
             //! updating global data 
-            omniChainCDS.totalAvailableLiquidationAmount += _liquidationAmount;
+            omniChainData.totalAvailableLiquidationAmount += _liquidationAmount;
         }  
 
         if(ethPrice != lastEthPrice){
@@ -256,13 +255,14 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
         }
 
         //! getting options since,the src don't know the dst state
-        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
+        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(250000, 0);
 
         //! calculting fee 
-        MessagingFee memory fee = quote(dstEid, FunctionToDo(1), 0, 0, 0, LiquidationInfo(0,0,0,0), 0, _options, false);
+        MessagingFee memory fee = globalVariables.quote(IGlobalVariables.FunctionToDo(1), _options, false);
 
+        globalVariables.setOmniChainData(omniChainData);
         //! Calling Omnichain send function
-        send(dstEid, FunctionToDo(1), omniChainCDS, 0, fee, _options);
+        globalVariables.send{value: fee.nativeFee}(IGlobalVariables.FunctionToDo(1), fee, _options,msg.sender);
 
         emit Deposit(msg.sender,index,usdaAmount,usdtAmount,block.timestamp,ethPrice,lockingPeriod,_liquidationAmount,_liquidate);
     }
@@ -287,10 +287,11 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
 
         uint128 ethPrice = getLatestData();
         require(ethPrice != 0,"Oracle Failed");
+        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
         // Calculate return amount includes
         // eth Price difference gain or loss
         // option fees
-        uint256 optionFees = ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * omniChainCDS.lastCumulativeRate)/CDSLib.PRECISION) - 
+        uint256 optionFees = ((cdsDetails[msg.sender].cdsAccountDetails[_index].normalizedAmount * omniChainData.lastCumulativeRate)/CDSLib.PRECISION) - 
             cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
         uint256 returnAmount = cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount + optionFees;
         
@@ -303,14 +304,9 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
         //! calculting fee 
-        MessagingFee memory fee = quote(
-            dstEid, 
-            FunctionToDo(2), 
-            optionsFeesToGetFromOtherChain, 
-            0, 
-            0,  
-            LiquidationInfo(0,0,0,0), 
-            0, 
+        MessagingFee memory fee = globalVariables.quote(
+            
+            IGlobalVariables.FunctionToDo(2),
             _options, 
             false);
         uint128 ethAmount;
@@ -318,7 +314,7 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
         // If user opted for liquidation
         if(cdsDetails[msg.sender].cdsAccountDetails[_index].optedLiquidation){
             returnAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
-            uint128 currentLiquidations = borrowing.omniChainBorrowingNoOfLiquidations();
+            uint128 currentLiquidations = omniChainData.noOfLiquidations;
             uint128 liquidationIndexAtDeposit = cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationindex;
             if(currentLiquidations >= liquidationIndexAtDeposit){
                 // Loop through the liquidations that were done after user enters
@@ -341,76 +337,86 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
 
                 if(ethAmount == 0){
                     totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
-                    omniChainCDS.totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
+                    omniChainData.totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
 
                     totalCdsDepositedAmountWithOptionFees -= (
                         cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount + (optionFees - optionsFeesToGetFromOtherChain));
-                    omniChainCDS.totalCdsDepositedAmountWithOptionFees -= (
+                    omniChainData.totalCdsDepositedAmountWithOptionFees -= (
                         cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount + optionFees);
                 }else{
                     totalCdsDepositedAmount -= (cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
-                    omniChainCDS.totalCdsDepositedAmount -= (
+                    omniChainData.totalCdsDepositedAmount -= (
                         cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount 
                         - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount);
                     totalCdsDepositedAmountWithOptionFees -= (
                         cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount + optionsFeesToGetFromOtherChain);
-                    omniChainCDS.totalCdsDepositedAmountWithOptionFees -= (
+                    omniChainData.totalCdsDepositedAmountWithOptionFees -= (
                         cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount - cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount + optionFees);
                 }
 
-                ITreasury.FunctionToDo functionToDo; 
+                IGlobalVariables.FunctionToDo functionToDo; 
 
                 if(optionsFeesToGetFromOtherChain > 0 && ethAmount == 0){
-                    functionToDo = ITreasury.FunctionToDo(2);
+                    functionToDo = IGlobalVariables.FunctionToDo(3);
 
                 }else if(optionsFeesToGetFromOtherChain == 0 && ethAmount > 0){
-                    functionToDo = ITreasury.FunctionToDo(3);
+                    functionToDo = IGlobalVariables.FunctionToDo(4);
 
                 }else if(optionsFeesToGetFromOtherChain > 0 && ethAmount > 0){
-                    functionToDo = ITreasury.FunctionToDo(4);
+                    functionToDo = IGlobalVariables.FunctionToDo(5);
 
                 }
 
-                if(optionsFeesToGetFromOtherChain > 0 || ethAmount >0 ){
-                    treasury.oftOrNativeReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
+                if(optionsFeesToGetFromOtherChain > 0 || ethAmount > 0 ){
+                    globalVariables.oftOrNativeReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
                         functionToDo,
-                        ITreasury.USDaOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
-                        ITreasury.NativeTokenTransferData(treasuryAddress, ethAmount));
+                        IGlobalVariables.USDaOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
+                        IGlobalVariables.NativeTokenTransferData(treasuryAddress, ethAmount),
+                        msg.sender);
                 }
+                (uint256 usdaToTransfer, uint128 ethToTransfer) = CDSLib.calculateUserProportionInWithdraw(
+                   cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount,
+                   returnAmountWithGains,
+                   ethAmount 
+                );
+                treasury.updateUsdaCollectedFromCdsWithdraw(returnAmountWithGains - usdaToTransfer);
+                treasury.updateLiquidatedETHCollectedFromCdsWithdraw(ethAmount - ethToTransfer);
 
-                cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmountWithGains;
+                cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = usdaToTransfer;
 
                 // Get approval from treasury 
-                treasury.approveUSDa(address(this),returnAmountWithGains);
+                treasury.approveUSDa(address(this),usdaToTransfer);
 
                 //Call transferFrom in usda
-                bool success = usda.transferFrom(treasuryAddress,msg.sender, returnAmountWithGains); // transfer amount to msg.sender
+                bool success = usda.transferFrom(treasuryAddress,msg.sender, usdaToTransfer); // transfer amount to msg.sender
                 require(success == true, "Transsuccessed in cds withdraw");
                 
-                if(ethAmount != 0){
-                    treasury.updateEthProfitsOfLiquidators(ethAmount,false);
+                if(ethToTransfer != 0){
+                    omniChainData.ethProfitsOfLiquidators -= ethToTransfer;
+                    // treasury.updateEthProfitsOfLiquidators(ethToTransfer,false);
                     // Call transferEthToCdsLiquidators to tranfer eth
-                    treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
+                    treasury.transferEthToCdsLiquidators(msg.sender,ethToTransfer);
                 }
 
-                emit Withdraw(msg.sender,_index,returnAmountWithGains,block.timestamp,ethAmount,ethPrice,optionFees,optionFees);
+                emit Withdraw(msg.sender,_index,usdaToTransfer,block.timestamp,ethToTransfer,ethPrice,optionFees,optionFees);
             }
 
         }else{
 
             if(optionsFeesToGetFromOtherChain > 0){
-                treasury.oftOrNativeReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
-                    ITreasury.FunctionToDo(2),
-                    ITreasury.USDaOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
-                    ITreasury.NativeTokenTransferData(address(0), 0));
+                globalVariables.oftOrNativeReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
+                    IGlobalVariables.FunctionToDo(3),
+                    IGlobalVariables.USDaOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
+                    IGlobalVariables.NativeTokenTransferData(address(0), 0),
+                    msg.sender);
             }
             
             // usda.approve(msg.sender, returnAmount);
             totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
             totalCdsDepositedAmountWithOptionFees -= returnAmount - optionsFeesToGetFromOtherChain;
 
-            omniChainCDS.totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
-            omniChainCDS.totalCdsDepositedAmountWithOptionFees -= returnAmount;
+            omniChainData.totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
+            omniChainData.totalCdsDepositedAmountWithOptionFees -= returnAmount;
             
             cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
 
@@ -419,7 +425,7 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
             require(transfer == true, "Transfer failed in cds withdraw");
         }
 
-        if(treasury.omniChainTreasuryTotalVolumeOfBorrowersAmountinUSD() != 0){
+        if(omniChainData.totalVolumeOfBorrowersAmountinWei != 0){
             require(borrowing.calculateRatio(0,ethPrice) > (2 * CDSLib.RATIO_PRECISION),"CDS: Not enough fund in CDS");
         }
 
@@ -432,8 +438,9 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
             require(sent, "Failed to send Ether");
         }
 
+        globalVariables.setOmniChainData(omniChainData);
         //! Calling Omnichain send function
-        send(dstEid, FunctionToDo(2), omniChainCDS, optionsFeesToGetFromOtherChain, fee, _options);
+        globalVariables.send{value: fee.nativeFee}(IGlobalVariables.FunctionToDo(2), fee, _options,msg.sender);
         
         emit Withdraw(msg.sender,_index,returnAmount,block.timestamp,ethAmount,ethPrice,optionFees,optionFees);
     }
@@ -512,7 +519,8 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
 
         require(usda.balanceOf(msg.sender) >= _usdaAmount,"Insufficient balance");
         burnedUSDaInRedeem += _usdaAmount;
-        omniChainCDS.burnedUSDaInRedeem += _usdaAmount;
+        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
+        omniChainData.burnedUSDaInRedeem += _usdaAmount;
         bool transfer = usda.burnFromUser(msg.sender,_usdaAmount);
         require(transfer == true, "USDa Burn failed in redeemUSDT");
 
@@ -526,19 +534,15 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
 
         //! calculting fee 
-        MessagingFee memory fee = quote(
-            dstEid, 
-            FunctionToDo(1),
-            0, 
-            0, 
-            0,  
-            LiquidationInfo(0,0,0,0), 
-            0, 
+        MessagingFee memory fee = globalVariables.quote(
+            
+            IGlobalVariables.FunctionToDo(1),
             _options, 
             false);
 
+        globalVariables.setOmniChainData(omniChainData);
         //! Calling Omnichain send function
-        send(dstEid, FunctionToDo(1), omniChainCDS, 0, fee, _options);
+        globalVariables.send{value: fee.nativeFee}(IGlobalVariables.FunctionToDo(1), fee, _options,msg.sender);
     }
 
     function setWithdrawTimeLimit(uint64 _timeLimit) external onlyAdmin {
@@ -564,6 +568,14 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
         borrowLiquidation = _address;
     }
 
+    function setGlobalVariables(address _address) external onlyAdmin {
+        require(_address != address(0) && isContract(_address) != false, "Input address is invalid");
+        globalVariables = IGlobalVariables(_address);
+        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
+        omniChainData.lastCumulativeRate = CDSLib.PRECISION;
+        globalVariables.setOmniChainData(omniChainData);
+    }
+
     function setUSDaLimit(uint8 percent) external onlyAdmin{
         require(percent != 0, "USDa limit can't be zero");
         require(multiSign.executeSetterFunction(IMultiSign.SetterFunctions(8)));
@@ -578,7 +590,9 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
 
     function calculateValue(uint128 _price) internal view returns(CalculateValueResult memory) {
 
-        uint256 vaultBal = treasury.omniChainTreasuryTotalVolumeOfBorrowersAmountinWei();
+        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
+
+        uint256 vaultBal = omniChainData.totalVolumeOfBorrowersAmountinWei;
 
         return CDSLib.calculateValue(
             _price,
@@ -593,38 +607,22 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
      * @dev calculate cumulative rate
      * @param fees fees to split
      */
-    function calculateCumulativeRate(uint128 fees) external payable onlyBorrowOrLiquidationContract{
+    function calculateCumulativeRate(uint128 fees) external onlyBorrowingContract{
+        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
 
         (
             totalCdsDepositedAmountWithOptionFees,
-            omniChainCDS.totalCdsDepositedAmountWithOptionFees,
-            omniChainCDS.lastCumulativeRate) = CDSLib.calculateCumulativeRate(
+            omniChainData.totalCdsDepositedAmountWithOptionFees,
+            omniChainData.lastCumulativeRate) = CDSLib.calculateCumulativeRate(
             fees,
             totalCdsDepositedAmount,
             totalCdsDepositedAmountWithOptionFees,
-            omniChainCDS.totalCdsDepositedAmountWithOptionFees,
-            omniChainCDS.lastCumulativeRate,
-            treasury.omniChainTreasuryNoOfBorrowers()
-
+            omniChainData.totalCdsDepositedAmountWithOptionFees,
+            omniChainData.lastCumulativeRate,
+            omniChainData.noOfBorrowers
         );
 
-        //! getting options since,the src don't know the dst state
-        bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
-
-        //! calculting fee 
-        MessagingFee memory fee = quote(
-            dstEid, 
-            FunctionToDo(1), 
-            0, 
-            0, 
-            0, 
-            LiquidationInfo(0,0,0,0), 
-            0, 
-            _options, 
-            false);
-
-        //! Calling Omnichain send function
-        send(dstEid, FunctionToDo(1), omniChainCDS, 0, fee, _options);
+        globalVariables.setOmniChainData(omniChainData);
     }
 
     /**
@@ -641,148 +639,37 @@ contract CDS is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUpgrad
     }
 
     function getOptionsFeesProportions(uint256 optionsFees) internal view returns (uint256){
+        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
+
         return CDSLib.getOptionsFeesProportions(
             optionsFees,
             totalCdsDepositedAmount,
-            omniChainCDS.totalCdsDepositedAmount,
+            omniChainData.totalCdsDepositedAmount,
             totalCdsDepositedAmountWithOptionFees,
-            omniChainCDS.totalCdsDepositedAmountWithOptionFees
+            omniChainData.totalCdsDepositedAmountWithOptionFees
         );
     }
 
-    function callLzSendFromExternal(
-        uint32 _dstEid,
-        FunctionToDo functionToDo,
-        uint256 optionsFeesToGetFromOtherChain,
-        uint256 cdsAmountToGetFromOtherChain,
-        uint256 liqAmountToGetFromOtherChain,
-        LiquidationInfo memory liquidationInfo,
-        uint128 liqIndex,
-        MessagingFee memory fee,
-        bytes memory _options
-    ) external payable onlyBorrowOrLiquidationContract returns (MessagingReceipt memory receipt) {
-
-        bytes memory _payload = abi.encode(
-            functionToDo,
-            omniChainCDS,
-            optionsFeesToGetFromOtherChain,
-            cdsAmountToGetFromOtherChain,
-            liqAmountToGetFromOtherChain,
-            liquidationInfo,
-            liqIndex
-            );
-        
-        //! Calling layer zero send function to send to dst chain
-        receipt = _lzSend(_dstEid, _payload, _options, fee, payable(msg.sender));
-    }
-
-    function send(
-        uint32 _dstEid,
-        FunctionToDo _functionToDo,
-        OmniChainCDSData memory _message,
-        uint256 optionsFeesToGetFromOtherChain,
-        MessagingFee memory fee,
-        bytes memory _options
-    ) internal returns (MessagingReceipt memory receipt) {
-
-        LiquidationInfo memory liqInfo;
-
-        bytes memory _payload = abi.encode(
-            _functionToDo, 
-            _message, 
-            optionsFeesToGetFromOtherChain, 
-            0, 
-            0,
-            liqInfo,
-            0);
-        
-        //! Calling layer zero send function to send to dst chain
-        receipt = _lzSend(_dstEid, _payload, _options, fee, payable(msg.sender));
-    }
-
-    function quote(
-        uint32 _dstEid,
-        FunctionToDo _functionToDo,
-        uint256 optionsFeesToGetFromOtherChain,
-        uint256 cdsAmountToGetFromOtherChain,
-        uint256 liqAmountToGetFromOtherChain,
-        LiquidationInfo memory liquidationInfo,
-        uint128 liqIndex,
-        bytes memory _options,
-        bool _payInLzToken
-    ) public view returns (MessagingFee memory fee) {
-        bytes memory payload = abi.encode(
-            _functionToDo,
-            omniChainCDS,
-            optionsFeesToGetFromOtherChain,
-            cdsAmountToGetFromOtherChain,
-            liqAmountToGetFromOtherChain,
-            liquidationInfo,
-            liqIndex);
-        fee = _quote(_dstEid, payload, _options, _payInLzToken);
-    }
-
-    function _lzReceive(
-        Origin calldata /*_origin*/,
-        bytes32 /*_guid*/,
-        bytes calldata payload,
-        address /*_executor*/,
-        bytes calldata /*_extraData*/
-    ) internal override {
-
-        OmniChainCDSData memory data;
-        FunctionToDo functionToDo;
-        uint256 optionsFeesToRemove;
-        uint256 cdsAmountToRemove;
-        uint256 liqAmountToRemove;
-        LiquidationInfo memory liquidationInfo;
-        uint128 liqIndex;
-
-        (
-            functionToDo, 
-            data, 
-            optionsFeesToRemove,
-            cdsAmountToRemove,
-            liqAmountToRemove,
-            liquidationInfo,
-            liqIndex) = abi.decode(payload, (FunctionToDo, OmniChainCDSData, uint256, uint256, uint256, LiquidationInfo, uint128));
-
-        if(functionToDo == FunctionToDo.UPDATE_GLOBAL){
-            omniChainCDS = data;
-        }else if(functionToDo == FunctionToDo.UPDATE_INDIVIDUAL){
-            totalCdsDepositedAmountWithOptionFees -= optionsFeesToRemove;
-            totalCdsDepositedAmount -= cdsAmountToRemove;
-            totalAvailableLiquidationAmount -= liqAmountToRemove;
-            omniChainCDSLiqIndexToInfo[liqIndex] = liquidationInfo;
-            omniChainCDS = data;
-        }
-    }
-
-    function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external onlyBorrowOrLiquidationContract{
+    function updateLiquidationInfo(uint128 index,LiquidationInfo memory liquidationData) external onlyGlobalOrLiquidationContract{
         omniChainCDSLiqIndexToInfo[index] = liquidationData;
     }
 
-    function updateTotalAvailableLiquidationAmount(uint256 amount) external onlyBorrowOrLiquidationContract{
-        totalAvailableLiquidationAmount -= amount;
-        omniChainCDS.totalAvailableLiquidationAmount -= amount;
+    function updateTotalAvailableLiquidationAmount(uint256 amount) external onlyGlobalOrLiquidationContract{
+        if(totalAvailableLiquidationAmount != 0){
+            totalAvailableLiquidationAmount -= amount;
+        }
     }
 
-    function updateTotalCdsDepositedAmount(uint128 _amount) external onlyBorrowOrLiquidationContract{
-        totalCdsDepositedAmount -= _amount;
-        omniChainCDS.totalCdsDepositedAmount -= _amount;
+    function updateTotalCdsDepositedAmount(uint128 _amount) external onlyGlobalOrLiquidationContract{
+        if(totalCdsDepositedAmount != 0){
+            totalCdsDepositedAmount -= _amount;
+        }
     }
 
-    function updateTotalCdsDepositedAmountWithOptionFees(uint128 _amount) external onlyBorrowOrLiquidationContract{
-        totalCdsDepositedAmountWithOptionFees -= _amount;
-        omniChainCDS.totalCdsDepositedAmountWithOptionFees -= _amount;
-    }
-
-    function omniChainCDSTotalCdsDepositedAmount() external view returns(uint256){
-        return omniChainCDS.totalCdsDepositedAmount;
-    }
-
-    function omniChainCDSTotalAvailableLiquidationAmount() external view returns(uint256){
-        return omniChainCDS.totalAvailableLiquidationAmount;
+    function updateTotalCdsDepositedAmountWithOptionFees(uint128 _amount) external onlyGlobalOrLiquidationContract{
+        if(totalCdsDepositedAmountWithOptionFees != 0){
+            totalCdsDepositedAmountWithOptionFees -= _amount;
+        }
     }
 
     function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory,uint64){

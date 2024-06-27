@@ -180,7 +180,7 @@ library BorrowLib {
         amount = (uint128(_amount) * USDA_PRECISION)/_bondRatio;
     }
 
-    function calculateBaseToMultiply(uint32 usdaPrice) public pure returns (uint16 baseToMultiply){
+    function calculateBaseToMultiply(uint32 usdaPrice) public pure returns (uint8 baseToMultiply){
         if(usdaPrice < 9500){
             baseToMultiply = 50;
         }else if(usdaPrice < 9700 && usdaPrice >= 9500){
@@ -200,25 +200,25 @@ library BorrowLib {
         }
     }
 
-    function calculateNewAPRToUpdate(uint32 usdaPrice) public pure returns(uint128 newAPR){
+    function calculateNewAPRToUpdate(uint32 usdaPrice) public pure returns(uint128 ratePerSec,uint8 newAPR){
         require(usdaPrice != 0, "Invalid USDa price");
-        uint32 newBorrowingFeesRate = 5 * calculateBaseToMultiply(usdaPrice);
-        if(newBorrowingFeesRate == 250){
-            newAPR = 1000000007075835619725814915;
-        }else if (newBorrowingFeesRate == 150){
-            newAPR = 1000000004431822129783699001;
-        }else if(newBorrowingFeesRate == 100){
-            newAPR = 1000000003022265980097387650;
-        }else if(newBorrowingFeesRate == 75){
-            newAPR = 1000000002293273137447730714;
-        }else if(newBorrowingFeesRate == 50){
-            newAPR = 1000000001547125957863212448;
-        }else if(newBorrowingFeesRate == 40){
-            newAPR = 1000000001243680656318820312;
-        }else if(newBorrowingFeesRate == 25){
-            newAPR = 1000000000782997609082909351;
-        }else if(newBorrowingFeesRate == 5){
-            newAPR = 1000000000158153903837946257;
+        newAPR = 5 * calculateBaseToMultiply(usdaPrice);
+        if(newAPR == 250){
+            ratePerSec = 1000000007075835619725814915;
+        }else if (newAPR == 150){
+            ratePerSec = 1000000004431822129783699001;
+        }else if(newAPR == 100){
+            ratePerSec = 1000000003022265980097387650;
+        }else if(newAPR == 75){
+            ratePerSec = 1000000002293273137447730714;
+        }else if(newAPR == 50){
+            ratePerSec = 1000000001547125957863212448;
+        }else if(newAPR == 40){
+            ratePerSec = 1000000001243680656318820312;
+        }else if(newAPR == 25){
+            ratePerSec = 1000000000782997609082909351;
+        }else if(newAPR == 5){
+            ratePerSec = 1000000000158153903837946257;
         }
     }
 

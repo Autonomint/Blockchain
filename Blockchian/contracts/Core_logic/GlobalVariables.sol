@@ -9,6 +9,7 @@ import "hardhat/console.sol";
 import "../interface/IUSDa.sol";
 import "../interface/CDSInterface.sol";
 import "../interface/IGlobalVariables.sol";
+import "../interface/ITreasury.sol";
 import { OApp, MessagingFee, Origin } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OApp.sol";
 import { MessagingReceipt } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/OAppSender.sol";
 import { OptionsBuilder } from "@layerzerolabs/lz-evm-oapp-v2/contracts/oapp/libs/OptionsBuilder.sol";
@@ -19,7 +20,10 @@ contract GlobalVariables is IGlobalVariables,Initializable,UUPSUpgradeable,Reent
     using OptionsBuilder for bytes;
     IUSDa private usda;
     CDSInterface private cds;
-    address private dstTreasuryAddress;
+    ITreasury private treasury;
+    address private borrowing;
+    address private borrowLiq;
+    address private dstGlobalVariablesAddress;
     uint32 private dstEid;
     OmniChainData private omniChainData; //! omniChainData contains global data(all chains)
 
@@ -37,12 +41,35 @@ contract GlobalVariables is IGlobalVariables,Initializable,UUPSUpgradeable,Reent
     }
 
     function _authorizeUpgrade(address newImplementation) internal onlyOwner override{}
+    
+    // Function to check if an address is a contract
+    function isContract(address addr) internal view returns (bool) {
+        uint size;
+        assembly {
+            size := extcodesize(addr)
+        }
+        return size > 0;
+    }
+
+    modifier onlyCoreContracts() {
+        require( 
+            msg.sender == borrowing ||  msg.sender == address(cds) || msg.sender == borrowLiq || msg.sender == address(treasury), 
+            "This function can only called by Core contracts");
+        _;
+    }
+
+    modifier onlyCDSOrBorrowLiq() {
+        require( 
+            msg.sender == address(cds) || msg.sender == borrowLiq, 
+            "This function can only called by Core contracts");
+        _;
+    }
 
     function getOmniChainData() public view returns(OmniChainData memory){
         return omniChainData;
     }
 
-    function setOmniChainData(OmniChainData memory _omniChainData) public{
+    function setOmniChainData(OmniChainData memory _omniChainData) public onlyCoreContracts{
         omniChainData = _omniChainData;
     }
 
@@ -50,52 +77,100 @@ contract GlobalVariables is IGlobalVariables,Initializable,UUPSUpgradeable,Reent
         dstEid = _eid;
     }
 
+    function setTreasury(address _treasury) public onlyOwner{
+        require(_treasury != address(0) && isContract(_treasury) != false, 
+            "Treasury address should not be zero address and must be contract address");
+        treasury = ITreasury(_treasury);
+    }
+
+    function setBorrowing(address _borrow) public onlyOwner{
+        require(_borrow != address(0) && isContract(_borrow) != false, 
+            "Borrowing address should not be zero address and must be contract address");
+        borrowing = _borrow;
+    }
+
+    function setBorrowLiq(address _borrowLiq) public onlyOwner{
+        require(_borrowLiq != address(0) && isContract(_borrowLiq) != false, 
+            "Borrow Liquidation address should not be zero address and must be contract address");
+        borrowLiq = _borrowLiq;
+    }
+
+    function setDstGlobalVariablesAddress(address _globalVariables) public onlyOwner{
+        require(_globalVariables != address(0) && isContract(_globalVariables) != false, 
+            "Destination treasury address should not be zero address and must be contract address");
+        dstGlobalVariablesAddress = _globalVariables;
+    }
+
     function oftOrNativeReceiveFromOtherChains(
         FunctionToDo _functionToDo,
         USDaOftTransferData memory _oftTransferData,
-        NativeTokenTransferData memory _nativeTokenTransferData
-    ) external payable returns (MessagingReceipt memory receipt) {
+        NativeTokenTransferData memory _nativeTokenTransferData,
+        address _refundAddress
+    ) external payable onlyCDSOrBorrowLiq returns (MessagingReceipt memory receipt) {
 
         bytes memory _payload = abi.encode(
-            _functionToDo, 
-            omniChainData, 
-            _oftTransferData,
-            _nativeTokenTransferData);
+                _functionToDo,
+                _oftTransferData.tokensToSend,
+                _oftTransferData.tokensToSend,
+                _oftTransferData.tokensToSend,
+                CDSInterface.LiquidationInfo(0,0,0,0),0, 
+                _oftTransferData,
+                _nativeTokenTransferData,
+                omniChainData
+            );
 
         MessagingFee memory _fee;
+        MessagingFee memory feeForTokenTransfer;
+        MessagingFee memory feeForNativeTransfer;
         bytes memory _options;
+        //! getting options since,the src don't know the dst state
+        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
 
-        if(_functionToDo == FunctionToDo.TOKEN_TRANSFER || _functionToDo == FunctionToDo.BOTH_TRANSFER){
+        SendParam memory _sendParam = SendParam(
+            dstEid,
+            bytes32(uint256(uint160(_oftTransferData.recipient))),
+            _oftTransferData.tokensToSend,
+            _oftTransferData.tokensToSend,
+            options,
+            '0x',
+            '0x'
+        );
+        feeForTokenTransfer = usda.quoteSend( _sendParam, false);
 
-            //! getting options since,the src don't know the dst state
-            bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
+        options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(280000, 0).addExecutorNativeDropOption(
+                uint128(_nativeTokenTransferData.nativeTokensToSend), 
+                bytes32(uint256(uint160(dstGlobalVariablesAddress))));
 
-            SendParam memory _sendParam = SendParam(
-                dstEid,
-                bytes32(uint256(uint160(_oftTransferData.recipient))),
-                _oftTransferData.tokensToSend,
-                _oftTransferData.tokensToSend,
-                options,
-                '0x',
-                '0x'
-            );
-            MessagingFee memory fee = usda.quoteSend( _sendParam, false);
+        feeForNativeTransfer = quote(FunctionToDo(1), options, false);
 
-            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(350000, 0).addExecutorNativeDropOption(
-                uint128(fee.nativeFee), 
-                bytes32(uint256(uint160(dstTreasuryAddress)))
+        if(_functionToDo == FunctionToDo.TOKEN_TRANSFER){
+
+            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(400000, 0).addExecutorNativeDropOption(
+                uint128(feeForTokenTransfer.nativeFee), 
+                bytes32(uint256(uint160(dstGlobalVariablesAddress)))
             );
 
         }else if(_functionToDo == FunctionToDo.NATIVE_TRANSFER){
-            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(260000, 0);
+
+            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(250000, 0).addExecutorNativeDropOption(
+                uint128(feeForNativeTransfer.nativeFee), 
+                bytes32(uint256(uint160(dstGlobalVariablesAddress)))
+            );
+        }else if(_functionToDo == FunctionToDo.BOTH_TRANSFER){
+
+            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(400000, 0).addExecutorNativeDropOption(
+                // 104083014000000000,
+                uint128(feeForTokenTransfer.nativeFee + (feeForNativeTransfer.nativeFee - _nativeTokenTransferData.nativeTokensToSend)),
+                bytes32(uint256(uint160(dstGlobalVariablesAddress)))
+            );
         }
 
         _fee = quoteInternal(
                 dstEid, 
                 _functionToDo, 
-                0,
-                0,
-                0,
+                _oftTransferData.tokensToSend,
+                _oftTransferData.tokensToSend,
+                _oftTransferData.tokensToSend,
                 CDSInterface.LiquidationInfo(0,0,0,0),
                 0,
                 _oftTransferData,
@@ -104,7 +179,7 @@ contract GlobalVariables is IGlobalVariables,Initializable,UUPSUpgradeable,Reent
                 false);
 
         //! Calling layer zero send function to send to dst chain
-        receipt = _lzSend(dstEid, _payload, _options, _fee, payable(msg.sender));
+        receipt = _lzSend(dstEid, _payload, _options, _fee, payable(_refundAddress));
     }
 
     function sendInternal(        
@@ -147,7 +222,7 @@ contract GlobalVariables is IGlobalVariables,Initializable,UUPSUpgradeable,Reent
         NativeTokenTransferData memory _nativeTokenTransferData,
         bytes memory _options,
         bool _payInLzToken
-    ) public view returns (MessagingFee memory fee) {
+    ) internal view returns (MessagingFee memory fee) {
 
         bytes memory payload = abi.encode(
             functionToDo,
@@ -185,13 +260,33 @@ contract GlobalVariables is IGlobalVariables,Initializable,UUPSUpgradeable,Reent
         MessagingFee memory _fee,
         bytes memory _options,
         address _refundAddress
-    ) external payable returns (MessagingReceipt memory receipt){
+    ) external payable onlyCoreContracts returns (MessagingReceipt memory receipt){
         return sendInternal(
             dstEid,
             _functionToDo,
             0,0,0,
             CDSInterface.LiquidationInfo(0,0,0,0),
             0,
+            _fee,
+            _options,
+            _refundAddress
+        );
+    }
+
+    function sendForLiquidation(        
+        FunctionToDo _functionToDo,
+        uint128 _liqIndex,
+        CDSInterface.LiquidationInfo memory _liquidationInfo,
+        MessagingFee memory _fee,
+        bytes memory _options,
+        address _refundAddress
+    ) external payable onlyCoreContracts returns (MessagingReceipt memory receipt){
+        return sendInternal(
+            dstEid,
+            _functionToDo,
+            0,0,0,
+            _liquidationInfo,
+            _liqIndex,
             _fee,
             _options,
             _refundAddress
@@ -249,44 +344,18 @@ contract GlobalVariables is IGlobalVariables,Initializable,UUPSUpgradeable,Reent
             );
             _fee = usda.quoteSend( _sendParam, false);
 
+            treasury.transferFundsToGlobal(oftTransferData.tokensToSend, 0);
             usda.send{ value: _fee.nativeFee}( _sendParam, _fee, address(this));
 
-        }else if(functionToDo == FunctionToDo.NATIVE_TRANSFER){
+        }else if(functionToDo == FunctionToDo.NATIVE_TRANSFER || functionToDo == FunctionToDo.BOTH_TRANSFER){
 
-            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(260000, 0).addExecutorNativeDropOption(
+            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(280000, 0).addExecutorNativeDropOption(
                 uint128(nativeTokenTransferData.nativeTokensToSend), 
                 bytes32(uint256(uint160(nativeTokenTransferData.recipient)))
             );
 
-            bytes memory _payload = abi.encode(
-                FunctionToDo(1), 
-                omniChainData, 
-                USDaOftTransferData(address(0),0),
-                NativeTokenTransferData(address(0), 0));
+                        // _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
 
-        _fee = quoteInternal(
-                dstEid, 
-                FunctionToDo(1), 
-                0,
-                0,
-                0,
-                CDSInterface.LiquidationInfo(0,0,0,0),
-                0,
-                USDaOftTransferData(address(0),0),
-                NativeTokenTransferData(address(0), 0),
-                _options, 
-                false);
-
-            _lzSend(dstEid, _payload, _options, _fee, payable(msg.sender));
-
-        }else if(functionToDo == FunctionToDo.BOTH_TRANSFER){
-
-            // _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(60000, 0);
-
-            _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(260000, 0).addExecutorNativeDropOption(
-                uint128(nativeTokenTransferData.nativeTokensToSend), 
-                bytes32(uint256(uint160(nativeTokenTransferData.recipient)))
-            );
 
             SendParam memory _sendParam = SendParam(
                 dstEid,
@@ -299,17 +368,17 @@ contract GlobalVariables is IGlobalVariables,Initializable,UUPSUpgradeable,Reent
             );
             _fee = usda.quoteSend( _sendParam, false);
 
+            treasury.transferFundsToGlobal(oftTransferData.tokensToSend,nativeTokenTransferData.nativeTokensToSend);
             usda.send{ value: _fee.nativeFee}( _sendParam, _fee, address(this));
 
-        }else if(functionToDo == FunctionToDo.UPDATE_INDIVIDUAL){
-            cds.updateTotalCdsDepositedAmountWithOptionFees(uint128(optionsFeesToRemove));
-            cds.updateTotalCdsDepositedAmount(uint128(cdsAmountToRemove));
-            cds.updateTotalAvailableLiquidationAmount(liqAmountToRemove);
-            cds.updateLiquidationInfo(liqIndex, liquidationInfo);
         }
+        cds.updateTotalCdsDepositedAmountWithOptionFees(uint128(optionsFeesToRemove));
+        cds.updateTotalCdsDepositedAmount(uint128(cdsAmountToRemove));
+        cds.updateTotalAvailableLiquidationAmount(liqAmountToRemove);
+        cds.updateLiquidationInfo(liqIndex, liquidationInfo);
 
         omniChainData = message;
 
     }
-
+    receive() external payable{}
 }

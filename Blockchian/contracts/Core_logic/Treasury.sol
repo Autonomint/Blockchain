@@ -90,7 +90,7 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
 
     modifier onlyCoreContracts() {
         require( 
-            msg.sender == address(borrow) ||  msg.sender == cdsContract || msg.sender == borrowLiquidation, 
+            msg.sender == address(borrow) ||  msg.sender == cdsContract || msg.sender == borrowLiquidation || msg.sender == address(globalVariables), 
             "This function can only called by Core contracts");
         _;
     }
@@ -112,7 +112,6 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
     ) external payable onlyCoreContracts returns(DepositResult memory) {
 
         uint64 borrowerIndex;
-        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
         //check if borrower is depositing for the first time or not
         if (!borrowing[user].hasDeposited) {
             //change borrowerindex to 1
@@ -121,7 +120,6 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
             //change hasDeposited bool to true after first deposit
             borrowing[user].hasDeposited = true;
             ++noOfBorrowers;
-            ++omniChainData.noOfBorrowers;
         }
         else {
             //increment the borrowerIndex for each deposit
@@ -137,11 +135,9 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
 
         //Total volume of borrowers in USD
         totalVolumeOfBorrowersAmountinUSD += (_ethPrice * msg.value);
-        omniChainData.totalVolumeOfBorrowersAmountinUSD += (_ethPrice * msg.value);
 
         //Total volume of borrowers in Wei
         totalVolumeOfBorrowersAmountinWei += msg.value;
-        omniChainData.totalVolumeOfBorrowersAmountinWei += msg.value;
 
         //Adding depositTime to borrowing struct
         borrowing[user].depositDetails[borrowerIndex].depositedTime = _depositTime;
@@ -155,7 +151,6 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
 
         depositToAaveByUser(externalProtocolDepositEth);
         depositToCompoundByUser(externalProtocolDepositEth);
-        globalVariables.setOmniChainData(omniChainData);
 
         emit Deposit(user,msg.value);
         return DepositResult(borrowing[user].hasDeposited,borrowerIndex);
@@ -181,24 +176,18 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
 
         // Updating lastEthVaultValue in borrowing
         borrow.updateLastEthVaultValue(borrowing[borrower].depositDetails[index].depositedAmountUsdValue);
-        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
 
         // Updating total volumes
         totalVolumeOfBorrowersAmountinUSD -= borrowing[borrower].depositDetails[index].depositedAmountUsdValue;
         totalVolumeOfBorrowersAmountinWei -= borrowing[borrower].depositDetails[index].depositedAmount;
-        omniChainData.totalVolumeOfBorrowersAmountinUSD -= borrowing[borrower].depositDetails[index].depositedAmountUsdValue;
-        omniChainData.totalVolumeOfBorrowersAmountinWei -= borrowing[borrower].depositDetails[index].depositedAmount;
         // Deduct tototalBorrowedAmountt
         borrowing[borrower].totalBorrowedAmount -= borrowing[borrower].depositDetails[index].borrowedAmount;
         borrowing[borrower].depositDetails[index].depositedAmount = 0;
 
         if(borrowing[borrower].depositedAmount == 0){
             --noOfBorrowers;
-            --omniChainData.noOfBorrowers;
         }
         borrowing[borrower].depositDetails[index].withdrawAmount += uint128(amount);
-
-        globalVariables.setOmniChainData(omniChainData);
 
         // Send the ETH to Borrower
         (bool sent,) = payable(toAddress).call{value: amount}("");
@@ -621,62 +610,44 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
 
     function updateTotalInterest(uint256 _amount) external onlyCoreContracts{
         totalInterest += _amount;
-        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
-        omniChainData.totalInterest += _amount;
-        globalVariables.setOmniChainData(omniChainData);
     }
 
     function updateTotalInterestFromLiquidation(uint256 _amount) external onlyCoreContracts{
         totalInterestFromLiquidation += _amount;
-        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
-        omniChainData.totalInterestFromLiquidation += _amount;
-        globalVariables.setOmniChainData(omniChainData);
     }
 
     function updateAbondUSDaPool(uint256 amount,bool operation) external onlyCoreContracts{
         require(amount != 0, "Treasury:Amount should not be zero");
-        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
         if(operation){
             abondUSDaPool += amount;
-            omniChainData.abondUSDaPool += amount;
         }else{
             abondUSDaPool -= amount;
-            omniChainData.abondUSDaPool -= amount;
         }
-        globalVariables.setOmniChainData(omniChainData);
     }
 
     function updateUSDaGainedFromLiquidation(uint256 amount,bool operation) external onlyCoreContracts{
-        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
         if(operation){
             usdaGainedFromLiquidation += amount;
-            omniChainData.usdaGainedFromLiquidation += amount;
         }else{
             usdaGainedFromLiquidation -= amount;
-            omniChainData.usdaGainedFromLiquidation -= amount;
         }
-        globalVariables.setOmniChainData(omniChainData);
     }
 
-    function updateEthProfitsOfLiquidators(uint256 amount,bool operation) external onlyCoreContracts{
-        require(amount != 0, "Treasury:Amount should not be zero");
-        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
-        if(operation){
-            // ethProfitsOfLiquidators += amount;
-            omniChainData.ethProfitsOfLiquidators += amount;
+    // function updateEthProfitsOfLiquidators(uint256 amount,bool operation) external onlyCoreContracts{
+    //     require(amount != 0, "Treasury:Amount should not be zero");
+    //     if(operation){
+    //         // ethProfitsOfLiquidators += amount;
+    //         omniChainData.ethProfitsOfLiquidators += amount;
 
-        }else{
-            // ethProfitsOfLiquidators -= amount;
-            omniChainData.ethProfitsOfLiquidators += amount;
-        }
-        globalVariables.setOmniChainData(omniChainData);
-    }
+    //     }else{
+    //         // ethProfitsOfLiquidators -= amount;
+    //         omniChainData.ethProfitsOfLiquidators += amount;
+    //     }
+    //     globalVariables.setOmniChainData(omniChainData);
+    // }
 
     function updateInterestFromExternalProtocol(uint256 amount) external onlyCoreContracts{
         interestFromExternalProtocolDuringLiquidation += amount;
-        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
-        omniChainData.interestFromExternalProtocolDuringLiquidation += amount;
-        globalVariables.setOmniChainData(omniChainData);
     }
 
     function updateUsdaCollectedFromCdsWithdraw(uint256 amount) external onlyCoreContracts{
@@ -899,6 +870,19 @@ contract Treasury is ITreasury,Initializable,UUPSUpgradeable,ReentrancyGuardUpgr
         aavePoolAddressProvider = IPoolAddressesProvider(
             _aavePoolAddressProvider);                          // 0x2f39d218133AFaB8F2B819B1066c7E434Ad94E9e
         aToken = IERC20(_aToken);                               // 0x4d5F47FA6A74757f35C14fD3a6Ef8E3C9BC514E8
+    }
+
+    function transferFundsToGlobal(uint256 usdaAmount, uint256 ethAmount) external onlyCoreContracts{
+        if(usdaAmount != 0 && ethAmount == 0){
+            usda.transfer(msg.sender,usdaAmount);
+        }else if(usdaAmount == 0 && ethAmount != 0){
+            (bool sent,) = payable(msg.sender).call{value: ethAmount}("");
+            require(sent, "Failed to send Ether");
+        }else{
+            usda.transfer(address(globalVariables),usdaAmount);
+            (bool sent,) = payable(msg.sender).call{value: ethAmount}("");
+            require(sent, "Failed to send Ether");
+        }
     }
 
     receive() external payable{}

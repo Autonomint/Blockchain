@@ -24,6 +24,7 @@ contract BorrowLiquidation is IBorrowLiquidation,Initializable,OwnableUpgradeabl
     CDSInterface cds;
     IUSDa usda;
     IGlobalVariables private globalVariables;
+    address public admin;
 
     using OptionsBuilder for bytes;
 
@@ -67,6 +68,11 @@ contract BorrowLiquidation is IBorrowLiquidation,Initializable,OwnableUpgradeabl
         treasury = ITreasury(_treasury);
     }
 
+    function setAdmin(address _admin) external onlyOwner{
+        require(_admin != address(0) && isContract(_admin) != true, "Admin can't be zero address and contract address");
+        admin = _admin;
+    }
+
     /**
      * @dev This function liquidate ETH which are below downside protection.
      * @param _user The address to whom to liquidate ETH.
@@ -77,9 +83,8 @@ contract BorrowLiquidation is IBorrowLiquidation,Initializable,OwnableUpgradeabl
         address _user,
         uint64 _index,
         uint64 _currentEthPrice,
-        uint128 _globalNoOfLiquidations,
         uint256 _lastCumulativeRate
-    ) external payable onlyBorrowingContract{
+    ) external payable onlyBorrowingContract returns(CDSInterface.LiquidationInfo memory){
 
         // Get the borrower details
         ITreasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(_user,_index);
@@ -88,6 +93,7 @@ contract BorrowLiquidation is IBorrowLiquidation,Initializable,OwnableUpgradeabl
         
         // uint256 externalProtocolInterest = treasury.withdrawFromExternalProtocol(borrower,10000); // + treasury.withdrawFromCompoundByUser(borrower,index);
         IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
+        ++omniChainData.noOfLiquidations;
 
         require(
             depositDetail.depositedAmount <= (
@@ -138,27 +144,30 @@ contract BorrowLiquidation is IBorrowLiquidation,Initializable,OwnableUpgradeabl
 
         uint128 cdsAmountToGetFromThisChain = (liquidationAmountNeeded - uint128(liqAmountToGetFromOtherChain)) - (cdsProfits - cdsProfitsForOtherChain);
 
-        cds.updateLiquidationInfo(_globalNoOfLiquidations,liquidationInfo);
+        cds.updateLiquidationInfo(omniChainData.noOfLiquidations,liquidationInfo);
         cds.updateTotalCdsDepositedAmount(cdsAmountToGetFromThisChain);
         cds.updateTotalCdsDepositedAmountWithOptionFees(cdsAmountToGetFromThisChain);
         cds.updateTotalAvailableLiquidationAmount(cdsAmountToGetFromThisChain);
-        treasury.updateEthProfitsOfLiquidators(depositDetail.depositedAmount,true);
+        omniChainData.ethProfitsOfLiquidators += depositDetail.depositedAmount;
+        // treasury.updateEthProfitsOfLiquidators(depositDetail.depositedAmount,true);
+
+        omniChainData.totalCdsDepositedAmount -= liquidationAmountNeeded;
+        omniChainData.totalCdsDepositedAmountWithOptionFees -= liquidationAmountNeeded;
+        omniChainData.totalAvailableLiquidationAmount -= liquidationAmountNeeded;
 
         // Update totalInterestFromLiquidation
         uint256 totalInterestFromLiquidation = uint256(borrowerDebt - depositDetail.borrowedAmount);
+        omniChainData.totalInterestFromLiquidation += uint256(borrowerDebt - depositDetail.borrowedAmount);
         treasury.updateTotalInterestFromLiquidation(totalInterestFromLiquidation);
         treasury.updateDepositDetails(_user,_index,depositDetail);
+        globalVariables.setOmniChainData(omniChainData);
 
         if(liqAmountToGetFromOtherChain > 0){
-            globalVariables.oftOrNativeReceiveFromOtherChains{ value: msg.value}(
-                IGlobalVariables.FunctionToDo(2),
+            globalVariables.oftOrNativeReceiveFromOtherChains{value: msg.value}(
+                IGlobalVariables.FunctionToDo(3),
                 IGlobalVariables.USDaOftTransferData( address(treasury), liqAmountToGetFromOtherChain),
-                IGlobalVariables.NativeTokenTransferData(address(0), 0));
-
-            // treasury.oftOrNativeReceiveFromOtherChains{ value: msg.value - cdsLzFee.nativeFee}(
-            //     ITreasury.FunctionToDo(2),
-            //     ITreasury.USDaOftTransferData( address(treasury), liqAmountToGetFromOtherChain),
-            //     ITreasury.NativeTokenTransferData(address(0), 0));
+                IGlobalVariables.NativeTokenTransferData(address(0), 0),
+                admin);
         }
 
         // Burn the borrow amount
@@ -173,5 +182,6 @@ contract BorrowLiquidation is IBorrowLiquidation,Initializable,OwnableUpgradeabl
         }
         // Transfer ETH to CDS Pool
         emit Liquidate(_index,liquidationAmountNeeded,cdsProfits,depositDetail.depositedAmount,cds.totalAvailableLiquidationAmount());
+        return liquidationInfo;
     }
 }

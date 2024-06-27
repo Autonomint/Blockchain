@@ -35,16 +35,6 @@ interface IGlobalVariables{
         uint256  interestFromExternalProtocolDuringLiquidation;
     }
 
-    struct OmniChainDataCDS {
-        uint64  cdsCount;
-        uint256 totalCdsDepositedAmount;
-        uint256 totalCdsDepositedAmountWithOptionFees;
-        uint256 totalAvailableLiquidationAmount;
-        uint256 usdtAmountDepositedTillNow;
-        uint256 burnedUSDaInRedeem;
-        uint128 lastCumulativeRate;
-    }
-
     struct USDaOftTransferData {
         address recipient;
         uint256 tokensToSend;
@@ -63,34 +53,10 @@ interface IGlobalVariables{
     function oftOrNativeReceiveFromOtherChains(
         FunctionToDo _functionToDo,
         USDaOftTransferData memory _oftTransferData,
-        NativeTokenTransferData memory _nativeTokenTransferData
+        NativeTokenTransferData memory _nativeTokenTransferData,
+        address _refundAddress
     ) external payable returns (MessagingReceipt memory receipt);
 
-    // function send(        
-    //     uint32 _dstEid,
-    //     FunctionToDo functionToDo,
-    //     uint256 optionsFeesToGetFromOtherChain,
-    //     uint256 cdsAmountToGetFromOtherChain,
-    //     uint256 liqAmountToGetFromOtherChain,
-    //     CDSInterface.LiquidationInfo memory liquidationInfo,
-    //     uint128 liqIndex,
-    //     MessagingFee memory _fee,
-    //     bytes memory _options
-    // ) external payable returns (MessagingReceipt memory receipt);
-
-    function quoteInternal(
-        uint32 _dstEid,
-        FunctionToDo functionToDo,
-        uint256 optionsFeesToGetFromOtherChain,
-        uint256 cdsAmountToGetFromOtherChain,
-        uint256 liqAmountToGetFromOtherChain,
-        CDSInterface.LiquidationInfo memory liquidationInfo,
-        uint128 liqIndex,
-        USDaOftTransferData memory _oftTransferData,
-        NativeTokenTransferData memory _nativeTokenTransferData,
-        bytes memory _options,
-        bool _payInLzToken
-    ) external view returns (MessagingFee memory fee);
 
     function quote(
         FunctionToDo _functionToDo,
@@ -103,5 +69,14 @@ interface IGlobalVariables{
         MessagingFee memory _fee,
         bytes memory _options,
         address refundAddress
+    ) external payable returns (MessagingReceipt memory receipt);
+
+    function sendForLiquidation(        
+        FunctionToDo _functionToDo,
+        uint128 _liqIndex,
+        CDSInterface.LiquidationInfo memory _liquidationInfo,
+        MessagingFee memory _fee,
+        bytes memory _options,
+        address _refundAddress
     ) external payable returns (MessagingReceipt memory receipt);
 }
