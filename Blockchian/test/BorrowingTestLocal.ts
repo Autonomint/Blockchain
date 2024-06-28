@@ -972,6 +972,12 @@ describe("Borrowing Contract",function(){
                 ethers.parseEther("1"),
                 {value: (ethers.parseEther("1") +  BigInt(nativeFee))})
             const tx = await treasuryA.borrowing(user1.getAddress());
+            const tx3 = await treasuryA.getBorrowing(user1.getAddress(), tx[4]);
+            console.log(tx3);
+            const tx4 = await CDSContractA.cdsDetails(user1.getAddress());
+            console.log(tx4);
+            const tx5 = await CDSContractA.getCDSDepositDetails(user1.getAddress(), tx4[0]);
+            console.log(tx5);
             await expect(tx[4]).to.be.equal(1);
         })
 

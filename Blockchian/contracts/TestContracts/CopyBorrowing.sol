@@ -250,6 +250,7 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         ITreasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
         depositDetail.borrowedAmount = uint128(tokensToLend);
         depositDetail.optionFees = uint128(optionFees);
+        depositDetail.APR = APR;
 
         //Update variables in treasury
         treasury.updateHasBorrowed(msg.sender,true);
@@ -506,7 +507,6 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         require(_amount != 0,"Last ETH vault value can't be zero");
         IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
         omniChainData.ethVaultValue += _amount;
-        // omniChainBorrowing.ethVaultValue -= _amount;
         globalVariables.setOmniChainData(omniChainData);
     }
 

@@ -209,12 +209,17 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
 
         //! updating global data 
         omniChainData.usdtAmountDepositedTillNow += usdtAmount;
+        omniChainData.cdsPoolValue += totalDepositingAmount;
         
         //add deposited time of perticular index and amount in cdsAccountDetails
         cdsDetails[msg.sender].cdsAccountDetails[index].depositedTime = uint64(block.timestamp);
         cdsDetails[msg.sender].cdsAccountDetails[index].normalizedAmount = ((totalDepositingAmount * CDSLib.PRECISION)/omniChainData.lastCumulativeRate);
        
         cdsDetails[msg.sender].cdsAccountDetails[index].optedLiquidation = _liquidate;
+        cdsDetails[msg.sender].cdsAccountDetails[index].lockingPeriod = 60;
+        cdsDetails[msg.sender].cdsAccountDetails[index].depositedUSDa = usdaAmount;
+        cdsDetails[msg.sender].cdsAccountDetails[index].depositedUSDT = usdtAmount;
+
         //If user opted for liquidation
         if(_liquidate){
             cdsDetails[msg.sender].cdsAccountDetails[index].liquidationindex = omniChainData.noOfLiquidations;
@@ -298,6 +303,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
 
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
         cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedTime =  _withdrawTime;
+        cdsDetails[msg.sender].cdsAccountDetails[_index].ethPriceAtWithdraw = ethPrice;
 
         //! getting options since,the src don't know the dst state
         bytes memory _options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
@@ -309,7 +315,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
             _options, 
             false);
         uint128 ethAmount;
-
+        uint256 usdaToTransfer;
         // If user opted for liquidation
         if(cdsDetails[msg.sender].cdsAccountDetails[_index].optedLiquidation){
             returnAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].liquidationAmount;
@@ -367,27 +373,23 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                 }
 
                 if(optionsFeesToGetFromOtherChain > 0 || ethAmount > 0 ){
-                    // treasury.oftOrNativeReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
-                    //     functionToDo,
-                    //     ITreasury.USDaOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
-                    //     ITreasury.NativeTokenTransferData(treasuryAddress, ethAmount));
-
                     globalVariables.oftOrNativeReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
                         functionToDo,
                         IGlobalVariables.USDaOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
                         IGlobalVariables.NativeTokenTransferData(treasuryAddress, ethAmount),
                         msg.sender);
                 }
-                (uint256 usdaToTransfer, uint128 ethToTransfer) = CDSLib.calculateUserProportionInWithdraw(
+                usdaToTransfer = CDSLib.calculateUserProportionInWithdraw(
                    cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount,
-                   returnAmountWithGains,
-                   ethAmount 
+                   returnAmountWithGains 
                 );
                 treasury.updateUsdaCollectedFromCdsWithdraw(returnAmountWithGains - usdaToTransfer);
-                treasury.updateLiquidatedETHCollectedFromCdsWithdraw(ethAmount - ethToTransfer);
+                treasury.updateLiquidatedETHCollectedFromCdsWithdraw(ethAmount);
 
                 cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = usdaToTransfer;
-
+                cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawETHAmount = ethAmount;
+                cdsDetails[msg.sender].cdsAccountDetails[_index].optionFees = optionFees;
+                cdsDetails[msg.sender].cdsAccountDetails[_index].optionFeesWithdrawn = optionFees;
                 // Get approval from treasury 
                 treasury.approveUSDa(address(this),usdaToTransfer);
 
@@ -395,24 +397,19 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
                 bool success = usda.transferFrom(treasuryAddress,msg.sender, usdaToTransfer); // transfer amount to msg.sender
                 require(success == true, "Transsuccessed in cds withdraw");
                 
-                if(ethToTransfer != 0){
-                    omniChainData.ethProfitsOfLiquidators -= ethToTransfer;
-                    // treasury.updateEthProfitsOfLiquidators(ethToTransfer,false);
+                if(ethAmount != 0){
+                    omniChainData.ethProfitsOfLiquidators -= ethAmount;
+                    // treasury.updateEthProfitsOfLiquidators(ethAmount,false);
                     // Call transferEthToCdsLiquidators to tranfer eth
-                    treasury.transferEthToCdsLiquidators(msg.sender,ethToTransfer);
+                    treasury.transferEthToCdsLiquidators(msg.sender,ethAmount);
                 }
 
-                emit Withdraw(msg.sender,_index,usdaToTransfer,block.timestamp,ethToTransfer,ethPrice,optionFees,optionFees);
+                emit Withdraw(msg.sender,_index,usdaToTransfer,block.timestamp,ethAmount,ethPrice,optionFees,optionFees);
             }
 
         }else{
 
             if(optionsFeesToGetFromOtherChain > 0){
-                // treasury.oftOrNativeReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
-                //     ITreasury.FunctionToDo(2),
-                //     ITreasury.USDaOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
-                //     ITreasury.NativeTokenTransferData(address(0), 0));
-
                 globalVariables.oftOrNativeReceiveFromOtherChains{ value: msg.value - fee.nativeFee}(
                     IGlobalVariables.FunctionToDo(3),
                     IGlobalVariables.USDaOftTransferData(treasuryAddress, optionsFeesToGetFromOtherChain),
@@ -426,11 +423,19 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
 
             omniChainData.totalCdsDepositedAmount -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
             omniChainData.totalCdsDepositedAmountWithOptionFees -= returnAmount;
-            
-            cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = returnAmount;
 
-            treasury.approveUSDa(address(this),returnAmount);
-            bool transfer = usda.transferFrom(treasuryAddress,msg.sender, returnAmount); // transfer amount to msg.sender
+            usdaToTransfer = CDSLib.calculateUserProportionInWithdraw(
+                   cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount,
+                   returnAmount 
+                );
+            
+            cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawedAmount = usdaToTransfer;
+            cdsDetails[msg.sender].cdsAccountDetails[_index].withdrawETHAmount = ethAmount;
+            cdsDetails[msg.sender].cdsAccountDetails[_index].optionFees = optionFees;
+            cdsDetails[msg.sender].cdsAccountDetails[_index].optionFeesWithdrawn = optionFees;
+
+            treasury.approveUSDa(address(this),usdaToTransfer);
+            bool transfer = usda.transferFrom(treasuryAddress,msg.sender, usdaToTransfer); // transfer amount to msg.sender
             require(transfer == true, "Transfer failed in cds withdraw");
         }
 
@@ -446,14 +451,15 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
             (bool sent,) = payable(msg.sender).call{value: msg.value - fee.nativeFee}("");
             require(sent, "Failed to send Ether");
         }
+        omniChainData.cdsPoolValue -= cdsDetails[msg.sender].cdsAccountDetails[_index].depositedAmount;
 
         globalVariables.setOmniChainData(omniChainData);
         //! Calling Omnichain send function
         globalVariables.send{value: fee.nativeFee}(IGlobalVariables.FunctionToDo(2), fee, _options,msg.sender);
         
-        emit Withdraw(msg.sender,_index,returnAmount,block.timestamp,ethAmount,ethPrice,optionFees,optionFees);
+        emit Withdraw(msg.sender,_index,usdaToTransfer,block.timestamp,ethAmount,ethPrice,optionFees,optionFees);
     }
-
+   
 
     //calculating Ethereum value to return to CDS owner
     //The function will deduct some amount of ether if it is borrowed
@@ -632,7 +638,6 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         );
 
         return omniChainData.lastCumulativeRate;
-
     }
 
     /**

@@ -32,6 +32,8 @@ interface ITreasury{
         uint128 aBondTokensAmount;
         uint128 strikePrice;
         uint128 optionFees;
+        uint8 APR;
+        uint256 totalDebtAmountPaid;
     }
 
     //Borrower Details

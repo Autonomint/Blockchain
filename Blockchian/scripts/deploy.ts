@@ -20,13 +20,13 @@ import {
 
 async function main() {
 
-  const AMINTStablecoin = await ethers.getContractFactory("USDaStablecoin");
-  const deployedAMINTStablecoin = await upgrades.deployProxy(AMINTStablecoin,[
-    endpointModeSepolia,
-    owner1
-  ],{initializer:'initialize'}, {kind:'uups'});
-  await deployedAMINTStablecoin.waitForDeployment();
-  console.log("PROXY AMINT ADDRESS",await deployedAMINTStablecoin.getAddress());
+  // const AMINTStablecoin = await ethers.getContractFactory("USDaStablecoin");
+  // const deployedAMINTStablecoin = await upgrades.deployProxy(AMINTStablecoin,[
+  //   endpointModeSepolia,
+  //   owner1
+  // ],{initializer:'initialize'}, {kind:'uups'});
+  // await deployedAMINTStablecoin.waitForDeployment();
+  // console.log("PROXY AMINT ADDRESS",await deployedAMINTStablecoin.getAddress());
 
   // const ABONDToken = await ethers.getContractFactory("ABONDToken");
   // const deployedABONDToken = await upgrades.deployProxy(ABONDToken,{initializer:'initialize'}, {kind:'uups'});
@@ -145,50 +145,55 @@ async function main() {
 
   // await sleep(30 * 1000);
 
-  // await hre.run("verify:verify", {
-  //   address: "0x6502432f446402b8f225e639b95d4d03317a26e4",
-  //   contract: "contracts/Token/USDa.sol:USDaStablecoin"
-  // });
+  await hre.run("verify:verify", {
+    address: "0xc136a17f3c18698e3adf754dbdf7537a2f3265d4",
+    contract: "contracts/Token/USDa.sol:USDaStablecoin"
+  });
 
-  // await hre.run("verify:verify", {
-  //   address: "0x9eb1fc4bdf917e75d455d70f38d6689b10ec6919",
-  //   contract: "contracts/Token/Abond_Token.sol:ABONDTokenV2"
-  // });
+  await hre.run("verify:verify", {
+    address: "0xe5d4b991861e70d563e7d061e017e5566935941f",
+    contract: "contracts/Token/Abond_Token.sol:ABONDToken"
+  });
 
-  // await hre.run("verify:verify", {
-  //   address: "0x13a7b78e65c7e389cc56fc66a0342f90730120a8",
-  //   contract: "contracts/TestContracts/CopyUsdt.sol:TestUSDTV2"
-  // });
+  await hre.run("verify:verify", {
+    address: "0x74e0f0492e8f180f4fef6d9392e9f0e0fc8824be",
+    contract: "contracts/TestContracts/CopyUsdt.sol:TestUSDT"
+  });
 
-  // await hre.run("verify:verify", {
-  //   address: "0xcad6ac332d59b77dca90f1846947eae054739d15",
-  //   contract: "contracts/Core_logic/multiSign.sol:MultiSign",
-  // });
+  await hre.run("verify:verify", {
+    address: "0x4440fce307e3cac1734a80e844918e5acf089503",
+    contract: "contracts/Core_logic/multiSign.sol:MultiSign",
+  });
 
-  // await hre.run("verify:verify", {
-  //   address: "0x3a099a1ab348e6882bd73ab40db8f6346fc42260",
-  //   contract: "contracts/Core_logic/CDS.sol:CDSV2",
-  // });
+  await hre.run("verify:verify", {
+    address: "0x96d7ab459caeef767afce5c22a2ec31491d8be82",
+    contract: "contracts/Core_logic/CDS.sol:CDS",
+  });
 
-  // await hre.run("verify:verify", {
-  //   address: "0x2eac75c1DF39cc7c26E3bF996eE279d34529f7DE",
-  //   contract: "contracts/Core_logic/borrowing.sol:BorrowingV2",
-  // });
+  await hre.run("verify:verify", {
+    address: "0x57ce4a4d5dbaad3e0082f0d5833794fc56f8e9fc",
+    contract: "contracts/Core_logic/GlobalVariables.sol:GlobalVariables",
+  });
 
-  // await hre.run("verify:verify", {
-  //   address: "0xc2c4c0bb1a29c0aa0fd948e807075859603b5a4c",
-  //   contract: "contracts/Core_logic/borrowLiquidation.sol:BorrowLiquidation",
-  // });
+  await hre.run("verify:verify", {
+    address: "0x8e5e24b408a08c55ea4dbbc557716a88601758f4",
+    contract: "contracts/Core_logic/borrowing.sol:Borrowing",
+  });
 
-  // await hre.run("verify:verify", {
-  //   address: "0x9d88EfAE2D501FcbAf2D7887Cd85130A6A378837",
-  //   contract: "contracts/Core_logic/Treasury.sol:TreasuryV2",
-  // });
+  await hre.run("verify:verify", {
+    address: "0xb84ba6aebb9dc009f8e7551515bf3724e762b7fe",
+    contract: "contracts/Core_logic/borrowLiquidation.sol:BorrowLiquidation",
+  });
 
-  // await hre.run("verify:verify", {
-  //   address: "0xF4e5bD7996aA356651FE2E9233ddf0f04F36D567",
-  //   contract: "contracts/Core_logic/Options.sol:OptionsV2",
-  // });
+  await hre.run("verify:verify", {
+    address: "0x94a0482983626c6fcfd929b6b29eaa1a7f3a50ac",
+    contract: "contracts/Core_logic/Treasury.sol:Treasury",
+  });
+
+  await hre.run("verify:verify", {
+    address: "0xa2e7ac795784c66fe43d63ac7f3d1476070ba2d7",
+    contract: "contracts/Core_logic/Options.sol:Options",
+  });
 
   // await deployedTreasury.setExternalProtocolAddresses(
   //   wethGatewayBaseSepolia,

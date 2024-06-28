@@ -5,6 +5,7 @@ import { MessagingReceipt, MessagingFee } from "@layerzerolabs/lz-evm-oapp-v2/co
 
 interface CDSInterface {
 
+
     struct CdsAccountDetails {
         uint64 depositedTime;
         uint256 depositedAmount;
@@ -19,6 +20,13 @@ interface CDSInterface {
         uint128 liquidationAmount;
         uint128 liquidationindex;
         uint256 normalizedAmount;
+        uint128 lockingPeriod;
+        uint128 depositedUSDa;
+        uint128 depositedUSDT;
+        uint128 withdrawETHAmount;
+        uint128 ethPriceAtWithdraw;
+        uint256 optionFees;
+        uint256 optionFeesWithdrawn;
     }
 
     struct CdsDetails {

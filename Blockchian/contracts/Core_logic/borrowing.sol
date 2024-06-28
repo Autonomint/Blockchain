@@ -246,6 +246,7 @@ contract Borrowing is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         ITreasury.DepositDetails memory depositDetail = getBorrowingResult.depositDetails;
         depositDetail.borrowedAmount = uint128(tokensToLend);
         depositDetail.optionFees = uint128(optionFees);
+        depositDetail.APR = APR;
 
         //Update variables in treasury
         treasury.updateHasBorrowed(msg.sender,true);

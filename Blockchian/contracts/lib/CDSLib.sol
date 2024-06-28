@@ -167,16 +167,15 @@ library CDSLib {
         return (_totalCdsDepositedAmountWithOptionFees,_totalGlobalCdsDepositedAmountWithOptionFees,_lastCumulativeRate);
     }
 
-    function calculateUserProportionInWithdraw(uint256 depositedAmount, uint256 returnAmount, uint128 ethAmount) public pure returns(uint256,uint128){
+    function calculateUserProportionInWithdraw(uint256 depositedAmount, uint256 returnAmount) public pure returns(uint256){
         uint256 toUser;
         if(returnAmount > depositedAmount){
             uint256 profit = returnAmount - depositedAmount;
             toUser = (profit * 90) / 100;
-            ethAmount = (ethAmount * 90) / 100;
         }else{
             toUser = returnAmount;
         }
 
-        return (toUser, ethAmount);
+        return toUser;
     }
 }
