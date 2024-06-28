@@ -147,9 +147,10 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
             _liquidationAmount <= (totalDepositingAmount),
             "Liquidation amount can't greater than deposited amount"
         );
+        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
 
-        if(usdtAmountDepositedTillNow < usdtLimit){
-            if((usdtAmountDepositedTillNow + usdtAmount) <= usdtLimit){
+        if(omniChainData.usdtAmountDepositedTillNow < usdtLimit){
+            if((omniChainData.usdtAmountDepositedTillNow + usdtAmount) <= usdtLimit){
                 require(usdtAmount == totalDepositingAmount,'100% of amount must be USDT');
             }else{
                 revert("Surplus USDT amount");
@@ -164,7 +165,6 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
         require(ethPrice != 0,"Oracle Failed");
 
         uint64 index;
-        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
 
         // check if msg.sender is depositing for the first time
         // if yes change hasDeposited from desDeposit structure of msg.sender to true.
@@ -616,7 +616,7 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
      * @dev calculate cumulative rate
      * @param fees fees to split
      */
-    function calculateCumulativeRate(uint128 fees) external onlyBorrowingContract{
+    function calculateCumulativeRate(uint128 fees) external onlyBorrowingContract returns(uint128){
         IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
 
         (
@@ -631,7 +631,8 @@ contract CDSTest is CDSInterface,Initializable,UUPSUpgradeable,ReentrancyGuardUp
             omniChainData.noOfBorrowers
         );
 
-        globalVariables.setOmniChainData(omniChainData);
+        return omniChainData.lastCumulativeRate;
+
     }
 
     /**

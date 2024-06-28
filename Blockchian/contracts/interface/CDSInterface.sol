@@ -54,7 +54,7 @@ interface CDSInterface {
     function totalCdsDepositedAmount() external view returns(uint256);
     function totalAvailableLiquidationAmount() external returns(uint256);
 
-    function calculateCumulativeRate(uint128 fees) external;
+    function calculateCumulativeRate(uint128 fees) external returns(uint128);
 
     function getCDSDepositDetails(address depositor,uint64 index) external view returns(CdsAccountDetails memory,uint64);
     function updateTotalAvailableLiquidationAmount(uint256 amount) external;

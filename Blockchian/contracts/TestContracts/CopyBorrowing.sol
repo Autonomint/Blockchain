@@ -239,9 +239,11 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         abond.setAbondData(msg.sender, index, BorrowLib.calculateHalfValue(_depositingAmount), treasury.getExternalProtocolCumulativeRate(true));
         // Call the transfer function to mint USDa
         _transferToken(msg.sender,_depositingAmount,_ethPrice,optionFees);
+        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
 
         // Call calculateCumulativeRate in cds to split fees to cds users
-        cds.calculateCumulativeRate(uint128(optionFees));
+        omniChainData.lastCumulativeRate = cds.calculateCumulativeRate(uint128(optionFees));
+        omniChainData.totalCdsDepositedAmountWithOptionFees += optionFees;
 
         //Get the deposit details from treasury
         ITreasury.GetBorrowingResult memory getBorrowingResult = treasury.getBorrowing(msg.sender,index);
@@ -271,7 +273,6 @@ contract BorrowingTest is IBorrowing,Initializable,UUPSUpgradeable,ReentrancyGua
         lastEthprice = uint128(_ethPrice);
         
         //! updating global data 
-        IGlobalVariables.OmniChainData memory omniChainData = globalVariables.getOmniChainData();
         omniChainData.normalizedAmount += normalizedAmount;
         ++omniChainData.noOfBorrowers;
         omniChainData.totalVolumeOfBorrowersAmountinWei += _depositingAmount;

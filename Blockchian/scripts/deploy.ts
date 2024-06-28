@@ -10,8 +10,8 @@ import {
   aTokenAddressBaseSepolia,
   priceFeedAddressSepolia,
   priceFeedAddressBaseSepolia,
-  aavePoolAddressSepolia,
   aavePoolAddressBaseSepolia,
+  aavePoolAddressSepolia,
   owner1,owner2,owner3,
   eidSepolia,eidBaseSepolia,
   endpointSepolia,endpointBaseSepolia,endpointModeSepolia,
@@ -20,13 +20,13 @@ import {
 
 async function main() {
 
-  // const AMINTStablecoin = await ethers.getContractFactory("USDaStablecoin");
-  // const deployedAMINTStablecoin = await upgrades.deployProxy(AMINTStablecoin,[
-  //   endpointModeSepolia,
-  //   owner1
-  // ],{initializer:'initialize'}, {kind:'uups'});
-  // await deployedAMINTStablecoin.waitForDeployment();
-  // console.log("PROXY AMINT ADDRESS",await deployedAMINTStablecoin.getAddress());
+  const AMINTStablecoin = await ethers.getContractFactory("USDaStablecoin");
+  const deployedAMINTStablecoin = await upgrades.deployProxy(AMINTStablecoin,[
+    endpointModeSepolia,
+    owner1
+  ],{initializer:'initialize'}, {kind:'uups'});
+  await deployedAMINTStablecoin.waitForDeployment();
+  console.log("PROXY AMINT ADDRESS",await deployedAMINTStablecoin.getAddress());
 
   // const ABONDToken = await ethers.getContractFactory("ABONDToken");
   // const deployedABONDToken = await upgrades.deployProxy(ABONDToken,{initializer:'initialize'}, {kind:'uups'});
@@ -35,7 +35,7 @@ async function main() {
 
   // const TestUSDT = await ethers.getContractFactory("TestUSDT");
   // const deployedTestUSDT = await upgrades.deployProxy(TestUSDT,[
-  //   endpointSepolia,
+  //   endpointBaseSepolia,
   //   owner1
   // ],{initializer:'initialize'}, {kind:'uups'});
   // await deployedTestUSDT.waitForDeployment();
@@ -55,15 +55,26 @@ async function main() {
   // });
   // const deployedCDS = await upgrades.deployProxy(CDS,[
   //   await deployedAMINTStablecoin.getAddress(),
-  //   priceFeedAddressSepolia,
+  //   priceFeedAddressBaseSepolia,
   //   await deployedTestUSDT.getAddress(),
-  //   await deployedMultisign.getAddress(),
-  //   endpointSepolia,
-  //   owner1 ],{initializer:'initialize',
+  //   await deployedMultisign.getAddress()
+  //   ],{initializer:'initialize',
   //       unsafeAllowLinkedLibraries:true
   //   },{kind:'uups'})
   // await deployedCDS.waitForDeployment();
   // console.log("PROXY CDS ADDRESS",await deployedCDS.getAddress());
+
+  // const GlobalVariables = await ethers.getContractFactory("GlobalVariables");
+  // const deployedGlobalVariables = await upgrades.deployProxy(GlobalVariables,[
+  //   await deployedAMINTStablecoin.getAddress(),
+  //   await deployedCDS.getAddress(),
+  //   endpointBaseSepolia,
+  //   owner1
+  //   ],{initializer:'initialize',
+  //       unsafeAllowLinkedLibraries:true
+  //   },{kind:'uups'})
+  // await deployedGlobalVariables.waitForDeployment();
+  // console.log("PROXY GLOBAL ADDRESS",await deployedGlobalVariables.getAddress());
 
   
   // const borrowLibFactory = await ethers.getContractFactory("BorrowLib");
@@ -78,10 +89,10 @@ async function main() {
   //   await deployedCDS.getAddress(),
   //   await deployedABONDToken.getAddress(),
   //   await deployedMultisign.getAddress(),
-  //   priceFeedAddressSepolia,
+  //   priceFeedAddressBaseSepolia,
   //   11155111,
-  //   endpointSepolia,
-  //   owner1],{initializer:'initialize',
+  //   await deployedGlobalVariables.getAddress()
+  //   ],{initializer:'initialize',
   //       unsafeAllowLinkedLibraries:true
   //   },{kind:'uups'})
   // await deployedBorrowing.waitForDeployment();
@@ -97,6 +108,7 @@ async function main() {
   //   await deployedBorrowing.getAddress(),
   //   await deployedCDS.getAddress(),
   //   await deployedAMINTStablecoin.getAddress(),
+  //   await deployedGlobalVariables.getAddress()
   // ],{initializer:'initialize',
   //   unsafeAllowLinkedLibraries:true
   // },{kind:'uups'});
@@ -111,13 +123,18 @@ async function main() {
   //   await deployedCDS.getAddress(),
   //   await deployedLiquidation.getAddress(),
   //   await deployedTestUSDT.getAddress(),
-  //   endpointSepolia,
-  //   owner1 ],{initializer:'initialize'},{kind:'uups'});
+  //   await deployedGlobalVariables.getAddress()
+  // ],{initializer:'initialize'},{kind:'uups'});
   // await deployedTreasury.waitForDeployment();
   // console.log("PROXY TREASURY ADDRESS",await deployedTreasury.getAddress());
 
   // const Option = await ethers.getContractFactory("Options");
-  // const deployedOptions = await upgrades.deployProxy(Option,[await deployedTreasury.getAddress(),await deployedCDS.getAddress(),await deployedBorrowing.getAddress()],{initializer:'initialize'},{kind:'uups'});
+  // const deployedOptions = await upgrades.deployProxy(Option,[
+  //   await deployedTreasury.getAddress(),
+  //   await deployedCDS.getAddress(),
+  //   await deployedBorrowing.getAddress(),
+  //   await deployedGlobalVariables.getAddress()
+  // ],{initializer:'initialize'},{kind:'uups'});
   // await deployedOptions.waitForDeployment();
   // console.log("PROXY OPTIONS ADDRESS",await deployedOptions.getAddress());
 
@@ -143,10 +160,10 @@ async function main() {
   //   contract: "contracts/TestContracts/CopyUsdt.sol:TestUSDTV2"
   // });
 
-  await hre.run("verify:verify", {
-    address: "0xcad6ac332d59b77dca90f1846947eae054739d15",
-    contract: "contracts/Core_logic/multiSign.sol:MultiSign",
-  });
+  // await hre.run("verify:verify", {
+  //   address: "0xcad6ac332d59b77dca90f1846947eae054739d15",
+  //   contract: "contracts/Core_logic/multiSign.sol:MultiSign",
+  // });
 
   // await hre.run("verify:verify", {
   //   address: "0x3a099a1ab348e6882bd73ab40db8f6346fc42260",
@@ -174,15 +191,22 @@ async function main() {
   // });
 
   // await deployedTreasury.setExternalProtocolAddresses(
-  //   wethGatewaySepolia,
-  //   cometSepolia,
-  //   aavePoolAddressSepolia,
-  //   aTokenAddressSepolia,
-  //   wethAddressSepolia
+  //   wethGatewayBaseSepolia,
+  //   cometBaseSepolia,
+  //   aavePoolAddressBaseSepolia,
+  //   aTokenAddressBaseSepolia,
+  //   wethAddressBaseSepolia
   // )
 
   // await deployedMultisign.approveSetterFunction([0,1,2,3,4,5,6,7,8,9]);
   // await deployedABONDToken.setBorrowingContract(await deployedBorrowing.getAddress());
+
+  // await deployedGlobalVariables.setTreasury(await deployedTreasury.getAddress());
+  // await deployedGlobalVariables.setBorrowLiq(await deployedLiquidation.getAddress());
+  // await deployedGlobalVariables.setBorrowing(await deployedBorrowing.getAddress());
+
+  // await deployedLiquidation.setTreasury(await deployedTreasury.getAddress());
+  // await deployedLiquidation.setAdmin(owner1);
 
   // await deployedBorrowing.setDstEid(eidSepolia);
   // await deployedCDS.setDstEid(eidSepolia);
